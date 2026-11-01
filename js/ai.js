@@ -29,7 +29,7 @@
     }
 
     window.AI = {
-        generatePlan: function (answers) {
+        generatePlan: function (answers, opts) {
             return new Promise(function (resolve) {
                 setTimeout(function () {
                     var destination = Engine.matchDestination(answers.destination);
@@ -48,7 +48,7 @@
                     resolve(Engine.applyAgeRules(plan, curated
                         ? Object.assign({}, answers, { ages: [18, 19] })
                         : answers));
-                }, new URLSearchParams(location.search).get('fast') === '1' ? 0 : 1500);
+                }, (opts && opts.fast) || new URLSearchParams(location.search).get('fast') === '1' ? 0 : 1500);
             });
         },
         recommendDestinations: function (answers) {

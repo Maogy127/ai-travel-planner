@@ -1,4 +1,4 @@
-# Wayfare
+# GoNow
 
 Open `index.html` directly, or serve this directory with any static HTTP server. No build, dependencies, API keys, network data calls or external assets are required. Use `?fast=1` to skip the simulated planning delay.
 
@@ -12,6 +12,10 @@ Answers, itinerary changes and packing ticks save separately on this device. Sta
 
 Tests live outside this folder (in the project's `tests/` directory) and are not part of the site.
 
-`window.__wayfare` exposes `state` and `go(screen)` for inspection.
+`window.__gonow` exposes `state` and `go(screen)` for inspection.
 
 Main screen names: `start`, `dates`, `budget`, `who`, `ages`, `style`, `recommendations`, `fork`, `food`, `pace`, `musts`, `plan`, `credits`.
+
+## Saved data
+
+GoNow stores answers, itinerary edits, packing ticks and packing-list items in `localStorage` under `gonow:*` keys. Keys from the site's earlier name are migrated automatically on first load, so saved ticks and edits survive. **Reset my edits** clears itinerary changes only; packing ticks, quantities and added packing items are kept.

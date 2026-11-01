@@ -3,6 +3,7 @@
 --muted: #65716a;
 --paper: #f7f7f0;
 --orange: #c65331;
+--orange-text: #b84a29;
 --line: #dce2d8;
 --green: #e6eddf}
 *{
@@ -24,11 +25,12 @@ background: transparent;
 color: inherit;
 padding: 10px 16px;
 border-radius: 10px}
-button: hover{
+button:hover:not(:disabled){
 background: #e9eddf}
-button: disabled{
+button:disabled{
 opacity: .45;
-cursor: default}
+cursor: default;
+pointer-events: none}
 a{
 color: inherit}
 input,textarea,select{
@@ -78,14 +80,14 @@ letter-spacing: -1.7px;
 font-weight: 750;
 text-decoration: none}
 .logo span{
-color: var(--orange);
+color: var(--orange-text);
 margin-left: 5px}
 .topnote,.eyebrow{
 font-size: 11px;
 letter-spacing: 2px;
 font-weight: 700}
 .eyebrow{
-color: var(--orange);
+color: var(--orange-text);
 margin-bottom: 20px}
 .shell{
 max-width: 1240px;
@@ -430,7 +432,7 @@ max-width: 500px;
 padding: 30px;
 color: var(--ink);
 box-shadow: 0 20px 70px #0003}
-dialog: :backdrop{
+dialog::backdrop{
 background: #18372e70}
 :focus-visible{
 outline: 3px solid #cc623b;
@@ -593,7 +595,7 @@ box-shadow: 0 0 0 2px #c6533112;
 .option:has(input:checked)::after{
 content: '✓';
 margin-left: auto;
-color: var(--orange);
+color: var(--orange-text);
 font-weight: 800;
 }
 .plan-header{
@@ -723,7 +725,7 @@ content: '🌺';
 background: var(--accent);
 }
 .item.travel::before{
-content: '✈';
+content: '🚕';
 }
 .item.rest::before,.item.stay::before{
 content: '🌿';
@@ -891,3 +893,19 @@ z-index: 1;
 .plan-header .banner-credit { position: absolute; right: 14px; bottom: 12px; z-index: 2; }
 .plan-header .banner-credit .image-label { position: static; }
 h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, [tabindex="-1"]:focus:not(:focus-visible) { outline: none; }
+
+/* review fixes */
+.form-stack .outline.full{margin-top:12px}
+@media(min-width:1024px){.hero-photo{height:auto;max-height:560px;min-height:480px}}
+.hint{color:var(--muted,#55615a);font-size:14px;min-height:1.2em}
+.book-summary{font-size:14px;margin:10px 0;padding:10px 14px;border-radius:12px;background:#fff6e8}
+.book-summary a{font-weight:600}
+.tab-heading{font-size:clamp(28px,4vw,40px);line-height:1.1;margin:8px 0}
+.daynav a[aria-current="true"]{background:var(--ink,#17382e);color:#fff;border-radius:20px}
+.timeline>li{scroll-margin-top:170px}
+.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+[aria-invalid="true"]{border-color:#b3261e!important}
+@media(max-width:767px){
+.question .qfooter{position:sticky;bottom:0;z-index:5;background:var(--bg,#f6f3ea);margin:24px -20px 0;padding:12px 20px calc(12px + env(safe-area-inset-bottom))}
+}
+@media(max-width:380px){.timeline>li{grid-template-columns:40px minmax(0,1fr);gap:12px}.timeline::before{left:46px}}
