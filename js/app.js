@@ -148,6 +148,7 @@
         var ms=undo?8000:msg==='Your plan is ready.'?2500:3000;
         function hide() {
             toastEl.innerHTML='';
+            toastEl.classList.remove('plan-ready');
             undoPending=false;
         }
         function arm() {

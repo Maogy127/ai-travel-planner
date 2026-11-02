@@ -1042,3 +1042,4 @@ html.reduce-motion .page-sheet{display:none}html.reduce-motion .page-flip{animat
 #restart{white-space:nowrap;font-size:14px;padding:6px 4px}.logo{font-size:26px}}
 
 [data-testid="rank-badge"]{white-space:nowrap}
+#toast:empty{padding:0!important;border:0!important;box-shadow:none!important;opacity:0;pointer-events:none}
