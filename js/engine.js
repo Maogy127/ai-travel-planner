@@ -233,7 +233,7 @@
         return plan;
     }
     window.Engine= {
-        dateRange:dateRange, matchDestination:matchDestination, recommend:recommend, buildTemplatePlan:buildTemplatePlan, applyAgeRules:applyAgeRules, tripDays:tripDays, originRegion:origin
+        estimateCost:cost, dateRange:dateRange, matchDestination:matchDestination, recommend:recommend, buildTemplatePlan:buildTemplatePlan, applyAgeRules:applyAgeRules, tripDays:tripDays, originRegion:origin
     };
 }
 ());

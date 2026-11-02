@@ -24,12 +24,17 @@
         } catch(e) {}
     }
     var defaults= {
-        origin:'', destination:'', unsure:false, start:'', end:'', flexible:false, length:5, month:11, budget:null, includeFlights:true, who:'', ages:[], adults:2, kids:0, styles:[], food:[], allergies:'', pace:'Moderate', mustdos:'', stay:''
+        origin:'', destination:'', unsure:false, start:'', end:'', flexible:false, length:5, month:11, budget:null, includeFlights:true, covers:['flights','hotel','food','activities','transport'], completed:[], who:'', ages:[], adults:2, kids:0, styles:[], food:[], allergies:'', pace:'Moderate', mustdos:'', stay:''
     };
     var state= {
         screen:'start', answers:Object.assign( {}, defaults, read(KEY+'answers',  {})), plan:null, tab:'plan', recOffset:0, excluded:[], edits: {}, packed: {}, packMeta: {}, hidePacked:false
     };
+    if(!read(KEY+'answers',{}).covers&&state.answers.includeFlights===false)state.answers.covers=defaults.covers.filter(function(k){return k!=='flights';});
     var steps=['dates', 'budget', 'who', 'ages', 'style'], extra=['food', 'pace', 'musts'];
+    var reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
+    document.documentElement.classList.toggle('reduce-motion', reduceMotion.matches);
+    reduceMotion.addEventListener('change', function(e){document.documentElement.classList.toggle('reduce-motion',e.matches);});
+    var flipNext=false, openTile='day-0';
     var activeGeneration=0, toastTimer, undoPending=false;
     function esc(s) {
         return String(s==null?'':s).replace(/[&<>"']/g, function(c) {
@@ -184,6 +189,7 @@
         state.screen=screen;
         save();
         render();
+        if(flipNext){var page=view.querySelector('.question'); if(page){page.dataset.flip='true';page.classList.add('page-flip');}flipNext=false;}
         window.scrollTo(0, 0);
         var title=document.getElementById('step-title');
         if(title)title.focus( {
@@ -206,7 +212,8 @@
     }
     function start() {
         var a=state.answers;
-        view.innerHTML='<div class="shell"><div class="start-grid"><section class="intro"><div class="eyebrow">LESS PLANNING. MORE POSSIBILITY.</div>'+heading('Your whole trip,<br>planned in a minute.', 'A place to go. A plan that feels like you. Let’s find your next somewhere.')+'<div class="form-stack"><div><label class="field-label" for="from">Where are you flying from?</label><input id="from" data-testid="start-from" placeholder="City or airport (e.g., Seattle, SEA)" value="'+esc(a.origin)+'" autocomplete="off"><small>We use this to estimate flights.</small><div class="error" id="origin-error" role="alert"></div></div><div>'+(a.unsure?'<div class="row banner" style="margin:0">Surprise me ✓ '+btn('Change', 'start-change', '')+'</div>':'<label class="field-label" for="to">Where do you want to go?</label><input id="to" data-testid="start-to" placeholder="City, region or country" value="'+esc(a.destination)+'"><div class="error" id="dest-error" role="alert"></div>'+btn("I'm not sure yet", 'start-unsure', 'outline full')+'<small>Tell us a few things and we’ll suggest three places.</small>')+'</div>'+btn('Next <span aria-hidden="true">↗</span>', 'start-next', 'primary full')+'</div><div class="demo"><div class="eyebrow">A LITTLE INSPIRATION</div><strong>Try the demo: Oahu, Nov 25–29</strong><p>Couple aged 18 & 19 · The Kahala Hotel & Resort</p>'+btn('Open the Oahu sample ↗', 'demo-oahu', 'outline full')+'</div><p class="footer-note">Free to use. Your answers stay on this device until you save.</p></section>'+photo('images/hero.jpg', 'A sunlit island coastline, an invitation to slow down', 'hero-photo', '<div class="photo-caption"><span class="eyebrow" style="color:white">YOUR NEXT CHAPTER</span><strong>Somewhere feels like you.</strong><span>We’ll help you find it.</span></div>')+'</div><div class="start-footer"><span>✳ Made for your kind of travel</span><span>Thoughtful plans, down to the little things</span><span>Always yours to change</span></div></div>';
+        view.innerHTML='<div class="shell"><div class="start-grid"><section class="intro"><div class="eyebrow">THE WORLD IS YOUR TREASURE.</div>'+heading('Your next adventure<br>starts here.', 'A little less planning. A lot more going.')+'<div class="form-stack"><div><label class="field-label" for="from">Where are you flying from?</label><input id="from" data-testid="start-from" placeholder="City or airport (e.g., Seattle, SEA)" value="'+esc(a.origin)+'" autocomplete="off"><small>We use this to estimate flights.</small><div class="error" id="origin-error" role="alert"></div></div><div>'+(a.unsure?'<div class="row banner" style="margin:0">Surprise me ✓ '+btn('Change', 'start-change', '')+'</div>':'<label class="field-label" for="to">Where do you want to go?</label><input id="to" data-testid="start-to" placeholder="City, region or country" value="'+esc(a.destination)+'"><div class="error" id="dest-error" role="alert"></div>'+btn("I'm not sure yet", 'start-unsure', 'outline full')+'<small>Tell us a few things and we’ll suggest three places.</small>')+'</div>'+btn('Next <span aria-hidden="true">↗</span>', 'start-next', 'primary full')+'</div><div class="demo"><div class="eyebrow">A LITTLE INSPIRATION</div><strong>Try the demo: Oahu, Nov 25–29</strong><p>Couple aged 18 & 19 · The Kahala Hotel & Resort</p>'+btn('Open the Oahu sample ↗', 'demo-oahu', 'outline full')+'</div><p class="footer-note">Free to use. Your answers stay on this device until you save.</p></section>'+photo('images/hero.jpg', 'A sunlit island coastline, an invitation to slow down', 'hero-photo', '<div class="photo-caption"><span class="eyebrow" style="color:white">YOUR NEXT CHAPTER</span><strong>Somewhere feels like you.</strong><span>We’ll help you find it.</span><svg class="ship-mark" viewBox="0 0 140 70" width="100" height="50" aria-hidden="true"><path d="M10 48H126L108 62H30Z M68 6V45 M62 10L30 42H62Z M74 15L105 42H74Z" fill="none" stroke="currentColor" stroke-width="2"/><path d="M5 68Q20 58 35 68T65 68T95 68T125 68" fill="none" stroke="currentColor"/></svg></div>')+'</div><div class="start-footer"><span>✳ Made for your kind of travel</span><span>Thoughtful plans, down to the little things</span><span>Always yours to change</span></div></div>';
+        view.querySelector('.form-stack').insertAdjacentHTML('beforebegin','<div class="start-map" aria-hidden="true">'+mapRoute()+compass+'</div>');
         on('start-from', function(e) {
             a.origin=e.target.value;
             save();
@@ -244,7 +251,7 @@
                 get('start-from').setAttribute('aria-invalid', 'true');
                 valid=false;
             }
-            if(valid)go('dates');
+            if(valid){flipNext=true;go('dates');}
         });
         on('demo-oahu', demo);
     }
@@ -257,7 +264,7 @@
     }
     function option(value, label, sub, key, multi) {
         var a=state.answers, selected=multi?(a[key]||[]).indexOf(value)>=0:a[key]===value;
-        return'<label class="option" data-testid="opt-'+esc(value)+'"><input type="'+(multi?'checkbox':'radio')+'" name="'+key+'" value="'+esc(value)+'" '+(selected?'checked':'')+'><span><strong>'+label+'</strong>'+(sub?'<small>'+sub+'</small>':'')+'</span></label>';
+        return'<label class="option '+(selected?'stamped':'')+'" data-testid="opt-'+esc(value)+'"><input type="'+(multi?'checkbox':'radio')+'" name="'+key+'" value="'+esc(value)+'" '+(selected?'checked':'')+'><span><strong>'+label+'</strong>'+(sub?'<small>'+sub+'</small>':'')+'</span></label>';
     }
     function validQuestion() {
         var a=state.answers, s=state.screen;
@@ -287,7 +294,7 @@
     function question() {
         var a=state.answers, s=state.screen, index=steps.indexOf(s), isExtra=extra.indexOf(s)>=0, idx=isExtra?extra.indexOf(s):index, total=isExtra?3:5;
         var copy= {
-            dates:['When are you going?', 'Pick your travel dates. Weather and prices depend on them.'], budget:["What’s your budget?", 'Total for everyone, flights included. A rough number is fine.'], who:["Who’s coming?", 'This shapes pace, rooms and activities.'], ages:['How old are the travelers?', 'Ages change the plan: rental cars, tours and some activities have age limits.'], style:['What kind of trip do you want?', 'Pick up to two. A third pick swaps out your first.'], food:['What do you like to eat?', "Pick any. We’ll plan meals near where you’re staying."], pace:['How active do you want to be?', 'Walking, hiking and water time all count.'], musts:['Anything we must include?', "Bookings, birthdays, places, or things to skip. We’ll fit them in."]
+            dates:['When are you going?', 'Pick your travel dates. Weather and prices depend on them.'], budget:["What’s your budget?", 'Total for everyone. Choose what your treasure fund covers below.'], who:["Who’s coming?", 'This shapes pace, rooms and activities.'], ages:['How old are the travelers?', 'Ages change the plan: rental cars, tours and some activities have age limits.'], style:['What kind of trip do you want?', 'Pick up to two. A third pick swaps out your first.'], food:['What do you like to eat?', "Pick any. We’ll plan meals near where you’re staying."], pace:['How active do you want to be?', 'Walking, hiking and water time all count.'], musts:['Anything we must include?', "Bookings, birthdays, places, or things to skip. We’ll fit them in."]
         }
         [s];
         var content='';
@@ -305,7 +312,7 @@
         } else if(s==='budget') {
             content='<div class="options">'+[['1500', 'Under $1,500', 1400], ['3000', '$1,500–$3,000', 3000], ['5000', '$3,000–$5,000', 5000], ['5000+', '$5,000+', 6000], ['custom', "I’ll type a number", 0]].map(function(r) {
                 return option(r[0], r[1], '', 'budgetChoice', false);
-            }).join('')+'</div>'+(a.budgetChoice==='custom'?'<label>Total budget (USD)<input type="number" data-testid="budget-custom" min="101" value="'+esc(a.budget||'')+'"></label><small>Enter a number above $100.</small>':'')+'<label class="checkrow"><input type="checkbox" data-testid="include-flights" '+(a.includeFlights?'checked':'')+'>Include flights</label>';
+            }).join('')+'</div>'+(a.budgetChoice==='custom'?'<label>Total budget (USD)<input type="number" data-testid="budget-custom" min="101" value="'+esc(a.budget||'')+'"></label><small>Enter a number above $100.</small>':'');
         } else if(s==='who') {
             content='<div class="options">'+[['solo', '<span aria-hidden="true">🧍</span> Solo', 'Just me'], ['couple', '<span aria-hidden="true">👫</span> Couple', 'Two of us'], ['family', '<span aria-hidden="true">👨‍👩‍👧</span> Family', 'With kids'], ['friends', '<span aria-hidden="true">👯</span> Friends', 'A group of friends']].map(function(r) {
                 return option(r[0], r[1], r[2], 'who');
@@ -339,8 +346,10 @@
             dates:'Travel dates', budget:'Total trip budget', who:'Travel group', ages:'Traveler ages', style:'Trip styles', food:'Food preferences', pace:'Daily pace', musts:'Your requests'
         }
         [s])+'</legend>'+content+'</fieldset><div class="qfooter">'+btn('← Back', 'q-back', '')+btn('Skip', 'q-skip', '')+btn(s==='musts'?'Build my plan':s==='style'&&a.unsure?'See my options':'Continue →', 'q-continue', 'primary', validQuestion()?'':'disabled')+'</div></section>';
+        journal(s);
         view.querySelectorAll('.option input').forEach(function(el) {
             el.onchange=function() {
+                el.closest('.option').classList.toggle('stamped',el.checked);
                 var key=el.name;
                 if(key==='styles')a.styleSkipped=false;
                 if(el.type==='checkbox') {
@@ -349,7 +358,7 @@
                         var dropped=values[0];
                         a.styles=values.slice(1).concat(el.value);
                         var drop=view.querySelector('input[name="styles"][value="'+dropped+'"]');
-                        if(drop)drop.checked=false;
+                        if(drop){drop.checked=false;drop.closest('.option').classList.remove('stamped');}
                         var label=function(v){ var o=view.querySelector('[data-testid="opt-'+v+'"] strong'); return o?o.textContent.replace(/^[^A-Za-z]+/,''):v; };
                         var msg='Swapped '+label(dropped)+' for '+label(el.value)+'. You can pick two.';
                         document.getElementById('style-limit').textContent=msg;
@@ -417,10 +426,7 @@
             save();
             updateContinue();
         }, 'input');
-        on('include-flights', function(e) {
-            a.includeFlights=e.target.checked;
-            save();
-        }, 'change');
+
         view.querySelectorAll('[data-age]').forEach(function(el) {
             el.oninput=function() {
                 var n=Number(el.dataset.age);
@@ -480,6 +486,8 @@
         on('q-continue', nextQuestion);
     }
     function nextQuestion() {
+        state.answers.completed=Array.from(new Set((state.answers.completed||[]).concat(state.screen)));
+        flipNext=true;
         save();
         var s=state.screen, i=steps.indexOf(s), j=extra.indexOf(s);
         if(i>=0) {
@@ -487,6 +495,63 @@
             else go(state.answers.unsure?'recommendations':'fork');
         } else if(j<2)go(extra[j+1]);
         else generate();
+    }
+    var compass='<svg viewBox="0 0 64 64" width="32" height="32" aria-hidden="true"><circle cx="32" cy="32" r="25" fill="none" stroke="currentColor"/><circle cx="32" cy="32" r="20" fill="none" stroke="currentColor" stroke-dasharray="1 4"/><path d="M32 4l6 22 22 6-22 6-6 22-6-22-22-6 22-6z" fill="#f8eed7" stroke="currentColor"/><path d="M32 4v28L26 26z M60 32H32l6-6z M32 60V32l6 6z M4 32h28l-6 6z" fill="currentColor"/><circle cx="32" cy="32" r="3" fill="#a53f2e"/></svg>';
+    function icon(key){
+        var paths={dates:'M5 7h14v13H5z M8 4v6 M16 4v6 M5 12h14',budget:'M4 8c0-4 16-4 16 0s-16 4-16 0 M4 8v8c0 4 16 4 16 0V8 M4 12c0 4 16 4 16 0',who:'M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6 M2 20v-3c0-5 12-5 12 0v3 M16 5a3 3 0 0 1 0 6 M18 14c4 0 4 3 4 6',ages:'M6 3h12 M6 21h12 M8 3v5l8 8v5 M16 3v5l-8 8v5',style:'M12 2v20 M2 12h20 M16 8l-3 5-5 3 3-5z',flights:'M2 13l8-3V3l3-1 1 8 7 3v2l-7-1v5l3 2H7l3-2v-5l-8 1z',hotel:'M3 20V8 M21 20V8 M3 15h18 M6 9h5v5H6z M13 9h5v5h-5z',food:'M5 3v7c0 3 6 3 6 0V3 M8 3v19 M19 3c-5 3-5 10 0 10V3v19',activities:'M3 6h18v4c-4 0-4 4 0 4v4H3v-4c4 0 4-4 0-4z',transport:'M3 18V11l3-6h12l3 6v7z M3 11h18 M6 18v3 M18 18v3 M6 14h2 M16 14h2',bring:'M6 8h12l2 13H4z M9 8V4h6v4 M8 13h8v5H8z',info:'M12 10v8 M12 6v1 M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20'};
+        return '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(paths[key]||paths.style)+'"/></svg>';
+    }
+    function mapRoute(){return '<svg class="map-route" viewBox="0 0 500 140" fill="none" aria-hidden="true"><path class="route" d="M25 110C100 10 160 150 240 70S370 20 445 65" stroke="currentColor" stroke-width="2" stroke-dasharray="4 7"/><path class="map-x" d="M434 52l24 26m0-26l-24 26" stroke="#a53f2e" stroke-width="5"/><path d="M60 85l18-35 18 35m-28-15h20 M300 115q20-16 40 0t40 0" stroke="#9a855b"/></svg>';}
+    function passport(){var done=state.answers.completed||[];return '<div class="passport" data-testid="stamp-bar" aria-label="Stamp passport"><span>EXPLORER PASSPORT</span>'+steps.concat(done.filter(function(k){return !steps.includes(k);})).map(function(k,i){var earned=done.includes(k);return '<span class="passport-stamp '+(earned?'earned':'unearned')+' stamp-'+i%3+'" '+(earned?'data-testid="stamp"':'')+' aria-label="'+esc(k)+(earned?' completed':' not yet collected')+'">'+icon(k)+'<span>'+esc(k)+'</span></span>';}).join('')+'</div>';}
+    function journal(s){
+        var hints={dates:'Chart your dates; leave room for a little discovery.',budget:'Count your coins and choose what they need to cover.',who:'Every good expedition starts with its crew.',ages:'Ages help us choose adventures for the whole crew.',style:'Follow your compass. Choose up to two ways to explore.',food:'Find the flavors worth dropping anchor for.',pace:'Set a pace that leaves time to enjoy the view.',musts:'Pin your treasures so they make it onto the map.'};
+        var page=view.querySelector('.question');
+        page.insertAdjacentHTML('afterbegin',passport()+'<div class="guide" data-testid="guide" aria-live="polite">'+compass+'<span>'+hints[s]+'</span></div>');
+        page.insertAdjacentHTML('beforeend','<footer class="page-number">Page '+((steps.includes(s)?steps:extra).indexOf(s)+1)+' of '+(steps.includes(s)?5:3)+'</footer><aside class="pinned" data-testid="pinned-answers" aria-label="Pinned answers">'+(state.answers.completed||[]).map(function(k){var a=state.answers;var v={dates:a.flexible?'Flexible dates':a.start+' → '+a.end,budget:({'1500':'Under $1,500','3000':'$1,500–$3,000','5000':'$3,000–$5,000','5000+':'$5,000+'})[a.budgetChoice]||(a.budget?money(a.budget):'Flexible budget'),who:a.who,ages:a.ages.join(' & '),style:a.styles.join(', '),food:a.food.join(', '),pace:a.pace,musts:a.mustdos}[k];return '<span>'+esc(k)+': '+esc(v||'Skipped')+'</span>';}).join('')+'</aside>');
+        if(s==='budget'){
+            var covers=state.answers.covers||defaults.covers;
+            var field=document.createElement('fieldset');field.className='covers';field.innerHTML='<legend>What does this budget cover?</legend>'+Object.entries({flights:'Flights',hotel:'Hotel',food:'Food',activities:'Activities',transport:'Getting around (Uber/transit)'}).map(function(r){return '<label class="checkrow"><input type="checkbox" data-testid="cover-'+r[0]+'" value="'+r[0]+'" '+(covers.includes(r[0])?'checked':'')+'>'+icon(r[0])+'<span>'+r[1]+'</span></label>';}).join('');
+            page.querySelector('.qfooter').before(field);
+            field.onchange=function(){state.answers.covers=Array.from(field.querySelectorAll('input:checked')).map(function(e){return e.value;});state.answers.includeFlights=state.answers.covers.includes('flights');save();};
+        }
+    }
+    function budgetHTML(){
+        var p=state.plan,b=Engine.estimateCost(Object.assign({},state.answers,{includeFlights:true}),Engine.matchDestination(state.answers.destination)).breakdown, curated=p.id==='oahu-demo-2026-11';
+        var amounts=curated?{flights:'No approx. figure yet — check when booking',hotel:'No approx. figure yet — check when booking',food:'No approx. figure yet — check when booking',activities:'$830–950',transport:'$286–367 before tips'}:{flights:money(b.flights),hotel:money(b.stay),food:money(b.food),activities:money(b.activities),transport:money(b.localTransport)};
+        return '<section class="card budget" data-testid="budget-buckets"><h2>Budget</h2><p>Rough estimates, not quotes. '+(curated?'For two; flights, hotel and meals have not been researched.':'Based on the existing destination cost estimates.')+'</p>'+Object.entries({flights:'Flights',hotel:'Hotel',food:'Food',activities:'Activities',transport:'Getting around (Uber/transit)'}).map(function(r){return '<div class="bucket '+((state.answers.covers||defaults.covers).includes(r[0])?'included':'excluded')+'" data-testid="bucket-'+r[0]+'"><span class="bucket-icon">'+icon(r[0])+'</span><strong>'+r[1]+'</strong><span>'+(/\d/.test(amounts[r[0]])?'approx. ':'')+esc(amounts[r[0]])+'</span><small data-testid="bucket-status">'+((state.answers.covers||defaults.covers).includes(r[0])?'Included in your budget':'Not included')+'</small></div>';}).join('')+'</section>';
+    }
+    function planTiles(){
+        if(state.tab!=='plan')return;
+        var shell=view.querySelector('.shell');
+        var revealSeen=state.revealPlan===state.plan;state.revealPlan=state.plan;
+        shell.insertAdjacentHTML('afterbegin',passport()+'<div data-testid="treasure-reveal" class="treasure '+(revealSeen?'is-settled':'')+'" style="--reveal-time:'+(location.search.includes('fast=1')?'350ms':'1400ms')+'">'+mapRoute()+'<div><strong>Trip unlocked</strong><span>'+esc(state.plan.title)+'</span></div></div>');
+        var reveal=shell.querySelector('.treasure');if(!revealSeen)setTimeout(function(){reveal.classList.add('is-settled');},reduceMotion.matches||document.documentElement.classList.contains('reduce-motion')?0:location.search.includes('fast=1')?350:1400);
+        shell.insertAdjacentHTML('beforeend',budgetHTML());
+        var budget=view.querySelector('.budget');
+        var content=document.getElementById('tab-content');content.append(budget);
+        var essentials=document.createElement('section');essentials.className='card utility-tile';essentials.id='trip-essentials';essentials.dataset.title='Trip essentials';essentials.dataset.summary='Weather, age rules, costs and important notices';
+        Array.from(shell.children).filter(function(e){return e.matches('details, .warning');}).forEach(function(e){essentials.append(e);});content.append(essentials);
+        var p=state.plan, items=p.days.flatMap(function(d){return d.items;});
+        [
+            ['food','Food','Meal stops, close to your route',items.filter(function(it){return it.kind==='meal';}).map(function(it){return '<p><strong>'+esc(it.time)+' · '+esc(it.title)+'</strong></p>';}).join('')],
+            ['transport','Getting around','Rides, shuttles and walking',p.days.map(function(d,i){return '<p><strong>Day '+(i+1)+'</strong> · '+esc(d.car.level)+' — '+esc(d.car.note)+'</p>';}).join('')],
+            ['bring','What to bring','Your essentials, grouped and ready to tick', '<p>Open the Packing tab for the complete checklist. Activity checklists inside each day stay in sync with it.</p>'+packingGroups().map(function(g){return '<p><strong>'+esc(g.group)+'</strong> · '+g.items.length+' items</p>';}).join('')],
+            ['bookings','Booking reminders','Reserve the important parts before you go',prep((p.flags||[]).concat(p.days.flatMap(function(d){return (d.prep||[]).concat(d.items.flatMap(function(it){return it.prep||[];}));})).filter(function(t){return t.type==='book';}))]
+        ].forEach(function(r){var sec=document.createElement('section');sec.className='card utility-tile';sec.id=r[0]+'-tile';sec.dataset.title=r[1];sec.dataset.summary=r[2];sec.innerHTML='<h2>'+r[1]+'</h2>'+r[3];content.append(sec);});
+        var grid=document.createElement('div');grid.className='tile-grid';content.append(grid);
+        var sections=Array.from(view.querySelectorAll('.day, .budget, .utility-tile'));
+        sections.forEach(function(sec,i){
+            var id=sec.id||'budget-tile';if(sec.classList.contains('day'))sec.dataset.testid='plan-day';else if(sec.classList.contains('budget'))sec.dataset.testid='budget-buckets';
+            var wrap=document.createElement('div');wrap.dataset.testid='tile';wrap.className='tile';grid.append(wrap);wrap.append(sec);
+            var body=document.createElement('div');body.id='tile-content-'+i;body.className='tile-content';while(sec.firstChild)body.append(sec.firstChild);sec.append(body);
+            var title=sec.classList.contains('day')?'Day '+(i+1)+' · '+state.plan.days[i].theme:sec.dataset.title||'Budget';
+            var summary=sec.dataset.summary||(sec.classList.contains('day')?dateLabel(state.plan.days[i].date)+' · '+state.plan.days[i].items.length+' stops':'Five spending buckets · approx. estimates');
+            var toggle=document.createElement('button');toggle.dataset.testid='tile-toggle';toggle.className='tile-toggle';toggle.setAttribute('aria-controls',body.id);toggle.innerHTML='<span class="tile-badge" aria-hidden="true">'+(sec.classList.contains('day')?String(i+1):icon(sec.classList.contains('budget')?'budget':({'food-tile':'food','transport-tile':'style','bring-tile':'bring','trip-essentials':'info'})[id]||'dates'))+'</span><span class="tile-label">'+esc(title)+'<small>'+esc(summary)+'</small></span><span aria-hidden="true">＋</span>';sec.prepend(toggle);
+            function set(on){toggle.setAttribute('aria-expanded',String(on));body.hidden=!on;wrap.classList.toggle('is-open',on);}
+            set(openTile===id);
+            toggle.onclick=function(){var on=toggle.getAttribute('aria-expanded')!=='true';view.querySelectorAll('[data-testid="tile-toggle"]').forEach(function(t){t.setAttribute('aria-expanded','false');t.nextElementSibling.hidden=true;t.closest('.tile').classList.remove('is-open');});set(on);openTile=on?id:null;};
+        });
+        view.querySelectorAll('.daynav a').forEach(function(a,i){a.addEventListener('click',function(){var t=view.querySelectorAll('.day .tile-toggle')[i];if(t.getAttribute('aria-expanded')!=='true')t.click();});});
     }
     function recommendations() {
         var a=state.answers, all=Engine.recommend(a).filter(function(d) {
@@ -538,7 +603,7 @@
         }).join('');
     }
     function fork() {
-        view.innerHTML='<section class="question"><div class="eyebrow">A PLAN THAT FEELS LIKE YOU</div>'+heading('Want it more personal?', 'How detailed should we go? You can always refine later.')+'<div class="card"><span class="badge">ABOUT 1 MINUTE</span><h2>Yes, answer 3 more</h2><p>3 quick questions about food, pace and must-dos.</p>'+btn('Ask me →', 'fork-yes', 'primary full')+'</div><div class="card" style="margin-top:16px"><h2>No, quick plan now</h2><p>We’ll build it now from what you’ve told us.</p>'+btn('Plan it →', 'fork-no', 'outline full')+'</div><div class="qfooter">'+btn('← Back', 'fork-back', '')+'</div></section>';
+        view.innerHTML='<section class="question">'+passport()+'<div class="eyebrow">A PLAN THAT FEELS LIKE YOU</div>'+heading('Want it more personal?', 'How detailed should we go? You can always refine later.')+'<div class="card"><span class="badge">ABOUT 1 MINUTE</span><h2>Yes, answer 3 more</h2><p>3 quick questions about food, pace and must-dos.</p>'+btn('Ask me →', 'fork-yes', 'primary full')+'</div><div class="card" style="margin-top:16px"><h2>No, quick plan now</h2><p>We’ll build it now from what you’ve told us.</p>'+btn('Plan it →', 'fork-no', 'outline full')+'</div><div class="qfooter">'+btn('← Back', 'fork-back', '')+'</div></section>';
         on('fork-back', function() {
             go(state.answers.unsure?'recommendations':'style');
         });
@@ -741,6 +806,7 @@
                 day:'numeric'
             })+'</a>';
         }).join('')+'</nav>'+p.days.map(dayHTML).join(''):state.tab==='packing'?packingHTML():subheading('A little local knowledge', 'Useful notes, with a way back to the source.')+tipsHTML(p.tips)+'<p class="footer-note">Tips shown here link to their sources. Live social/review data comes later; real-data tips will show platform, link and retrieval date.</p>')+'</div><footer class="row" style="padding:25px 0">'+btn('Open packing list', 'open-packing', 'primary')+btn('Print / Save as PDF', 'print', 'outline')+btn('Copy as text', 'copy', 'outline')+btn('Share', 'share', 'outline')+'</footer><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
+        planTiles();
         on('build-template', function() {
             state.answers.templateOahu=true;
             save();

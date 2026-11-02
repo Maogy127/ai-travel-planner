@@ -48,7 +48,7 @@
                     resolve(Engine.applyAgeRules(plan, curated
                         ? Object.assign({}, answers, { ages: [18, 19] })
                         : answers));
-                }, (opts && opts.fast) || new URLSearchParams(location.search).get('fast') === '1' ? 0 : 1500);
+                }, matchMedia('(prefers-reduced-motion: reduce)').matches || (opts && opts.fast) || new URLSearchParams(location.search).get('fast') === '1' ? 0 : 1500);
             });
         },
         recommendDestinations: function (answers) {
