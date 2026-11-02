@@ -1043,3 +1043,12 @@ html.reduce-motion .page-sheet{display:none}html.reduce-motion .page-flip{animat
 
 [data-testid="rank-badge"]{white-space:nowrap}
 #toast:empty{padding:0!important;border:0!important;box-shadow:none!important;opacity:0;pointer-events:none}
+
+/* Local guidance remains readable on narrow screens and on printed plans. */
+#local-info p, #local-info small { overflow-wrap:anywhere; }
+#local-info small { display:block; margin-block:.5rem; }
+#local-info input { display:block; max-width:100%; width:12rem; margin-block:.5rem; }
+#local-info output { display:block; margin-block:.5rem; }
+
+.partner-link{overflow-wrap:anywhere}.partner-search{font-size:.85rem}
+@media print{.partner-link,.partner-search{display:none!important}}

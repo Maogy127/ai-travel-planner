@@ -545,6 +545,10 @@
             ['bring','What to bring','Your essentials, grouped and ready to tick', '<p>Open the Packing tab for the complete checklist. Activity checklists inside each day stay in sync with it.</p>'+packingGroups().map(function(g){return '<p><strong>'+esc(g.group)+'</strong> · '+g.items.length+' items</p>';}).join('')],
             ['bookings','Booking reminders','Reserve the important parts before you go',prep((p.flags||[]).concat(p.days.flatMap(function(d){return (d.prep||[]).concat(d.items.flatMap(function(it){return it.prep||[];}));})).filter(function(t){return t.type==='book';}))]
         ].forEach(function(r){var sec=document.createElement('section');sec.className='card utility-tile';sec.id=r[0]+'-tile';sec.dataset.title=r[1];sec.dataset.summary=r[2];sec.innerHTML='<h2>'+r[1]+'</h2>'+r[3];content.append(sec);});
+        var local=document.createElement('section');local.className='card utility-tile';local.id='local-info';local.dataset.testid='local-info';local.dataset.title='Weather, money & local info';local.dataset.summary='Local time, plugs, weather and currency';content.append(local);
+        var destination=p.id==='oahu-demo-2026-11'?'oahu':Engine.matchDestination(state.answers.destination).id;
+        var loadLocal=LocalInfo.mount(local,destination,p.start,p.end);
+        var booking=document.createElement('section');booking.className='card utility-tile';booking.id='book-links';booking.dataset.testid='book-links';booking.dataset.title='Book this';booking.dataset.summary='Hotel and flight searches on partner sites';booking.innerHTML=bookLinksHTML();content.append(booking);
         var grid=document.createElement('div');grid.className='tile-grid';content.append(grid);
         var sections=Array.from(view.querySelectorAll('.day, .budget, .utility-tile'));
         sections.forEach(function(sec,i){
@@ -556,7 +560,8 @@
             var toggle=document.createElement('button');toggle.dataset.testid='tile-toggle';toggle.className='tile-toggle';toggle.setAttribute('aria-controls',body.id);toggle.innerHTML='<span class="tile-badge" aria-hidden="true">'+(sec.classList.contains('day')?String(i+1):icon(sec.classList.contains('budget')?'budget':({'food-tile':'food','transport-tile':'style','bring-tile':'bring','trip-essentials':'info'})[id]||'dates'))+'</span><span class="tile-label">'+esc(title)+'<small>'+esc(summary)+'</small></span><span aria-hidden="true">＋</span>';sec.prepend(toggle);
             function set(on){toggle.setAttribute('aria-expanded',String(on));body.hidden=!on;wrap.classList.toggle('is-open',on);}
             set(openTile===id);
-            toggle.onclick=function(){var on=toggle.getAttribute('aria-expanded')!=='true';view.querySelectorAll('[data-testid="tile-toggle"]').forEach(function(t){t.setAttribute('aria-expanded','false');t.nextElementSibling.hidden=true;t.closest('.tile').classList.remove('is-open');});set(on);openTile=on?id:null;};
+            toggle.onclick=function(){var on=toggle.getAttribute('aria-expanded')!=='true';view.querySelectorAll('[data-testid="tile-toggle"]').forEach(function(t){t.setAttribute('aria-expanded','false');t.nextElementSibling.hidden=true;t.closest('.tile').classList.remove('is-open');});set(on);openTile=on?id:null;if(on&&id==='local-info')loadLocal();};
+            if(openTile===id&&id==='local-info')loadLocal();
         });
         view.querySelectorAll('.daynav a').forEach(function(a,i){a.addEventListener('click',function(){var t=view.querySelectorAll('.day .tile-toggle')[i];if(t.getAttribute('aria-expanded')!=='true')t.click();});});
     }
@@ -734,12 +739,26 @@
             return'<article class="card tip"><span class="badge">Source type: '+esc(t.sourceType)+'</span><p>'+esc(t.text)+'</p>'+(t.url?'<a data-testid="tip-source" href="'+esc(t.url)+'" target="_blank" rel="noopener noreferrer">Read source ↗</a>':'')+'</article>';
         }).join('');
     }
+    function partnerLink(key, title, activity) {
+        var a=state.answers, p=state.plan;
+        var destination=p.id==='oahu-demo-2026-11'?'Oahu, Hawaii':Engine.matchDestination(a.destination).name;
+        // Only explicit airport choices are accepted; ambiguous city/region names fall back.
+        var airports={'los angeles (lax)':'LAX','los angeles':'LAX','lax':'LAX','hnl':'HNL','honolulu':'HNL','oahu':'HNL','oahu, hawaii':'HNL'};
+        var values={destination:destination,start:p.start||'',end:p.end||'',adults:a.who==='solo'?1:a.who==='couple'?2:(a.adults||2),
+            query:(title?title+' ':'')+destination,
+            fromIata:airports[(a.origin||'').trim().toLowerCase()],toIata:airports[destination.toLowerCase()],
+            yymmdd_start:(p.start||'').slice(2).replace(/-/g,''),yymmdd_end:(p.end||'').slice(2).replace(/-/g,'')};
+        return '<a class="partner-link" data-partner="'+key+'"'+(activity?' data-testid="book-this"':'')+' href="'+esc(window.gonowPartnerURL(key,values))+'" target="_blank" rel="noopener noreferrer sponsored">Search on '+esc(window.GONOW_AFFILIATES.partners[key].name)+' ↗</a>';
+    }
+    function bookLinksHTML() {
+        return '<h2>Book this</h2><p data-testid="affiliate-disclosure">'+esc(window.GONOW_AFFILIATES.disclosure)+'</p><p>Hotels</p><div class="row">'+partnerLink('booking')+partnerLink('expedia')+'</div><p>Flights</p><div class="row">'+partnerLink('skyscanner')+'</div><small>Choose airports on Skyscanner if your route is unknown. Confirm dates and travelers on every partner site.</small>';
+    }
     function itemHTML(it, dayIndex) {
         var edit=state.edits.items&&state.edits.items[it.id]|| {}, title=edit.title||it.title, note=edit.note||'', time=edit.time||it.time;
         if(edit.swapped)it=Object.assign( {}, it,  {
             sources:[], bring:[], prep:[], tips:[], price:'', bestTime:'', bookable:false
         });
-        return'<li data-item-id="'+esc(it.id)+'" id="item-'+esc(it.id)+'"><time>'+esc(time)+'</time><article class="item '+esc(it.kind)+'"><div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bring&&it.bring.length?'<details><summary data-testid="disclosure">What to bring ('+it.bring.length+')</summary><small>Ticking here also ticks it on your packing list.</small>'+it.bring.map(function(id) {
+        return'<li data-item-id="'+esc(it.id)+'" id="item-'+esc(it.id)+'"><time>'+esc(time)+'</time><article class="item '+esc(it.kind)+'"><div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bookable?'<p class="partner-search"><small>Find/Book this · Secondary search options</small><br>'+partnerLink('getyourguide',title,true)+' · '+partnerLink('viator',title,true)+'</p>':'')+(it.bring&&it.bring.length?'<details><summary data-testid="disclosure">What to bring ('+it.bring.length+')</summary><small>Ticking here also ticks it on your packing list.</small>'+it.bring.map(function(id) {
             var p=packingItem(id);
             return p?checkHTML(p, 'bring-item'):'';
         }).join('')+'</details>':'')+(it.prep&&it.prep.length?'<p class="section-label" style="margin-top:15px">Prep reminders</p>'+prep(it.prep):'')+(it.tips?it.tips.map(function(t) {
