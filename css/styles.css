@@ -1052,3 +1052,55 @@ html.reduce-motion .page-sheet{display:none}html.reduce-motion .page-flip{animat
 
 .partner-link{overflow-wrap:anywhere}.partner-search{font-size:.85rem}
 @media print{.partner-link,.partner-search{display:none!important}}
+
+/* Day Builder — separate from the itinerary's tiles and items. */
+/* Day Builder: joined parchment tickets and a compact activity chest. */
+.db-root{margin:20px 0 32px;padding:20px;border:1px solid #b9a57f;border-radius:6px 18px 6px 6px;background:linear-gradient(125deg,#f5ecd7,#fffaf0);box-shadow:0 6px 20px #4636240b;min-width:0}
+.db-root[hidden],.db-form[hidden],.db-tray[hidden]{display:none}
+.db-heading{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.db-heading h2{margin:0;font-size:26px}.db-heading>button{margin-left:auto}
+.db-summary,.db-count,.db-tag,.db-lock{font-size:11px;border:1px solid #c8b994;border-radius:20px;padding:2px 7px;background:#eee5cf;white-space:nowrap}
+.db-root button{min-height:32px;min-width:32px;padding:5px 9px;font-size:12px;border:1px solid #bdad8d;border-radius:5px;background:#fffaf0;color:#30494b}
+.db-root button:hover{background:#e9dec6}
+.db-root button:focus-visible,.db-root input:focus-visible,.db-root select:focus-visible,.db-locked:focus-visible{outline:3px solid #237b88;outline-offset:3px}
+.db-days{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px}
+.db-days button[aria-pressed=true]{background:#294e50;color:#fff;border-color:#294e50}
+.db-pair{display:flex;align-items:stretch;margin:6px 0;border:1px solid #c7b794;border-radius:5px 10px 10px 5px;background:#fffcf4;min-width:0;position:relative}
+.db-time{flex:0 0 156px;padding:10px 12px;display:flex;align-items:center;border-right:1px dashed #ad9670;background:linear-gradient(95deg,#eadabb,#f1e6cf);font:600 12px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;font-variant-numeric:tabular-nums;border-radius:4px 0 0 4px;overflow-wrap:normal}
+.db-time::after{content:'';position:absolute;left:150px;top:-5px;width:10px;height:10px;border-radius:50%;background:#f7efdd;border-bottom:1px solid #c7b794}
+.db-activity{padding:9px 12px;flex:1;min-width:0;overflow-wrap:anywhere;position:relative}
+.db-activity strong{display:block;font-size:14px;line-height:1.35}.db-activity small{display:block;font-size:11px;color:#65706a;line-height:1.5}
+.db-controls{display:flex;gap:4px;margin-top:6px;flex-wrap:wrap}
+.db-controls [data-db-action=handle]{touch-action:none;cursor:grab;font-size:20px;line-height:1;padding:2px 7px;color:#746245}
+.db-controls button:not([data-db-action=add]){font-size:18px;line-height:1}
+.db-lock{display:inline-flex;align-items:center;gap:4px;margin-top:5px}.db-locked{border:2px solid #8e7956}.db-locked .db-time{background:#dfcdab}
+.db-activity>[data-db-action=delete]{position:absolute;right:6px;bottom:5px}
+.db-prep{border-style:dashed;background:#f2eee4;color:#6d726b}.db-prep .db-time{background:#e9e4d8}.db-tag{display:inline-block;margin-top:4px}
+.db-free{border-color:#d9d9c9;background:#fffefa}.db-free .db-time{background:#f1f1e6}
+.db-travel{margin:0 0 0 18px;padding:4px 12px;border-left:1px dotted #a58e66;color:#65706a;font-size:11px;line-height:1.5}
+.db-chest-toggle{margin:14px 8px 8px 0;display:inline-flex;align-items:center;gap:10px}.db-count{padding:1px 6px}
+.db-tray{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;padding:12px;margin:4px 0 14px;border:1px dashed #a99269;border-radius:8px;background:#e9dcc244;min-height:70px}
+.db-tray .db-pair{margin:0}.db-tray .db-activity{padding:10px}
+.db-form{display:grid;grid-template-columns:2fr 1fr 1fr 1.5fr auto;align-items:end;gap:10px;padding-top:12px;margin-top:8px;border-top:1px dashed #baa57d}
+.db-form label{font-size:12px;min-width:0}.db-form input,.db-form select{display:block;min-width:0;width:100%;padding:8px;font-size:13px}.db-form>p{grid-column:1/-1;margin:0;color:#9e3930;font-size:12px}.db-form>button{justify-self:start;align-self:end;height:40px;padding:8px 16px;background:#237b88;color:white;border-color:#237b88}
+.db-conflict{border:2px solid #ad5144}.db-note{display:table;font-size:11px;line-height:1.5;color:#943c33;background:#fae7df;border-radius:8px;padding:3px 7px;margin:7px 0 0}
+.db-picked{outline:3px solid #237b88;outline-offset:3px;box-shadow:0 8px 15px #294e5033;transform:translateY(-2px)}
+.db-ghost{position:fixed!important;pointer-events:none!important;z-index:10000;width:min(320px,calc(100vw - 24px));opacity:.9;box-shadow:0 12px 28px #273f4a55;transform:rotate(2deg);margin:0}
+.db-ghost *{pointer-events:none!important}.db-ghost .db-controls{display:none}
+.db-drop-indicator{position:fixed;pointer-events:none;z-index:10001;height:3px;background:#237b88;border-radius:2px;box-shadow:0 0 0 2px #fff8}
+.db-shake{animation:db-shake .35s ease-in-out}
+@keyframes db-shake{25%,75%{transform:translateX(-3px)}50%{transform:translateX(3px)}}
+@media(max-width:900px){.db-tray{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:600px){
+ .db-root{padding:12px}.db-heading{gap:8px}.db-heading h2{font-size:23px}.db-heading>button{margin-left:0}
+ .db-root button{min-width:40px;min-height:40px}.db-time{flex-basis:84px;padding:9px 6px;font-size:11px}.db-time::after{left:78px}
+ .db-activity{padding:8px}.db-activity strong{font-size:13px}.db-controls{gap:4px}.db-controls button{padding:4px}
+ .db-travel{font-size:10px;margin-left:9px;padding:4px 6px}.db-tray{grid-template-columns:minmax(0,1fr);padding:8px}
+ .db-form{grid-template-columns:repeat(2,minmax(0,1fr))}.db-form>label:first-child{grid-column:1/-1}.db-form>button{grid-column:1/-1;width:100%;justify-self:stretch}
+}
+@media(prefers-reduced-motion:reduce){.db-root *,.db-ghost,.db-ghost *,.db-drop-indicator{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+@media print{.db-root{display:none}}
+
+html.reduce-motion .db-ghost,html.reduce-motion .db-ghost *,html.reduce-motion .db-drop-indicator{animation:none!important;transition:none!important}
+
+.db-travel-late{color:#943c33;border-left-color:#ad5144;background:#fae7df}

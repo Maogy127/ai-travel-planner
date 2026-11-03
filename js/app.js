@@ -842,6 +842,12 @@
         }).join('')+'</nav>'+p.days.map(dayHTML).join(''):state.tab==='packing'?packingHTML():subheading('A little local knowledge', 'Useful notes, with a way back to the source.')+tipsHTML(p.tips)+'<p class="footer-note">Tips shown here link to their sources. Live social/review data comes later; real-data tips will show platform, link and retrieval date.</p>')+'</div><footer class="row" style="padding:25px 0">'+btn('Open packing list', 'open-packing', 'primary')+'<span data-testid="print">'+btn('Print / Save as PDF', 'print-plan', 'outline')+'</span>'+btn('Copy as text', 'copy', 'outline')+'<span data-testid="share">'+btn('Share link', 'share-link', 'outline')+'</span>'+btn('Download calendar', 'download-ics', 'outline')+'</footer><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
         planTiles();
         expeditionUI();
+        if(p.id==='oahu-demo-2026-11'&&state.tab==='plan'&&window.DayBuilder){
+            var db=document.createElement('section');db.className='db-root';db.dataset.testid='db-root';
+            document.querySelector('#tab-content .daynav').insertAdjacentElement('afterend',db);
+            db.hidden=get('treasure-map')?!get('treasure-map').hidden:false;
+            window.DayBuilder.mount(db,{ages:state.answers.ages});
+        }
         on('build-template', function() {
             state.answers.templateOahu=true;
             save();
@@ -1236,7 +1242,7 @@
         var map= pref==='map';
         var content=document.getElementById('tab-content');
         content.insertAdjacentHTML('afterbegin','<div class="view-switch row" role="group" aria-label="Itinerary view">'+btn('List','view-list','outline','aria-pressed="'+!map+'"')+btn('Treasure map','view-map','outline','aria-pressed="'+map+'"')+'</div><section class="treasure-map" data-testid="treasure-map" '+(!map?'hidden':'')+'><h2>Your treasure route</h2><p>Illustrative route, not to scale</p><svg viewBox="0 0 600 '+(state.plan.days.length*95+40)+'" role="img" aria-label="Dotted illustrative route through each day">'+state.plan.days.map(function(d,i){var x=i%2?430:170,y=55+i*95;return (i?'<path d="M'+(i%2?170:430)+' '+(y-95)+' Q300 '+(y-45)+' '+x+' '+y+'" fill="none" stroke="currentColor" stroke-dasharray="3 8"/>':'')+d.items.map(function(it,j){return '<circle cx="'+(x-45+j%9*11)+'" cy="'+(y+30+Math.floor(j/9)*7)+'" r="2" fill="currentColor"/>';}).join('')+'<circle cx="'+x+'" cy="'+y+'" r="22" fill="#f8eed7" stroke="currentColor"/><text x="'+x+'" y="'+(y+6)+'" text-anchor="middle">'+(i+1)+'</text>'+(i===state.plan.days.length-1?'<path d="M'+(x+32)+' '+(y-12)+'l24 24m0-24l-24 24" stroke="#963a29" stroke-width="3"/>':'');}).join('')+'</svg><ol>'+state.plan.days.map(function(d,i){return '<li>'+btn('Day '+(i+1)+' · '+d.date+' · '+esc(d.theme),'map-day','outline','data-map-day="'+i+'"')+'</li>';}).join('')+'</ol></section>');
-        function setMap(value,persist){map=value;get('treasure-map').hidden=!value;content.querySelector('.tile-grid').hidden=value;content.querySelector('.daynav').hidden=value;get('view-list').setAttribute('aria-pressed',String(!value));get('view-map').setAttribute('aria-pressed',String(value));if(persist){try{localStorage.setItem(KEY+'view',value?'map':'list');}catch(e){}if(value)earn('Viewed the treasure map');}}
+        function setMap(value,persist){map=value;get('treasure-map').hidden=!value;content.querySelector('.tile-grid').hidden=value;content.querySelector('.daynav').hidden=value;var builder=content.querySelector('.db-root');if(builder)builder.hidden=value;get('view-list').setAttribute('aria-pressed',String(!value));get('view-map').setAttribute('aria-pressed',String(value));if(persist){try{localStorage.setItem(KEY+'view',value?'map':'list');}catch(e){}if(value)earn('Viewed the treasure map');}}
         setMap(map,false);on('view-map',function(){setMap(true,true);});on('view-list',function(){setMap(false,true);});
         view.querySelectorAll('[data-map-day]').forEach(function(b){b.onclick=function(){setMap(false,true);var t=document.querySelector('#day-'+b.dataset.mapDay+' .tile-toggle');if(t.getAttribute('aria-expanded')!=='true')t.click();t.scrollIntoView({block:'start',behavior:'auto'});t.focus({preventScroll:true});};});
     }

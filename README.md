@@ -57,3 +57,12 @@ The **Book this** tile offers Booking.com and Expedia hotel searches and Skyscan
 `js/affiliates.js` defines `window.GONOW_AFFILIATES` and the single `gonowPartnerURL` builder. Enrollment is disabled and all IDs are empty, so no affiliate parameters are appended. TODO comments identify placeholders. Only enabling the config and supplying a nonempty ID plus a configured parameter enables attribution; Viator mcid is also empty. Expedia Group Travel Creator Program and Skyscanner parameter names must be configured from actual enrollment details. All template values and attribution values are URL encoded. Skyscanner uses a dated route only with known IATA codes for both ends; otherwise it opens the homepage. The small explicit airport lookup covers LAX and HNL; ambiguous destinations fall back. Verify dates, airports and traveler details on partner sites.
 
 Both file and HTTP regression runs cover the partner domains, destination searches (or flight IATA/homepage fallback), absent attribution parameters, disclosure, link relationships, official Kualoa source and print hiding. They also check that a Costa Rica CRC plan displays **Live rate unavailable** without requesting Frankfurter.
+
+The Oahu sample includes **Build your day**, a separate editable itinerary with a
+Treasure chest, fixed bookings and derived travel/preparation blocks. Move handles
+support pointer drag and Space/Enter, arrow keys, Escape; move buttons also work
+on touch screens. Builder edits save under
+`gonow:daybuilder:oahu-demo-2026-11`. Reset to suggested restores the selected day.
+Planning estimates and warnings require checking routes and actual reservations.
+Run `node tests/daybuilder_logic.js` from the project root for pure scheduling
+checks, and `python3 tests/shots_daybuilder.py` for the ten builder screenshots.
