@@ -792,8 +792,9 @@
             return true;
         });
         if(relaxed&&i===2&&state.plan.id==='oahu-demo-2026-11') {
-            items.push( {
-                id:'relax-kahala', time:'~11:15 AM', kind:'rest', title:'Uber back to the Kahala, then hotel beach / pool and sunset at Kahala Beach', desc:'A gentler afternoon after the dive. Check the Uber app for the fare from Kewalo Basin.', bring:[], prep:[], sources:[]
+            var afterDive=items.findIndex(function(it){return /intro dive/i.test(it.title);})+1;
+            items.splice(afterDive||items.length,0, {
+                id:'relax-kahala', time:'~11:15 AM', kind:'rest', title:'Uber back to the Kahala, then hotel beach / pool before getting ready for Senia', desc:'A gentler afternoon after the dive. Check the Uber app for the fare from Kewalo Basin.', bring:[], prep:[], sources:[]
             });
         }
         if(relaxed&&i===3&&state.plan.id==='oahu-demo-2026-11') {

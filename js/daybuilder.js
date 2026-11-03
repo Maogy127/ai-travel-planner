@@ -24,6 +24,7 @@ function place(title) {
     if (/Kewalo|dive|parasail/i.test(title)) return 'Kewalo Basin';
     if (/Kualoa|Aunty Pat|Jurassic/i.test(title)) return 'Kualoa Ranch';
     if (/Diamond Head.*entry|Reserve to Diamond/i.test(title)) return 'Diamond Head';
+    if (/Senia|Chinatown/i.test(title)) return 'Chinatown';
     if (/Kahala|palms/i.test(title)) return HOTEL;
     if (/Ala Moana|Magic Island|Makai Market/i.test(title)) return 'Ala Moana';
     if (/Lanikai|Kailua/i.test(title)) return 'Kailua';
@@ -34,10 +35,16 @@ function place(title) {
 // oahu.js Nov 26 dinner/return: 15–20 / 20–30 min; Nov 27 dive: 20–30 min;
 // Nov 26 Diamond Head exit: 15–20 min; Kualoa shuttle: 55–70 min;
 // Nov 28 Kailua departure: 40–45 min, Kailua→Makapuu: 25–35 min.
+// Nov 27 Kewalo→Ala Moana: 15–20 min walk; Kahala↔Senia (Chinatown): 30–40 min.
 const routes = {
     'Kahala palms|Waikiki': 30, 'Kahala|Waikiki': 20, 'Kahala|Kewalo Basin': 30, 'Diamond Head|Waikiki': 20,
-    'Kualoa Ranch|Waikiki': 60, 'Kahala|Kailua': 45, 'Kailua|Makapuu': 35
+    'Kualoa Ranch|Waikiki': 60, 'Kahala|Kailua': 45, 'Kailua|Makapuu': 35, 'Kahala|Chinatown': 35,
+    'Kewalo Basin|Ala Moana': 20
 };
+const walks = new Set(['Kewalo Basin|Ala Moana']);
+const isWalk = (from, to) => walks.has(from + '|' + to) || walks.has(to + '|' + from);
+// Short names used in "you'd miss …" notes for dressy dinners.
+const venue = booking => booking.short || (booking.dressy ? 'La Mer' : booking.title);
 function commuteMinutes(from, to) {
     // oahu.js Nov 26 prep/photos: ten minutes along the beach and back.
     if ([from, to].includes('Kahala palms') && [from, to].includes(HOTEL)) return 10;
@@ -49,6 +56,7 @@ function leg(from, to) {
     let label = '~15–30 min, check route';
     if (from === to) label = 'short walk, est.';
     else if (minutes === 10) label = 'Walk ~10 min';
+    else if (isWalk(from, to)) label = 'Walk ~' + minutes + ' min';
     else if (minutes === 60 && [from, to].includes('Kualoa Ranch')) label = 'Shuttle ~60 min';
     else if (routes[from + '|' + to] || routes[to + '|' + from]) label = 'Uber ~' + minutes + ' min';
     return {minutes, label};
@@ -105,6 +113,23 @@ function buildSuggested(date) {
         items[items.findIndex(i => i.id === 'lamer')].prepBlock = items.find(i => i.kind === 'prep');
         items = items.filter(i => i.kind !== 'prep');
     }
+    if (date === '2026-11-27') {
+        // Dive, Ala Moana, hotel prep, then the locked 6:00–8:00 PM Senia booking.
+        const [ride, dive, lunch, shop, toHotel, prep, toDinner, dinner, home] = items;
+        [[ride, 30], [dive, 180], [lunch, 40], [shop, 175]].forEach(([item, minutes]) => { item.duration = minutes; });
+        items.forEach(item => { item.estimate = false; });
+        Object.assign(ride, {place: HOTEL, to: 'Kewalo Basin'});
+        Object.assign(dive, {id: 'dive-1127'});
+        Object.assign(lunch, {id: 'lunch-1127'});
+        Object.assign(shop, {id: 'shopping'});
+        Object.assign(toHotel, {id: 'uber-kahala', place: 'Ala Moana', to: HOTEL, duration: 30, pickup: true});
+        Object.assign(prep, {id: 'prep-senia', kind: 'prep', place: HOTEL, duration: 60});
+        Object.assign(dinner, {id: 'senia', place: 'Chinatown', locked: true, dressy: true, short: 'Senia', venue: 'Senia',
+            duration: 120, prepBlock: prep,
+            inboundRide: {...toDinner, place: HOTEL, duration: 35, label: 'Uber ~30–40 min, est. $20–30'}});
+        Object.assign(home, {id: 'uber-home', place: 'Chinatown', to: HOTEL, duration: 35, pickup: true});
+        items = [ride, dive, lunch, shop, toHotel, dinner, home];
+    }
 
     // The flight remains an unknown-time anchor until the traveler supplies a time.
     if (date === '2026-11-29') items.forEach(item => {
@@ -117,13 +142,16 @@ function buildSuggested(date) {
     });
     return {date, items};
 }
+// Ideas no longer on a day card stay available in the treasure chest.
+const chestOnly = [{id: 'magic-island', time: '5:15 PM', kind: 'sight', title: 'Magic Island sunset',
+    desc: 'Ala Moana Beach Park. Be in place by about 5:30 PM; sunset about 5:48 PM.'}];
 function trayItems() {
     const all = window.OAHU_SAMPLE.days.flatMap(day => day.items);
     const patterns = [/Beginner intro dive/, /Waikiki parasail/, /Jurassic Adventure/, /Black Friday shopping/,
         /^Royal Hawaiian Center/, /palms — sunset/, /^Magic Island/, /^Waikiki Beach sunset/, /Free time at the Kahala/,
         /Lanikai Pillbox/, /^Makapuʻu Lighthouse Trail/, /Diamond Head —/];
     return patterns.map((pattern, index) => {
-        const item = convert(all.find(item => pattern.test(item.title)));
+        const item = convert(all.find(item => pattern.test(item.title)) || chestOnly.find(item => pattern.test(item.title)));
         Object.assign(item, {sourceId: item.id, id: 'chest-' + index, preferred: null, locked: false});
         if (index === 5) Object.assign(item, {place: 'Kahala palms', duration: 60, estimate: false});
         if (index === 8) item.title = 'Hotel downtime';
@@ -164,10 +192,14 @@ function reflow(day, ctx = {}) {
             item.walkBack = {depart: previous.end, arrive: previous.end + 10};
             travel = leg(HOTEL, WAIKIKI);
             if (item.inboundRide) travel = {minutes: item.inboundRide.duration, label: 'Uber ~' + item.inboundRide.duration + ' min'};
+        } else if (item.inboundRide?.label && previous && (previous.to || previous.place) === item.inboundRide.place) {
+            travel = {minutes: item.inboundRide.duration, label: item.inboundRide.label};
         }
         // Explicit rides already include arrival travel; free time and prep share a hotel room.
         if ((previous?.kind === 'travel' && previous.to === item.place) || (previous?.flex && item.kind === 'prep')) travel = {minutes: 0, label: ''};
         if (previous?.walkNext && previous.place === item.place) travel = {minutes: 5, label: 'Walk ~5 min'};
+        // A ride booked from where you already are needs no connector.
+        if (item.pickup && previous && (previous.to || previous.place) === item.place) travel = {minutes: 0, label: ''};
         const earliest = previous ? previous.end + travel.minutes + (item.walkBack ? 10 : 0) : 0;
         item.start = item.locked && item.preferred !== null ? item.preferred : Math.max(earliest, item.preferred ?? (previous ? 0 : 540));
         if (item.flex) {
@@ -194,7 +226,7 @@ function reflow(day, ctx = {}) {
             const depart = item.locked && !item.textTime ? item.start - buffer - travel.minutes : previous.end;
             item.travel = {...travel, depart, arrive: depart + travel.minutes, late: item.locked && earliest + buffer > item.start};
             if (item.locked && !item.textTime && earliest + buffer > item.start) {
-                warn(previous, 'Ends ' + clock(previous.end) + " — you'd miss " + (item.dressy ? 'La Mer' : item.title), undefined, 0);
+                warn(previous, 'Ends ' + clock(previous.end) + " — you'd miss " + venue(item), undefined, 0);
             }
             // An explicit ride already includes travel: no redundant short walk.
             if (!travel.minutes || (previous.kind === 'travel' && previous.to === item.place)) item.travel = null;
@@ -212,7 +244,7 @@ function reflow(day, ctx = {}) {
             const beforeBooking = index < raw.indexOf(booking);
             const requiredTravel = commuteMinutes(item.to || item.place, booking.place);
             if (!item.locked && beforeBooking && item.end + requiredTravel + (booking.dressy ? 15 : 0) > booking.preferred) {
-                warn(item, 'Ends ' + clock(item.end) + " — you'd miss " + (booking.dressy ? 'La Mer' : booking.title), undefined, 0);
+                warn(item, 'Ends ' + clock(item.end) + " — you'd miss " + venue(booking), undefined, 0);
             }
             if ((!item.locked || item.custom) && item.start < booking.preferred + booking.duration && item.end > booking.preferred) {
                 warn(item, 'Overlaps ' + booking.title, undefined, 1);
@@ -450,7 +482,7 @@ function mount(root, ctx = {}) {
         const at = d.items.findIndex(i => (i.preferred ?? 1440) > start);
         d.items.splice(at < 0 ? d.items.length : at, 0, item);
         const overlap = d.items.find(i => i.id !== item.id && i.locked && i.preferred < end && i.preferred + i.duration > start);
-        formStatus = overlap ? 'Overlaps ' + (overlap.dressy ? 'La Mer at Halekulani' : overlap.title) : '';
+        formStatus = overlap ? 'Overlaps ' + (overlap.venue || (overlap.dressy ? 'La Mer at Halekulani' : overlap.title)) : '';
         save();
         const result = render({id: item.id, zone: 'day'});
         if (!formStatus && result.conflicts.length) {
