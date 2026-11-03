@@ -1104,3 +1104,22 @@ html.reduce-motion .page-sheet{display:none}html.reduce-motion .page-flip{animat
 html.reduce-motion .db-ghost,html.reduce-motion .db-ghost *,html.reduce-motion .db-drop-indicator{animation:none!important;transition:none!important}
 
 .db-travel-late{color:#943c33;border-left-color:#ad5144;background:#fae7df}
+/* Day Builder accessibility and compact coarse-pointer layout. */
+.db-sr{position:absolute;width:1px;height:1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.db-time{font-family:'DM Sans',sans-serif;gap:0;font-variant-numeric:tabular-nums}
+.db-activity small,.db-travel,.db-prep{color:#4f5a54;font-size:12px}
+.db-root small,.db-tag,.db-lock,.db-summary,.db-count,.db-note{font-size:12px}
+.db-drop-indicator{height:8px}.db-drop-target{outline:3px solid #237b88;background:#e4f0ec}
+.db-note svg{vertical-align:middle;margin-right:4px}
+.db-tray>small{grid-column:1/-1}
+@media(max-width:600px){
+ .db-time{flex-direction:column;justify-content:center;align-items:flex-start;font-size:14px}.db-time span+span{font-size:12px}
+ .db-tray{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:6px}.db-tray .db-activity{padding:7px}.db-tray .db-controls{gap:6px}.db-tray [data-db-action=add]{background:#294e50;color:white;flex:1}.db-tray [data-db-action=handle]{padding:2px}
+}
+@media(pointer:coarse){
+ .db-root button,.db-root input,.db-root select{min-width:44px;min-height:44px}
+ .db-controls,.db-days,.db-heading,.db-form{gap:6px}
+ .db-form>button{height:auto;min-height:44px}
+}
+.db-controls button svg,.db-activity>[data-db-action=delete] svg{display:block;margin:auto}
+.db-root .db-tray [data-db-action=add]:hover,.db-root .db-days button[aria-pressed=true]:hover{background:#1e3d3f;color:#fff}.db-root .db-form>button:hover{background:#1b6570;color:#fff}

@@ -35,17 +35,20 @@ function place(title) {
 // Nov 26 Diamond Head exit: 15–20 min; Kualoa shuttle: 55–70 min;
 // Nov 28 Kailua departure: 40–45 min, Kailua→Makapuu: 25–35 min.
 const routes = {
-    'Kahala|Waikiki': 20, 'Kahala|Kewalo Basin': 30, 'Diamond Head|Waikiki': 20,
+    'Kahala palms|Waikiki': 30, 'Kahala|Waikiki': 20, 'Kahala|Kewalo Basin': 30, 'Diamond Head|Waikiki': 20,
     'Kualoa Ranch|Waikiki': 60, 'Kahala|Kailua': 45, 'Kailua|Makapuu': 35
 };
 function commuteMinutes(from, to) {
+    // oahu.js Nov 26 prep/photos: ten minutes along the beach and back.
+    if ([from, to].includes('Kahala palms') && [from, to].includes(HOTEL)) return 10;
     if (from === to) return 0;
     return routes[from + '|' + to] ?? routes[to + '|' + from] ?? 30;
 }
 function leg(from, to) {
-    const minutes = commuteMinutes(from, to);
+    const minutes = from === to ? 5 : commuteMinutes(from, to);
     let label = '~15–30 min, check route';
-    if (!minutes) label = 'short walk';
+    if (from === to) label = 'short walk, est.';
+    else if (minutes === 10) label = 'Walk ~10 min';
     else if (minutes === 60 && [from, to].includes('Kualoa Ranch')) label = 'Shuttle ~60 min';
     else if (routes[from + '|' + to] || routes[to + '|' + from]) label = 'Uber ~' + minutes + ' min';
     return {minutes, label};
@@ -59,7 +62,7 @@ function duration(item) {
 function convert(item) {
     return {
         id: item.id, title: clean(item.title), place: place(item.title), preferred: parse(item.time),
-        duration: duration(item), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : [],
+        duration: duration(item), walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
     };
@@ -76,25 +79,39 @@ function buildSuggested(date) {
         }
     });
     if (date === '2026-11-26') {
-        items = items.slice(0, 7);
-        const durations = [15, 90, 20, 70, 15, 150, 60];
-        items.forEach((item, index) => { item.duration = durations[index]; item.estimate = false; });
+        // Morning source ranges use the upper end, except the documented 2 PM return.
+        const morningDurations = [15, 90, 20, 70, 15, 150, 60];
+        items.forEach((item, index) => {
+            if (index < morningDurations.length) item.duration = morningDurations[index];
+            else item.duration = duration(day.items[index]);
+            item.estimate = false;
+        });
+        // The locked reservation documents its full 7:30–9:30 PM window.
+        items[12].duration = 120;
         Object.assign(items[0], {place: HOTEL, to: 'Diamond Head'});
         items[1].locked = true;
         Object.assign(items[2], {place: 'Diamond Head', to: WAIKIKI});
         Object.assign(items[3], {place: WAIKIKI, to: 'Kualoa Ranch', locked: true});
         Object.assign(items[6], {place: 'Kualoa Ranch', to: WAIKIKI, locked: true});
-        items.push(
-            {id: 'return-hotel', title: 'Uber to the Kahala', place: WAIKIKI, to: HOTEL, preferred: 840, duration: 20, kind: 'travel'},
-            {id: 'free', title: 'Free time', place: HOTEL, preferred: 870, duration: 120, flex: true},
-            {id: 'photos', title: 'Sunset photos at the Kahala palms', place: HOTEL, preferred: 1050, duration: 60, detail: 'Sunset ~5:48 PM'},
-            {id: 'lamer', title: 'Dinner — La Mer at Halekulani', place: WAIKIKI, preferred: 1170, duration: 120, locked: true, dressy: true}
-        );
+        Object.assign(items[7], {id: 'return-hotel', place: WAIKIKI, to: HOTEL});
+        Object.assign(items[8], {id: 'free', flex: true});
+        Object.assign(items[9], {id: 'prep-dress', kind: 'prep', place: HOTEL});
+        Object.assign(items[10], {id: 'photos', place: 'Kahala palms', tags: ['sunset']});
+        Object.assign(items[12], {id: 'lamer', place: WAIKIKI, locked: true, dressy: true});
+        // Dinner travel becomes a connector; the hotel return remains on the day card.
+        items[12].inboundRide = {...items[11], duration: 20};
+        items.splice(13, 1);
+        items.splice(11, 1);
+        items[items.findIndex(i => i.id === 'lamer')].prepBlock = items.find(i => i.kind === 'prep');
+        items = items.filter(i => i.kind !== 'prep');
     }
-    // Flight departure is unknown: preserve the source's relative time as an anchor.
+
+    // The flight remains an unknown-time anchor until the traveler supplies a time.
     if (date === '2026-11-29') items.forEach(item => {
         item.locked = true;
-        item.textTime = 'Flight − 3 h 05';
+        item.title = 'Flight (add your time)';
+        item.flight = true;
+        item.textTime = 'Add flight time';
         item.detail = '';
         item.preferred = null;
     });
@@ -103,12 +120,13 @@ function buildSuggested(date) {
 function trayItems() {
     const all = window.OAHU_SAMPLE.days.flatMap(day => day.items);
     const patterns = [/Beginner intro dive/, /Waikiki parasail/, /Jurassic Adventure/, /Black Friday shopping/,
-        /^Royal Hawaiian Center/, /palms — sunset/, /^Magic Island/, /^Waikiki Beach sunset/, /Spa \/ rest/,
+        /^Royal Hawaiian Center/, /palms — sunset/, /^Magic Island/, /^Waikiki Beach sunset/, /Free time at the Kahala/,
         /Lanikai Pillbox/, /^Makapuʻu Lighthouse Trail/, /Diamond Head —/];
     return patterns.map((pattern, index) => {
         const item = convert(all.find(item => pattern.test(item.title)));
         Object.assign(item, {sourceId: item.id, id: 'chest-' + index, preferred: null, locked: false});
-        if (index === 8) item.title = 'Spa at the Kahala';
+        if (index === 5) Object.assign(item, {place: 'Kahala palms', duration: 60, estimate: false});
+        if (index === 8) item.title = 'Hotel downtime';
         return item;
     }).concat([{id: 'chest-bar', title: 'Sunset bar / cocktails', place: WAIKIKI, duration: 60,
         estimate: true, tags: ['alcohol'], detail: '21+'}]);
@@ -130,7 +148,7 @@ function reflow(day, ctx = {}) {
     if (dinner) {
         let at = raw.findIndex(item => item.id === 'photos');
         if (at < 0 || at > raw.indexOf(dinner)) at = raw.indexOf(dinner);
-        raw.splice(at, 0, {id: 'prep-dress', title: 'Get ready / change + makeup', place: HOTEL,
+        raw.splice(at, 0, dinner.prepBlock || {id: 'prep-dress', title: 'Get ready / change + makeup', place: HOTEL,
             duration: 60, preferred: 990, kind: 'prep'});
     }
     for (let index = 0; index < raw.length; index++) {
@@ -141,8 +159,16 @@ function reflow(day, ctx = {}) {
             output.push(item);
             continue;
         }
-        const travel = previous ? leg(previous.to || previous.place, item.place) : {minutes: 0, label: ''};
-        const earliest = previous ? previous.end + travel.minutes : 0;
+        let travel = previous ? leg(previous.to || previous.place, item.place) : {minutes: 0, label: ''};
+        if (previous?.place === 'Kahala palms' && item.place === WAIKIKI) {
+            item.walkBack = {depart: previous.end, arrive: previous.end + 10};
+            travel = leg(HOTEL, WAIKIKI);
+            if (item.inboundRide) travel = {minutes: item.inboundRide.duration, label: 'Uber ~' + item.inboundRide.duration + ' min'};
+        }
+        // Explicit rides already include arrival travel; free time and prep share a hotel room.
+        if ((previous?.kind === 'travel' && previous.to === item.place) || (previous?.flex && item.kind === 'prep')) travel = {minutes: 0, label: ''};
+        if (previous?.walkNext && previous.place === item.place) travel = {minutes: 5, label: 'Walk ~5 min'};
+        const earliest = previous ? previous.end + travel.minutes + (item.walkBack ? 10 : 0) : 0;
         item.start = item.locked && item.preferred !== null ? item.preferred : Math.max(earliest, item.preferred ?? (previous ? 0 : 540));
         if (item.flex) {
             // Work backwards from the next anchor, reserving every intervening
@@ -171,9 +197,11 @@ function reflow(day, ctx = {}) {
                 warn(previous, 'Ends ' + clock(previous.end) + " — you'd miss " + (item.dressy ? 'La Mer' : item.title), undefined, 0);
             }
             // An explicit ride already includes travel: no redundant short walk.
-            if (previous.kind === 'travel' || previous.to) item.travel = null;
+            if (!travel.minutes || (previous.kind === 'travel' && previous.to === item.place)) item.travel = null;
         }
-        if ((item.tags || []).includes('dive') && day.date >= '2026-11-28') {
+        const flightTime = ctx.flightTime;
+        const untilFlight = flightTime ? (Date.parse('2026-11-29T00:00:00Z') - Date.parse(day.date + 'T00:00:00Z')) / 60000 + parse(flightTime) - item.end : null;
+        if ((item.tags || []).includes('dive') && (flightTime ? untilFlight >= 0 && untilFlight < 1440 : day.date >= '2026-11-28')) {
             warn(item, 'Keep 24 hrs between diving and flying', window.OAHU_SOURCES.dan, 2);
         }
         if ((item.tags || []).some(tag => tag === 'alcohol' || tag === 'bar') && ages.some(age => age < 21)) {
@@ -186,19 +214,19 @@ function reflow(day, ctx = {}) {
             if (!item.locked && beforeBooking && item.end + requiredTravel + (booking.dressy ? 15 : 0) > booking.preferred) {
                 warn(item, 'Ends ' + clock(item.end) + " — you'd miss " + (booking.dressy ? 'La Mer' : booking.title), undefined, 0);
             }
-            if (!item.locked && item.start < booking.preferred + booking.duration && item.end > booking.preferred) {
+            if ((!item.locked || item.custom) && item.start < booking.preferred + booking.duration && item.end > booking.preferred) {
                 warn(item, 'Overlaps ' + booking.title, undefined, 1);
             }
         }
         const sunset = window.OAHU_SAMPLE.weather.text.match(/sunset approx\. (\d{1,2}:\d{2} PM)/i);
-        if (/sunset.*photo|photo.*sunset/i.test(item.title) && sunset && item.start > parse(sunset[1])) {
-            warn(item, 'Starts after sunset (~' + sunset[1] + ')', undefined, 4);
+        if ((item.tags || []).includes('sunset') && sunset && item.start > parse(sunset[1])) {
+            warn(item, item.start > parse(sunset[1]) + 30 ? 'After dark — sunset ~' + sunset[1] : 'Starts after sunset (~' + sunset[1] + ')', undefined, item.start > parse(sunset[1]) + 30 ? -1 : 4);
         }
         output.push(item);
         previous = item;
         if ((item.tags || []).includes('dive')) {
             const prep = {id: 'prep-' + item.id, title: 'Rinse off & change', place: item.place,
-                start: item.end, end: item.end + 30, duration: 30, kind: 'prep', detail: '~30 min, est.'};
+                start: item.end, end: item.end + 30, duration: 30, kind: 'prep', detail: '~30 min'};
             output.push(prep);
             previous = prep;
         }
@@ -207,7 +235,14 @@ function reflow(day, ctx = {}) {
         id: item.id, note: item.notes[0], source: item.noteSource
     }))};
 }
-const icons = {handle: '⠿', up: '↑', down: '↓', remove: '⇥', add: '+ Add', delete: '×'};
+const svg = path => `<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
+const icons = {
+    handle: svg('<path d="M8 5h1m6 0h1M8 12h1m6 0h1M8 19h1m6 0h1"/>'),
+    up: svg('<path d="M5 12l7-7 7 7M12 5v14"/>'),
+    down: svg('<path d="M5 12l7 7 7-7M12 5v14"/>'),
+    remove: svg('<path d="M3 11h18v10H3ZM3 11V8a5 5 0 015-5h8a5 5 0 015 5v3M10 10h4v5h-4Z"/>'),
+    add: '+ Add', delete: svg('<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>')
+};
 const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'To chest', add: 'Add to day', delete: 'Delete booking'};
 function button(action, title) {
     const label = esc(labels[action] + ' ' + title);
@@ -218,6 +253,13 @@ function mount(root, ctx = {}) {
     let saved = {};
     try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
     const days = saved.days || {};
+    let flightTime = saved.flightTime || '';
+    root.innerHTML = '<div class="db-content"></div><div class="db-sr" role="status" aria-live="polite" data-testid="db-live"></div>';
+    const content = root.querySelector('.db-content');
+    const live = root.querySelector('[data-testid=db-live]');
+    let previousConflicts = new Map();
+    let addedConflicts = [];
+    let formStatus = '';
     let date = '2026-11-26';
     let expanded = false;
     let bookingOpen = false;
@@ -229,11 +271,11 @@ function mount(root, ctx = {}) {
         return days[date];
     }
     function announce(message) {
-        const live = document.getElementById('live');
-        if (live) live.textContent = message;
+        live.textContent = message + (addedConflicts.length ? ' Heads-up: ' + addedConflicts[0] + (addedConflicts.length > 1 ? ' +' + (addedConflicts.length - 1) + ' more' : '') : '');
+        addedConflicts = [];
     }
     function save() {
-        try { localStorage.setItem(KEY, JSON.stringify({days})); } catch (e) {}
+        try { localStorage.setItem(KEY, JSON.stringify({days, flightTime})); } catch (e) {}
     }
     function listFor(zone) {
         return zone === 'tray' ? current().tray : current().items;
@@ -251,17 +293,20 @@ function mount(root, ctx = {}) {
         const controls = movable ? `<div class="db-controls">${button('handle', i.title)}${tray
             ? button('add', i.title)
             : button('up', i.title) + button('down', i.title) + button('remove', i.title)}</div>` : '';
-        const durationText = `${i.duration} min${i.estimate ? ', est.' : ''}`;
-        return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${i.locked ? ' tabindex="0" aria-label="' + esc(i.title + '. Locked booking — times are fixed') + '"' : ''}>
-            ${tray ? '' : `<div class="db-time" data-testid="db-time">${esc(i.textTime || range(i.start, i.end))}</div>`}
+        const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
+        const noteId = 'db-note-' + i.id;
+        const described = i.notes?.length ? ` aria-describedby="${esc(noteId)}"` : '';
+        return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${described}${i.locked ? ' tabindex="0" aria-label="' + esc(i.title + '. Locked booking — times are fixed') + '"' : ''}>
+            ${tray ? '' : `<div class="db-time" data-testid="db-time" aria-label="${esc(i.flight ? flightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end))}">${i.flight ? esc(flightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}</span>`}</div>`}
             <div class="db-activity" data-testid="db-activity">
                 <strong>${esc(i.title)}</strong>
                 <small>${esc(i.place)}${tray || i.estimate ? ' · ' + durationText : ''}</small>
+                ${i.flight ? `<label>Flight time<input type="time" aria-label="Flight time" data-testid="db-flight-time" value="${flightTime ? String(Math.floor(parse(flightTime) / 60)).padStart(2, '0') + ':' + String(parse(flightTime) % 60).padStart(2, '0') : ''}"></label>` : ''}
                 ${i.detail ? `<small>${esc(i.detail)}</small>` : ''}
                 ${i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : ''}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
                 ${controls}${i.custom ? button('delete', i.title) : ''}
-                ${(i.notes || []).map(note => `<p class="db-note" data-testid="db-note">${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
+                ${(i.notes || []).map(note => `<p class="db-note" id="${esc(noteId)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div></div>`;
     }
     function alreadyOnDay(item) {
@@ -270,7 +315,9 @@ function mount(root, ctx = {}) {
     }
     function render(focus) {
         const d = current();
-        const result = reflow(d, ctx);
+        const result = reflow(d, {...ctx, flightTime});
+        addedConflicts = result.conflicts.filter(c => previousConflicts.get(c.id) !== c.note).map(c => result.items.find(i => i.id === c.id).title + ' — ' + c.note);
+        previousConflicts = new Map(result.conflicts.map(c => [c.id, c.note]));
         const availableTray = d.tray.filter(item => !alreadyOnDay(item));
         const summary = result.conflicts.length ? `${result.conflicts.length} heads-up` : 'All clear';
         const chips = window.OAHU_SAMPLE.days.map(day => {
@@ -280,22 +327,22 @@ function mount(root, ctx = {}) {
         }).join('');
         const timeline = result.items.map(i => {
             const travel = i.travel ? `<div class="db-travel${i.travel.late ? ' db-travel-late' : ''}" data-testid="db-travel">${i.travel.late ? esc(i.travel.label) + ' · leave by ' + clock(i.travel.depart) : clock(i.travel.depart) + ' · ' + esc(i.travel.label) + (i.travel.minutes ? ' · arrive ' + clock(i.travel.arrive) : '')}</div>` : '';
-            return travel + pair(i, false);
+            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">${clock(i.walkBack.depart)} · Walk ~10 min · arrive ${clock(i.walkBack.arrive)}</div>` : '') + travel + pair(i, false);
         }).join('');
-        root.innerHTML = `<div class="db-heading"><h2>Build your day</h2><span class="db-summary" data-testid="db-summary" aria-live="polite">${summary}</span><button type="button" data-testid="db-reset" data-db-action="reset">Reset to suggested</button></div>
+        content.innerHTML = `<div class="db-heading"><h2>Build your day</h2><span class="db-summary" data-testid="db-summary">${summary}</span><button type="button" data-testid="db-reset" data-db-action="reset">Reset to suggested</button></div>
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
             <div class="db-day" data-testid="db-day-list">${timeline}</div>
             <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Treasure chest <span class="db-count">${availableTray.length}</span></button>
-            <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}>${availableTray.map(i => pair(i, true)).join('')}</div>
+            <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}><small>~ = estimate</small>${availableTray.map(i => pair(i, true)).join('')}</div>
             <button type="button" data-testid="db-booking-toggle" data-db-action="booking" aria-expanded="${bookingOpen}" aria-controls="db-booking">+ Add booking</button>
             <form id="db-booking" class="db-form" data-testid="db-booking-form" ${bookingOpen ? '' : 'hidden'}>
                 <label>Name<input name="name" data-testid="db-booking-name" required maxlength="100"></label>
                 <label>Start<input name="start" data-testid="db-booking-start" type="time" required></label>
                 <label>End<input name="end" data-testid="db-booking-end" type="time" required></label>
                 <label>Place<select name="place" data-testid="db-booking-place">${[HOTEL, WAIKIKI, 'Kewalo Basin', 'Kualoa Ranch', 'Diamond Head', 'Ala Moana', 'Kailua', 'Makapuu', 'HNL', 'Other'].map(p => `<option>${p}</option>`).join('')}</select></label>
-                <button data-testid="db-booking-add">Anchor it</button><p data-testid="db-form-note" role="status"></p>
+                <button data-testid="db-booking-add">Anchor it</button><p data-testid="db-form-note" role="status">${esc(formStatus)}</p>
             </form>`;
-        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && !document.documentElement.classList.contains('reduce-motion')) {
             root.querySelectorAll('.db-conflict').forEach(element => {
                 element.classList.add('db-shake');
                 element.addEventListener('animationend', () => element.classList.remove('db-shake'), {once: true});
@@ -303,8 +350,9 @@ function mount(root, ctx = {}) {
         }
         if (focus) {
             const row = Array.from(root.querySelectorAll('[data-db-id]')).find(e => e.dataset.dbId === focus.id && e.dataset.dbZone === focus.zone);
-            row?.querySelector(`[data-db-action="${focus.action || 'handle'}"]`)?.focus({preventScroll: true});
+            (row?.querySelector(`[data-db-action="${focus.action || 'handle'}"]`) || row)?.focus({preventScroll: true});
         }
+        root.querySelectorAll('[aria-describedby]').forEach(row => row.querySelector('[data-db-action=handle]')?.setAttribute('aria-describedby', row.getAttribute('aria-describedby')));
         return result;
     }
 
@@ -341,6 +389,7 @@ function mount(root, ctx = {}) {
         const row = b.closest('[data-db-id]');
         if (action === 'day') {
             date = b.dataset.date;
+            formStatus = '';
             picked = null;
             render();
             root.querySelector(`[data-testid="db-day-${date}"]`).focus();
@@ -354,17 +403,31 @@ function mount(root, ctx = {}) {
             root.querySelector('[data-testid="db-booking-toggle"]').focus();
         } else if (action === 'reset') {
             picked = null;
+            formStatus = '';
             days[date] = {...buildSuggested(date), tray: trayItems()};
             save();
             render();
+            root.querySelector('[data-testid=db-reset]').focus();
             announce('Reset to suggested. Fair winds!');
         } else if (action === 'delete') {
+            let nextRow = row.nextElementSibling;
+            while (nextRow && !nextRow.dataset.dbId) nextRow = nextRow.nextElementSibling;
+            const next = nextRow?.dataset.dbId;
+            formStatus = '';
             current().items = current().items.filter(i => i.id !== row.dataset.dbId);
             save();
             render();
+            (root.querySelector(`[data-db-id="${next}"] button`) || root.querySelector(`[data-db-id="${next}"][tabindex]`) || root.querySelector('[data-testid=db-booking-toggle]')).focus();
             announce('Booking deleted');
         } else if (action !== 'handle') {
             change(row.dataset.dbId, row.dataset.dbZone, action);
+        }
+    });
+    root.addEventListener('change', e => {
+        if (e.target.matches('[data-testid=db-flight-time]')) {
+            const [h, m] = e.target.value.split(':').map(Number);
+            flightTime = e.target.value ? clock(h * 60 + m) : '';
+            save(); render(); root.querySelector('[data-testid=db-flight-time]').focus(); announce('Flight time updated');
         }
     });
     root.addEventListener('submit', e => {
@@ -386,9 +449,15 @@ function mount(root, ctx = {}) {
         const d = current();
         const at = d.items.findIndex(i => (i.preferred ?? 1440) > start);
         d.items.splice(at < 0 ? d.items.length : at, 0, item);
+        const overlap = d.items.find(i => i.id !== item.id && i.locked && i.preferred < end && i.preferred + i.duration > start);
+        formStatus = overlap ? 'Overlaps ' + (overlap.dressy ? 'La Mer at Halekulani' : overlap.title) : '';
         save();
-        render();
-        announce('Locked booking added');
+        const result = render({id: item.id, zone: 'day'});
+        if (!formStatus && result.conflicts.length) {
+            formStatus = result.conflicts[0].note;
+            root.querySelector('[data-testid=db-form-note]').textContent = formStatus;
+        }
+        announce('Locked booking added. ' + formStatus);
     });
     root.addEventListener('keydown', e => {
         if (e.key === 'Escape' && drag) {
@@ -398,7 +467,7 @@ function mount(root, ctx = {}) {
             return;
         }
         const row = e.target.closest('[data-db-id]');
-        if (row?.classList.contains('db-locked') && [' ', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        if (!e.target.matches('input,select') && row?.classList.contains('db-locked') && [' ', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
             e.preventDefault();
             announce('Locked booking — times are fixed');
             return;
@@ -434,6 +503,7 @@ function mount(root, ctx = {}) {
 
     function cancelDrag() {
         if (!drag) return;
+        root.querySelectorAll('.db-drop-target').forEach(e => e.classList.remove('db-drop-target'));
         drag.ghost?.remove();
         drag.indicator?.remove();
         const {handle, pointerId} = drag;
@@ -465,7 +535,7 @@ function mount(root, ctx = {}) {
             } else at = index + (after ? 1 : 0);
             lineY = after ? bounds.bottom : bounds.top;
         }
-        return {zone, at, bounds, lineY};
+        return {zone, at, bounds, lineY, row};
     }
     root.addEventListener('pointerdown', e => {
         const handle = e.target.closest('[data-db-action="handle"]');
@@ -496,6 +566,8 @@ function mount(root, ctx = {}) {
         drag.ghost.style.left = Math.min(e.clientX + 12, window.innerWidth - Math.min(320, window.innerWidth - 24)) + 'px';
         drag.ghost.style.top = e.clientY + 12 + 'px';
         const target = dropTarget(e.clientX, e.clientY);
+        root.querySelectorAll('.db-drop-target').forEach(e => e.classList.remove('db-drop-target'));
+        target?.row?.classList.add('db-drop-target');
         drag.indicator.hidden = !target;
         if (target) Object.assign(drag.indicator.style, {left: target.bounds.left + 'px', top: target.lineY + 'px', width: target.bounds.width + 'px'});
         if (e.clientY < 55) window.scrollBy(0, -12);
