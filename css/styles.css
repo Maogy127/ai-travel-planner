@@ -1215,3 +1215,11 @@ html.reduce-motion .db-root.db-dock .db-dock-tray{transition:none}
  .db-root.db-printing .db-print-all [data-db-action=down],
  .db-root.db-printing .db-print-all [data-db-action=remove]{display:none!important}
 }
+.db-time-editor fieldset{border:1px solid #b9a57f;border-radius:6px;display:flex;flex-wrap:wrap;gap:10px}
+.db-time-editor label{display:grid;gap:4px}
+.db-time-editor input,.db-time-editor button,.library-card button,.library-card select{min-height:44px}
+.db-time-editor [role=alert]{color:#8b2820}
+.library-photo{height:auto;min-height:110px}
+.library-photo img{height:110px;object-fit:cover}
+.library-photo .image-label{position:static;display:block}
+.activity-fallback{font-size:.9rem}

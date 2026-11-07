@@ -1,5 +1,6 @@
 # Unmocked live verification of the day builder on GitHub Pages + screenshots.
-import asyncio, json, time
+import asyncio, json, time, sys
+from verify_live_tray import verify_draft
 from playwright.async_api import async_playwright
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent
@@ -106,10 +107,22 @@ async def one(b,w,name):
   ok(f'{name} live reorder export sync', photo=='10:00 PM–11:00 PM' and '20261126T220000' in ics and '20261126T174000' not in ics and '10:00 PM–11:00 PM' in text and '5:40 PM–6:40 PM' not in text, photo)
   await ctx.close()
 async def main():
-  async with async_playwright() as p:
-    b=await p.chromium.launch()
-    await one(b,1280,'desktop');await one(b,390,'mobile')
-    await b.close()
+  try:
+    async with async_playwright() as p:
+      b=await p.chromium.launch()
+      try:
+        for width, name in ((1280, 'desktop'), (390, 'mobile')):
+          try:
+            await one(b,width,name)
+          except Exception as exc:
+            ok(f'{name} live coverage completed',False,str(exc))
+        await verify_draft(b,URL,ok)
+      finally:
+        await b.close()
+  except Exception as exc:
+    ok('live browser run completed',False,str(exc))
   ok('no console errors',not errs,json.dumps(errs[:10]))
   print('SUMMARY',sum(r[1] for r in res),'/',len(res))
-asyncio.run(main())
+  return 0 if all(r[1] for r in res) else 1
+if __name__ == '__main__':
+  sys.exit(asyncio.run(main()))
