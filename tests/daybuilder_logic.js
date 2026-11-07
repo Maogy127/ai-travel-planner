@@ -25,10 +25,10 @@ diveDay.items.splice(diveDay.items.findIndex(i=>i.id==='photos'),0,db.trayItems(
 const late=db.reflow(diveDay);
 assert(!late.items.some(i=>i.flex));
 assert(late.conflicts.some(c=>/^Ends .* — you'd miss La Mer$/.test(c.note)));
-assert(late.items.every(i=>(i.notes||[]).length<=1));
+
 assert(!late.items.at(-1).notes);
 assert(late.items.at(-1).travel.late);
-assert.equal(late.conflicts.length,late.items.filter(i=>i.notes?.length).length);
+assert.equal(late.conflicts.length,late.items.reduce((n,i)=>n+(i.notes||[]).length,0));
 for(const sourceDay of OAHU_SAMPLE.days) assert.equal(db.reflow(db.buildSuggested(sourceDay.date)).conflicts.length,0);
 // Flexible time shrinks to the available slack and hides below 15 minutes.
 for (const [anchor,expected] of [[660,30],[645,15],[644,null]]) {
@@ -90,6 +90,11 @@ assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arri
   listeners.click({target: {closest() {return button;}}});
  };
  click('add', 'chest-0', 'tray');
+ assert(!mounted.getDay().items.some(i=>i.id==='chest-0'));
+ click('again', 'chest-0', 'tray');
+ const copy=mounted.getDay().items.find(i=>i.id.startsWith('instance-'));
+ assert(copy && copy.sourceId===db.trayItems()[0].sourceId);
+ assert(db.importDays(mounted.exportState()).days['2026-11-26'].items.some(i=>i.id===copy.id));
  assert(live.textContent.includes('Heads-up:'));
  assert(live.textContent.includes("you'd miss La Mer"));
  assert(content.innerHTML.includes('aria-describedby="db-note-'));
@@ -136,3 +141,11 @@ console.log('Mounted rendering and conflict announcements passed.');
  for(const i of fri.items)console.log(db.range(i.start,i.end)+'  '+i.title+(i.locked?'  [locked]':''));
  console.log('11/27 Senia lock checks passed.');
 }
+
+const sunsetDay=db.buildSuggested('2026-11-26');
+Object.assign(sunsetDay.items.find(i=>i.id==='photos'),{preferred:1200,manualTime:true});
+const sunsetResult=db.reflow(sunsetDay), sunsetPhoto=sunsetResult.items.find(i=>i.id==='photos');
+assert(sunsetPhoto.notes.some(n=>n.includes('After dark')));
+assert(sunsetPhoto.notes.some(n=>n.includes('Overlaps')));
+assert.deepEqual([sunsetResult.items.find(i=>i.id==='lamer').start,sunsetResult.items.find(i=>i.id==='lamer').end],[1170,1290]);
+assert(sunsetResult.items.some(i=>i.travel || i.kind==='prep'));

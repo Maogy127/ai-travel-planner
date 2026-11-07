@@ -32,9 +32,10 @@ async def flow(b, base):
   ok('pillbox result', 'Lanikai' in await row.inner_text() and await row.locator('img').count()==1 and 'estimate' in (await row.inner_text()).lower())
   ok('pillbox restriction visible', await row.get_by_test_id('activity-restriction').count()>=1 and 'Unconfirmed' in await row.inner_text())
   await row.get_by_test_id('activity-day').select_option('2026-11-25')
-  await row.get_by_test_id('activity-add').click()
+  ok('existing pillbox disabled across days', await row.get_by_test_id('activity-add').is_disabled())
+  await row.get_by_test_id('activity-add-again').click()
   await pg.get_by_test_id('db-day-2026-11-25').click()
-  ok('added pillbox reflowed', await pg.get_by_test_id('db-day-list').locator('[data-db-id=chest-9]').count()==1)
+  ok('added pillbox reflowed', await pg.get_by_test_id('db-day-list').locator('[data-db-id^=instance-]').count()==1)
   await pg.get_by_test_id('activity-search').fill('cocktail')
   bar = pg.get_by_test_id('activity-result').filter(has_text='Sunset bar')
   ok('21+ blocks the bar for ages 18 and 19', await bar.get_by_test_id('activity-add').is_disabled() and '21' in await bar.inner_text())
@@ -43,7 +44,7 @@ async def flow(b, base):
   ok('optional alcohol does not block dinner', await opt.get_by_test_id('activity-add').is_enabled() and 'does not block' in (await opt.inner_text()).lower())
   await pg.get_by_test_id('activity-search').fill('parasail')
   sail = pg.get_by_test_id('activity-result').first
-  ok('unconfirmed parasail limits stay addable', 'Unconfirmed' in await sail.inner_text() and await sail.get_by_test_id('activity-add').is_enabled())
+  ok('unconfirmed parasail limits stay addable', 'Unconfirmed' in await sail.inner_text() and await sail.get_by_test_id('activity-add-again').is_enabled())
   await pg.get_by_test_id('db-day-2026-11-26').click()
   before = await pg.evaluate("window.__gonow.buildICS()")
   for _ in range(8):

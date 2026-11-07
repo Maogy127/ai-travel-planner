@@ -399,6 +399,11 @@
                 });
             });
         }
+        if(window.DayBuilder)window.DayBuilder.draftItems().forEach(function(item){
+            var source=item.sourceId||item.id;
+            if(entries.some(function(e){return e.sourceId===source&&e.title===item.title;}))return;
+            entries.push({id:'draft-'+source, sourceId:source, title:item.title, place:item.place, duration:item.duration, estimate:item.estimate, rules:[]});
+        });
         entries.forEach(function(entry){
             var blocked=null;
             (entry.rules||[]).forEach(function(r){
@@ -421,15 +426,20 @@
         aside.dataset.bound='1';
         aside.addEventListener('input', function(e){if(e.target&&e.target.dataset.testid==='activity-search')renderLibraryResults(aside, e.target.value);});
         aside.addEventListener('click', function(e){
-            var add=e.target.closest('[data-testid=activity-add]');
+            var add=e.target.closest('[data-testid=activity-add], [data-testid=activity-add-again]');
             if(!add||add.disabled)return;
             var card=add.closest('[data-testid=activity-result]');
             var entry=libraryEntries().find(function(item){return item.id===card.dataset.id;});
             if(!entry||entry.blocked)return;
             var day=card.querySelector('[data-testid=activity-day]').value;
-            var result=window.DayBuilder.addToDay(day, entry.chestId?{chestId:entry.chestId}:{title:entry.title, place:entry.place, duration:entry.duration});
+            var result=window.DayBuilder.addToDay(day, {chestId:entry.chestId, sourceId:entry.sourceId||entry.id, title:entry.title, place:entry.place, duration:entry.duration, again:add.dataset.testid==='activity-add-again'});
             var note=card.querySelector('[data-testid=activity-add-note]');
             if(note)note.textContent=result&&result.ok?'Added to the draft. This does not book it or confirm availability.':(result&&result.reason)||'Could not add';
+        });
+        aside.addEventListener('dragstart', function(e){
+            var card=e.target.closest('[data-testid=activity-result]');
+            if(!card||card.draggable===false){e.preventDefault();return;}
+            e.dataTransfer.setData('text/gonow-activity', card.dataset.id);
         });
         aside.addEventListener('submit', function(e){
             if(!e.target.matches('[data-testid=add-own-form]'))return;
@@ -443,7 +453,7 @@
     function renderLibraryResults(aside, query){
         var q=String(query||'').trim().toLowerCase();
         var all=libraryEntries();
-        var list=all.filter(function(entry){return !q||(entry.title+' '+entry.place).toLowerCase().indexOf(q)>=0;}).slice(0, 12);
+        var list=all.filter(function(entry){return !q||(entry.title+' '+entry.place).toLowerCase().indexOf(q)>=0;});
         var days=state.plan?state.plan.days:[];
         var dayOpts=days.map(function(d){return '<option value="'+esc(d.date)+'">'+esc(dateLabel(d.date))+'</option>';}).join('');
         var host=aside.querySelector('[data-testid=activity-results]');
@@ -453,16 +463,19 @@
         }
         host.innerHTML=list.map(function(entry){
             var photoSrc=entry.sourceId&&ITEM_PHOTOS[entry.sourceId];
-            var img=photoSrc?photo(photoSrc, entry.title, 'library-photo'):'';
-            return '<article class="library-card" data-testid="activity-result" data-id="'+esc(entry.id)+'">'+img+'<h3>'+esc(entry.title)+'</h3><p>'+esc(entry.place)+' · '+(entry.estimate?'~':'')+esc(String(entry.duration))+' min'+(entry.estimate?' estimate':'')+'</p>'+restrictionHTML(entry)+'<label>Day <select data-testid="activity-day">'+dayOpts+'</select></label><button type="button" data-testid="activity-add"'+(entry.blocked?' disabled':'')+'>Add to trip</button><p data-testid="activity-add-note"></p></article>';
+            var img=photoSrc?photo(photoSrc, entry.title, 'library-photo'):'<p class="activity-fallback">'+icon('info')+' '+esc(entry.title)+' in '+esc(entry.place)+'. No verified activity photo.</p>';
+            var exists=window.DayBuilder.draftItems().some(function(i){return (i.sourceId||i.id)===(entry.sourceId||entry.id);});
+            return '<article class="library-card" data-testid="activity-result" data-id="'+esc(entry.id)+'" draggable="'+(!entry.blocked&&!exists)+'">'+img+'<h3>'+esc(entry.title)+'</h3><p>'+esc(entry.place)+' · '+(entry.estimate?'~':'')+esc(String(entry.duration))+' min'+(entry.estimate?' estimate':'')+'</p>'+restrictionHTML(entry)+'<label>Day <select data-testid="activity-day">'+dayOpts+'</select></label><button type="button" data-testid="activity-add"'+(entry.blocked||exists?' disabled':'')+'>Add to trip</button>'+(exists?'<p>Already in your plan</p><button type="button" data-testid="activity-add-again"'+(entry.blocked?' disabled':'')+'>Add again</button>':'')+'<p data-testid="activity-add-note"></p></article>';
         }).join('');
+        host.querySelectorAll('[data-testid=activity-day]').forEach(function(select){select.value=window.DayBuilder.selectedDate();});
     }
     function ensureLibrary(aside){
         if(!aside.querySelector('[data-testid=activity-search]')){
-            aside.insertAdjacentHTML('afterbegin','<div class="library-search"><p data-testid="search-honesty">Search this device’s activity library for your destination. It is not a live worldwide place search. That would need a places provider and an API key, which this page does not use.</p><label>Search activities<input data-testid="activity-search" type="search" placeholder="Try dive, sunset, walk"></label><p>Adding a stop does not book it or confirm availability.</p><div data-testid="activity-results"></div><form data-testid="add-own-form"><label>Add your own<input data-testid="add-own-name" maxlength="100" placeholder="Name"></label><label>Day <select data-testid="add-own-day">'+ (state.plan?state.plan.days:[]).map(function(d){return '<option value="'+esc(d.date)+'">'+esc(dateLabel(d.date))+'</option>';}).join('')+'</select></label><button type="submit">Add your own</button><p data-testid="add-own-note"></p></form></div>');
+            aside.insertAdjacentHTML('afterbegin','<div class="library-search"><h2>Activity treasure chest</h2><p>All activities in your draft and optional library ideas.</p><p data-testid="search-honesty">Search this device’s activity library for your destination. It is not a live worldwide place search. That would need a places provider and an API key, which this page does not use.</p><label>Search activities<input data-testid="activity-search" type="search" placeholder="Try dive, sunset, walk"></label><p>Adding a stop does not book it or confirm availability.</p><div data-testid="activity-results"></div><form data-testid="add-own-form"><label>Add your own<input data-testid="add-own-name" maxlength="100" placeholder="Name"></label><label>Day <select data-testid="add-own-day">'+ (state.plan?state.plan.days:[]).map(function(d){return '<option value="'+esc(d.date)+'">'+esc(dateLabel(d.date))+'</option>';}).join('')+'</select></label><button type="submit">Add your own</button><p data-testid="add-own-note"></p></form></div>');
             bindLibrary(aside);
-            renderLibraryResults(aside, '');
         }
+        renderLibraryResults(aside, aside.querySelector('[data-testid=activity-search]').value);
+        aside.querySelector('[data-testid=add-own-day]').value=window.DayBuilder.selectedDate();
     }
     function draftScreen(){
         if(!state.plan){go('home');return;}
@@ -485,6 +498,14 @@
             }
         };
         window.DayBuilder.mount(db, ctx);
+        db.addEventListener('dragover', function(e){if(e.target.closest('[data-testid=db-day-list]'))e.preventDefault();});
+        db.addEventListener('drop', function(e){
+            if(!e.target.closest('[data-testid=db-day-list]'))return;
+            e.preventDefault();
+            var entry=libraryEntries().find(function(i){return i.id===e.dataTransfer.getData('text/gonow-activity');});
+            if(entry&&!entry.blocked)window.DayBuilder.addToDay(window.DayBuilder.selectedDate(),{chestId:entry.chestId,sourceId:entry.sourceId||entry.id,title:entry.title,place:entry.place,duration:entry.duration});
+        });
+        db.addEventListener('keydown', function(e){if(e.key==='Escape'){var tray=db.querySelector('.db-dock-tray');tray.classList.remove('is-open');get('tray-toggle').setAttribute('aria-expanded','false');get('tray-toggle').focus();}});
         on('generate-plan', function(){
             var list=readTrips();
             var trip=list.find(function(t){return t.id===state.tripId;})||{id:state.tripId, snapshot:null};
@@ -1028,7 +1049,7 @@
         if(edit.swapped)it=Object.assign( {}, it,  {
             sources:[], bring:[], prep:[], tips:[], price:'', bestTime:'', bookable:false
         });
-        return'<article class="item '+esc(it.kind)+'">'+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):'')+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bookable&&!/\bspa\b/i.test(title||'')?'<p class="partner-search"><small>Find/Book this · Secondary search options</small><br>'+partnerLink('getyourguide',title,true)+' · '+partnerLink('viator',title,true)+'</p>':'')+(it.bring&&it.bring.length?'<details><summary data-testid="disclosure">What to bring ('+it.bring.length+')</summary><small>Ticking here also ticks it on your packing list.</small>'+it.bring.map(function(id) {
+        return'<article class="item '+esc(it.kind)+'">'+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):(opts.photo?'<p class="activity-fallback">'+icon('info')+' No verified activity photo.</p>':''))+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bookable&&!/\bspa\b/i.test(title||'')?'<p class="partner-search"><small>Find/Book this · Secondary search options</small><br>'+partnerLink('getyourguide',title,true)+' · '+partnerLink('viator',title,true)+'</p>':'')+(it.bring&&it.bring.length?'<details><summary data-testid="disclosure">What to bring ('+it.bring.length+')</summary><small>Ticking here also ticks it on your packing list.</small>'+it.bring.map(function(id) {
             var p=packingItem(id);
             return p?checkHTML(p, 'bring-item'):'';
         }).join('')+'</details>':'')+(it.prep&&it.prep.length?'<p class="section-label" style="margin-top:15px">Prep reminders</p>'+prep(it.prep):'')+(it.tips?it.tips.map(function(t) {
@@ -1138,8 +1159,8 @@
                 return original&&it.title!==original.title?it.title.replace(/\p{Extended_Pictographic}/gu,'').trim():'';
             },
             detail:function(src,date,item){
-                var chest=item&&/^chest-/.test(item.id);
-                var it=find(src,date)||(chest?p.days.flatMap(function(d){return d.items;}).find(function(o){return o.id===src;}):null);if(!it)return '';
+                var chest=item&&(/^(chest-|instance-)/.test(item.id)||item.sourceId!==item.id);
+                var it=find(src,date)||p.days.flatMap(function(d){return d.items;}).find(function(o){return o.id===src;});if(!it)return '<p>'+icon('info')+' '+esc(item.title)+' in '+esc(item.place)+'. No verified activity photo.</p>';
                 var html='<div class="db-item" data-item-id="'+esc(it.id)+'"'+(chest?'':' id="item-'+esc(it.id)+'"')+'>'+itemArticle(it,{photo:true,travel:!chest,noActions:chest})+'</div>';
                 (item&&item.extraSources||[]).forEach(function(id){var ride=find(id,date);if(ride)html+='<div class="db-item db-item-ride" data-item-id="'+esc(ride.id)+'" id="item-'+esc(ride.id)+'"><p class="section-label">Getting there and back</p>'+itemArticle(ride,{travel:true})+'</div>';});
                 return html;

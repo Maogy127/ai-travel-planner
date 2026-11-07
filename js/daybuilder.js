@@ -167,12 +167,14 @@ function reflow(day, ctx = {}) {
 
     const ages = (ctx.ages?.length ? ctx.ages : [18, 19]).map(Number);
     const raw = clone(day.items);
+    raw.forEach(item => { delete item.notes; delete item.noteSources; delete item.notePriority; delete item.noteSource; });
     let previous = null;
-    function warn(item, note, source, priority = 2) {
-        if (item.notePriority !== undefined && item.notePriority <= priority) return;
-        item.notes = [note];
-        item.notePriority = priority;
-        item.noteSource = source;
+    function warn(item, note, source) {
+        item.notes ||= [];
+        item.noteSources ||= [];
+        if (item.notes.includes(note)) return;
+        item.notes.push(note);
+        item.noteSources.push(source);
     }
     // Prep belongs before sunset photos, but never after the dressy booking.
     const dinner = raw.find(item => item.dressy);
@@ -204,8 +206,8 @@ function reflow(day, ctx = {}) {
         // A ride booked from where you already are needs no connector.
         if (item.pickup && previous && (previous.to || previous.place) === item.place) travel = {minutes: 0, label: ''};
         const earliest = previous ? previous.end + travel.minutes + (item.walkBack ? 10 : 0) : 0;
-        item.start = item.locked && item.preferred !== null ? item.preferred : Math.max(earliest, item.preferred ?? (previous ? 0 : 540));
-        if (item.flex && !item.locked) {
+        item.start = (item.manualTime || item.locked) && item.preferred !== null ? item.preferred : Math.max(earliest, item.preferred ?? (previous ? 0 : 540));
+        if (item.flex && !item.locked && !item.manualTime) {
             // Work backwards from the next anchor, reserving every intervening
             // activity, ride, automatic rinse and the dressy arrival buffer.
             const anchor = raw.findIndex((next, at) => at > index && next.locked && !next.textTime);
@@ -266,9 +268,9 @@ function reflow(day, ctx = {}) {
             previous = prep;
         }
     }
-    return {items: output, conflicts: output.filter(item => item.notes?.length).map(item => ({
-        id: item.id, note: item.notes[0], source: item.noteSource
-    }))};
+    return {items: output, conflicts: output.flatMap(item => (item.notes || []).map((note, index) => ({
+        id: item.id, note, source: item.noteSources[index]
+    })))};
 }
 const svg = path => `<svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
 const icons = {
@@ -281,9 +283,9 @@ const icons = {
     add: '+ Add', delete: svg('<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>')
 };
 const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'To chest', add: 'Add to day', delete: 'Delete booking'};
-function button(action, title) {
+function button(action, title, disabled = false) {
     const label = esc(labels[action] + ' ' + title);
-    return `<button type="button" data-testid="db-${action}" data-db-action="${action}" aria-label="${label}" title="${label}">${icons[action]}</button>`;
+    return `<button type="button" data-testid="db-${action}" data-db-action="${action}"${disabled ? ' disabled aria-disabled="true"' : ''} aria-label="${label}" title="${label}">${icons[action]}</button>`;
 }
 
 // Page-session state that survives planRender remounts (selected day, open boxes, shared copy).
@@ -328,10 +330,10 @@ function exportDays(days, flightTime) {
         const base = buildSuggested(date).items;
         const pool = base.concat(tray);
         const items = day.items.map(item => {
-            if (item.custom) return {c: 1, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, l: item.locked ? 1 : 0};
+            if (item.custom) return {c: 1, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
             const original = pool.find(candidate => candidate.id === item.id);
-            if (original && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
-            const entry = {id: item.id, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
+            if (original && !item.manualTime && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
+            const entry = {id: item.id, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
             if (item.userLocked) Object.assign(entry, {u: 1, bp: item.basePreferred, bd: item.baseDuration});
             return entry;
         });
@@ -350,19 +352,20 @@ function importDays(data) {
     Object.entries(data.d && typeof data.d === 'object' ? data.d : {}).forEach(([date, day]) => {
         if (!dates.has(date) || !day || !Array.isArray(day.i) || !Array.isArray(day.t)) return;
         const tray = trayItems();
-        const pool = buildSuggested(date).items.concat(tray);
+        const pool = window.OAHU_SAMPLE.days.flatMap(d => buildSuggested(d.date).items).concat(tray);
         const find = id => { const found = pool.find(item => item.id === id); return found ? clone(found) : null; };
         const items = day.i.map(entry => {
             if (typeof entry === 'string') return find(entry);
             if (!entry || typeof entry !== 'object' || typeof entry.id !== 'string') return null;
             if (entry.c) {
                 const start = minutes(entry.p), length = minutes(entry.d);
-                if (typeof entry.t !== 'string' || !entry.t.trim() || start == null || !length) return null;
+                if (typeof entry.t !== 'string' || !entry.t.trim() || (start === undefined) || !length) return null;
                 return {id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
-                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, custom: true};
+                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false};
             }
-            const item = find(entry.id);
+            const item = find(entry.id) || pool.find(i => i.sourceId === entry.s) && clone(pool.find(i => i.sourceId === entry.s));
             if (!item) return null;
+            item.id = entry.id; item.manualTime = !!entry.m; if (entry.e !== undefined) item.estimate = entry.e;
             item.locked = !!entry.l;
             if (minutes(entry.p) !== undefined) item.preferred = entry.p;
             if (minutes(entry.d)) item.duration = entry.d;
@@ -413,23 +416,22 @@ function mount(root, ctx = {}) {
         if (!days[date]) days[date] = {...buildSuggested(date), tray: trayItems()};
         return days[date];
     }
+    function draftItems() {
+        return window.OAHU_SAMPLE.days.flatMap(d => visibleItems(days[d.date] || buildSuggested(d.date), d.date));
+    }
     function addToDay(nextDate, spec) {
         if (!spec) return {ok: false, reason: 'Missing activity'};
+        const pool = window.OAHU_SAMPLE.days.flatMap(d => buildSuggested(d.date).items).concat(trayItems());
+        const base = spec.chestId ? pool.find(i => i.id === spec.chestId) : pool.find(i => i.sourceId === spec.sourceId);
+        const identity = spec.sourceId || base?.sourceId || base?.id || ('own:' + String(spec.title || '').trim().toLowerCase());
+        if (!spec.again && draftItems().some(i => (i.sourceId || i.id) === identity)) return {ok:false, reason:'Already in your plan'};
+        let item = base ? clone(base) : {title:String(spec.title || '').trim().slice(0,100), place:spec.place || 'Other', duration:Number(spec.duration) || 60, estimate:true, custom:true};
+        if (!item.title) return {ok:false, reason:'Name the activity'};
+        Object.assign(item, {sourceId:identity, preferred:null, locked:false});
+        delete item.textTime; delete item.flight;
+        if (spec.again || draftItems().some(i => i.id === item.id) || !item.id) item.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
         selectDay(nextDate, false);
         const d = current();
-        let item = null;
-        if (spec.chestId) {
-            const base = trayItems().find(candidate => candidate.id === spec.chestId);
-            if (!base) return {ok: false, reason: 'That activity is not in the library'};
-            if (d.items.some(existing => existing.id === base.id || existing.title === base.title)) return {ok: false, reason: 'Already on this day'};
-            item = clone(base);
-        } else {
-            const title = String(spec.title || '').trim().slice(0, 100);
-            if (!title) return {ok: false, reason: 'Name the activity'};
-            item = {id: 'lib-' + Date.now(), title, place: String(spec.place || 'Other').slice(0, 40),
-                duration: Math.max(15, Math.min(480, Number(spec.duration) || 60)), estimate: true,
-                preferred: null, locked: false, custom: true, tags: Array.isArray(spec.tags) ? spec.tags : []};
-        }
         d.items.push(item);
         save();
         render({id: item.id, zone: 'day'});
@@ -437,7 +439,7 @@ function mount(root, ctx = {}) {
         return {ok: true, id: item.id};
     }
     function announce(message) {
-        live.textContent = message + (addedConflicts.length ? ' Heads-up: ' + addedConflicts[0] + (addedConflicts.length > 1 ? ' +' + (addedConflicts.length - 1) + ' more' : '') : '');
+        live.textContent = message + (addedConflicts.length ? ' Heads-up: ' + addedConflicts.join('; ')  : '');
         addedConflicts = [];
     }
     function save() {
@@ -456,6 +458,7 @@ function mount(root, ctx = {}) {
     function adjustedItems(items, on) {
         if (!ctx.adjust) return items;
         return items.map(item => {
+            if (item.manualTime) return item;
             const change = ctx.adjust(sourceOf(item, on), on, item);
             return change ? {...item, ...change} : item;
         });
@@ -489,7 +492,9 @@ function mount(root, ctx = {}) {
         const print = !!options.print;
         const uid = uidFor(on, i.id);
         const src = tray ? null : sourceOf(i, on);
-        const detail = !tray && ctx.detail ? ctx.detail(src, on, i) : '';
+        const hhmm = n => String(Math.floor(n / 60)).padStart(2,'0') + ':' + String(n % 60).padStart(2,'0');
+        const editor = ctx.dock && !tray && !print && !i.textTime && i.kind !== 'prep' && i.kind !== 'travel' ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><fieldset ${i.locked ? 'disabled' : ''}><legend>Activity time${i.locked ? ' — unlock to edit' : ''}</legend><label>Start<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>End ${i.estimate ? '(estimate from default duration)' : ''}<input name="end" type="time" value="${hhmm(i.end)}"></label><label>Duration (minutes)<input name="duration" type="number" min="1" placeholder="${i.duration}"></label><button>Save activity time</button></fieldset><p role="alert" data-testid="activity-time-error"></p></form>` : '';
+        const detail = (!tray && ctx.detail ? ctx.detail(src, on, i) : '') + editor;
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
         const title = (!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
         const movable = !i.locked && i.kind !== 'prep' && !print;
@@ -497,12 +502,13 @@ function mount(root, ctx = {}) {
         const classes = ['db-pair', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
             i.kind === 'prep' && 'db-prep', i.flex && 'db-free', detail && 'db-expandable', open && 'is-open',
             picked?.id === i.id && picked.zone === (tray ? 'tray' : 'day') && 'db-picked'].filter(Boolean).join(' ');
-        const moves = movable ? button('handle', title) + (tray ? button('add', title) : button('up', title) + button('down', title) + button('remove', title)) : '';
+        const duplicate = tray && alreadyOnDay(i);
+        const moves = movable ? button('handle', title, duplicate) + (tray ? button('add', title, duplicate) + (duplicate ? '<span>Already in your plan</span><button type="button" data-testid="db-add-again" data-db-action="again">Add again</button>' : '') : button('up', title) + button('down', title) + button('remove', title)) : '';
         const lockChip = i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : '';
         const controls = moves || canLock ? `<div class="db-controls">${canLock ? lockChip : ''}${moves}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
         const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
         const noteId = 'db-note-' + uid;
-        const described = i.notes?.length ? ` aria-describedby="${esc(noteId)}"` : '';
+        const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
         const placeText = `${esc(i.place)}${tray || i.estimate ? ' · ' + durationText : ''}`;
         const heading = detail
             ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"><strong>${esc(title)}</strong><small>${placeText}</small><span class="db-expand-mark" aria-hidden="true">＋</span></button>`
@@ -517,13 +523,12 @@ function mount(root, ctx = {}) {
                 ${canLock ? '' : lockChip}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
                 ${controls}${i.custom && !print ? button('delete', title) : ''}
-                ${(i.notes || []).map(note => `<p class="db-note" id="${esc(noteId)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
+                ${(i.notes || []).map((note, index) => `<p class="db-note" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div>
             ${detail ? `<div class="db-detail" id="db-detail-${uid}" data-testid="db-detail" role="region" aria-labelledby="db-title-${uid}"${open ? '' : ' hidden'}>${detail}</div>` : ''}</div>`;
     }
     function alreadyOnDay(item) {
-        const sourceId = item.sourceId || trayItems().find(candidate => candidate.id === item.id)?.sourceId;
-        return current().items.some(existing => existing.id === sourceId || existing.title === item.title);
+        return draftItems().some(existing => (existing.sourceId || existing.id) === (item.sourceId || item.id));
     }
     function timelineHTML(result, options) {
         return result.items.map(i => {
@@ -538,9 +543,9 @@ function mount(root, ctx = {}) {
         const d = current();
         const result = dayResult(d, date);
         lastResult = result;
-        addedConflicts = result.conflicts.filter(c => previousConflicts.get(c.id) !== c.note).map(c => result.items.find(i => i.id === c.id).title + ' — ' + c.note);
-        previousConflicts = new Map(result.conflicts.map(c => [c.id, c.note]));
-        const availableTray = d.tray.filter(item => !alreadyOnDay(item));
+        addedConflicts = result.conflicts.filter(c => !previousConflicts.has(c.id + '|' + c.note)).map(c => result.items.find(i => i.id === c.id).title + ' — ' + c.note);
+        previousConflicts = new Map(result.conflicts.map(c => [c.id + '|' + c.note, true]));
+        const availableTray = d.tray;
         const summary = result.conflicts.length ? `${result.conflicts.length} heads-up` : 'All clear';
         const chips = window.OAHU_SAMPLE.days.map((day, index) => {
             const weekday = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', timeZone: 'UTC'});
@@ -582,7 +587,7 @@ function mount(root, ctx = {}) {
                 const tray = content.querySelector('.db-tray');
                 const form = content.querySelector('.db-form');
                 if (tools) aside.append(tools);
-                if (tray) { tray.hidden = false; aside.append(tray); }
+                if (tray && !ctx.dock) { tray.hidden = false; aside.append(tray); }
                 if (form) aside.append(form);
             }
         }
@@ -641,7 +646,19 @@ function mount(root, ctx = {}) {
         const index = list.findIndex(i => i.id === id);
         const item = list[index];
         if (!item || item.locked || item.kind === 'prep') return;
-        if (action === 'add' && alreadyOnDay(item)) return;
+        if (zone === 'tray' && action !== 'again' && alreadyOnDay(item)) return;
+        if (zone === 'tray' && (action === 'add' || action === 'again')) {
+            const copy = clone(item);
+            if (action === 'again') copy.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+            copy.sourceId = item.sourceId || item.id;
+            const destination = current().items;
+            const photos = destination.findIndex(i => i.id === 'photos');
+            destination.splice(target ?? (photos >= 0 ? photos : destination.length), 0, copy);
+            save();
+            render({id: copy.id, zone: 'day'});
+            announce(positionMessage(copy.id, 'day'));
+            return;
+        }
         let destination = list;
         let at = index;
         if (action === 'add' || action === 'remove') {
@@ -660,7 +677,7 @@ function mount(root, ctx = {}) {
             at = target > index ? target - 1 : target;
         }
         list.splice(index, 1);
-        destination.splice(at, 0, item);
+        if (zone !== 'tray' || !destination.some(existing => existing.id === item.id)) destination.splice(at, 0, item);
         session.open.delete(date + '|' + id);
         save();
         render({id, zone});
@@ -736,6 +753,16 @@ function mount(root, ctx = {}) {
             change(row.dataset.dbId, row.dataset.dbZone, action);
         }
     });
+    root.addEventListener('input', e => {
+        if (e.target.closest('.db-time-editor') && e.target.name === 'end') e.target.dataset.manual = 'true';
+        if (e.target.closest('.db-time-editor') && e.target.name === 'start') {
+            const form = e.target.form, item = current().items.find(i => i.id === form.closest('[data-db-id]').dataset.dbId);
+            if (!form.elements.end.dataset.manual && e.target.value) {
+                const [h,m] = e.target.value.split(':').map(Number), end = h*60+m+item.duration;
+                form.elements.end.value = String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0');
+            }
+        }
+    });
     root.addEventListener('change', e => {
         if (e.target.matches('[data-testid=db-flight-time]')) {
             const [h, m] = e.target.value.split(':').map(Number);
@@ -744,6 +771,24 @@ function mount(root, ctx = {}) {
         }
     });
     root.addEventListener('submit', e => {
+        if (e.target.matches('.db-time-editor')) {
+            e.preventDefault();
+            const form = e.target, row = form.closest('[data-db-id]');
+            const item = current().items.find(i => i.id === row.dataset.dbId);
+            if (!item || item.locked) return;
+            const time = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? Number(v.slice(0,2))*60 + Number(v.slice(3)) : NaN;
+            const start = time(form.elements.start.value);
+            const durationField = form.elements.duration;
+            const endField = form.elements.end;
+            const length = durationField.value ? Number(durationField.value) : endField.dataset.manual ? time(endField.value)-start : item.duration;
+            if (!Number.isFinite(start) || !Number.isFinite(length) || length <= 0 || start + length > 1440 || !form.checkValidity()) {
+                form.querySelector('[role=alert]').textContent = 'Enter valid times and a positive duration. End must be after start.';
+                form.setAttribute('aria-invalid','true'); return;
+            }
+            Object.assign(item,{preferred:start,duration:length,manualTime:true,estimate: !(durationField.value || endField.dataset.manual)});
+            save(); render(); announce('Activity time updated. Travel and prep are estimated separately.');
+            return;
+        }
         if (!e.target.matches('.db-form')) return;
         e.preventDefault();
         const values = new FormData(e.target);
@@ -794,7 +839,7 @@ function mount(root, ctx = {}) {
             return;
         }
         const handle = e.target.closest('[data-db-action="handle"]');
-        if (!handle) return;
+        if (!handle || handle.disabled) return;
         const {dbId: id, dbZone: zone} = row.dataset;
         if (e.key === ' ' || e.key === 'Enter') {
             e.preventDefault();
@@ -865,7 +910,7 @@ function mount(root, ctx = {}) {
     }
     root.addEventListener('pointerdown', e => {
         const handle = e.target.closest('[data-db-action="handle"]');
-        if (!handle || e.button !== 0 || picked) return;
+        if (!handle || handle.disabled || e.button !== 0 || picked) return;
         const row = handle.closest('[data-db-id]');
         drag = {id: row.dataset.dbId, zone: row.dataset.dbZone, handle, pointerId: e.pointerId,
             x: e.clientX, y: e.clientY, active: false};
@@ -915,7 +960,7 @@ function mount(root, ctx = {}) {
     root.addEventListener('pointercancel', cancelDrag);
     root.addEventListener('lostpointercapture', () => { if (drag) cancelDrag(); });
     const api = {
-        render, selectDay, renderPrint, root,
+        render, selectDay, renderPrint, root, draftItems: () => clone(draftItems()),
         getDay: () => clone(current()),
         date: () => date,
         exportState: () => exportDays(days, flightTime),
@@ -944,6 +989,7 @@ window.DayBuilder = {buildSuggested, reflow, commuteMinutes, mount, render: moun
     },
     print: on => active()?.renderPrint(on),
     schedule: () => active()?.schedule() || null,
+    draftItems: () => active()?.draftItems() || [],
     addToDay: (date, spec) => active()?.addToDay(date, spec) || {ok: false, reason: 'Open a draft first'},
     resetSession: () => { session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
 })();
