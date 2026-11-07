@@ -100,7 +100,7 @@ async def one(b,w,name):
     ids=await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
     if 'photos' in ids and 'lamer' in ids and ids.index('photos')>ids.index('lamer'): break
     await day.locator('[data-db-id=photos]').get_by_test_id('db-down').click()
-  photo=await day.locator('[data-db-id=photos]').get_by_test_id('db-time').inner_text()
+  photo=await day.locator('[data-db-id=photos]').get_by_test_id('db-time').evaluate('e=>e.textContent')
   ics=await pg.evaluate("window.__gonow.buildICS().replace(/\\r\\n /g,'')")
   text=await pg.evaluate('window.__gonow.planText()')
   ok(f'{name} live reorder export sync', photo=='10:00 PM–11:00 PM' and '20261126T220000' in ics and '20261126T174000' not in ics and '10:00 PM–11:00 PM' in text and '5:40 PM–6:40 PM' not in text, photo)
