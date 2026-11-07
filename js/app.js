@@ -206,8 +206,8 @@
     }
     window.addEventListener('popstate', function(e) {
         var target=e.state&&e.state.screen;
-        if(!target)target='start';
-        if(target==='plan'&&!state.plan)target='start';
+        if(!target)target='home';
+        if((target==='plan'||target==='draft')&&!state.plan)target='home';
         if(state.screen==='loading')activeGeneration++;
         go(target, true);
     });
@@ -269,6 +269,243 @@
         });
         save();
         generate();
+    }
+    var TRIPS='gonow:trips';
+    function readTrips(){try{var list=JSON.parse(localStorage.getItem(TRIPS));return Array.isArray(list)?list:[];}catch(e){return [];}}
+    function writeTrips(list){try{localStorage.setItem(TRIPS, JSON.stringify(list));}catch(e){}}
+    function cloneData(value){return JSON.parse(JSON.stringify(value||null));}
+    function currentTrip(){return readTrips().find(function(t){return t.id===state.tripId;})||null;}
+    function storedDraftExport(){
+        if(!state.plan||!window.DayBuilder)return null;
+        try{
+            var raw=JSON.parse(localStorage.getItem('gonow:daybuilder:'+state.plan.id))||{};
+            return window.DayBuilder.exportDays(raw.days||{}, raw.flightTime||'');
+        }catch(e){return null;}
+    }
+    function draftDirty(){
+        var trip=currentTrip();
+        if(!trip||!trip.snapshot)return false;
+        var builderSame=JSON.stringify(storedDraftExport())===JSON.stringify(trip.snapshot.builder||null);
+        var editsSame=JSON.stringify(state.edits||{})===JSON.stringify(trip.snapshot.edits||{});
+        return !(builderSame&&editsSame);
+    }
+    function weatherBlock(){
+        var start=state.answers.start||(state.plan&&state.plan.start)||'';
+        var inWindow=false;
+        if(/^\d{4}-\d{2}-\d{2}$/.test(start)){
+            var now=new Date(); now.setHours(12,0,0,0);
+            var when=new Date(start+'T12:00:00');
+            var ahead=(when-now)/86400000;
+            inWindow=ahead>=-1&&ahead<=15;
+        }
+        var seasonal=(state.plan&&state.plan.weather&&state.plan.weather.text)||'Seasonal conditions were not researched for these dates.';
+        if(!inWindow){
+            return {kind:'seasonal', label:'Seasonal typical conditions, not a forecast. These dates are outside the live forecast window, so no daily forecast numbers are shown.', text:seasonal};
+        }
+        return {kind:'forecast', label:'These dates are inside the live forecast window. A forecast is stored only after it loads. If it does not load, no daily numbers are invented.', text:''};
+    }
+    function rememberTrip(){
+        if(!state.plan||state.shared)return;
+        var list=readTrips();
+        var trip=list.find(function(t){return t.id===state.tripId;});
+        if(!trip){
+            state.tripId='trip-'+Date.now().toString(36);
+            trip={id:state.tripId, snapshot:null};
+            list.unshift(trip);
+        }
+        trip.destination=state.answers.destination||state.plan.title;
+        trip.start=state.answers.start||state.plan.start||'';
+        trip.end=state.answers.end||state.plan.end||'';
+        trip.title=state.plan.title;
+        trip.planId=state.plan.id;
+        trip.answers=cloneData(state.answers);
+        if(!trip.snapshot&&window.DayBuilder){
+            trip.snapshot={builder:window.DayBuilder.exportState(), edits:cloneData(state.edits), packed:cloneData(state.packed), at:new Date().toISOString(), weather:weatherBlock()};
+        }
+        writeTrips(list);
+    }
+    function migrateLegacyTrip(){
+        var answers=read(KEY+'answers', null);
+        var last=read(KEY+'lastTrip', null);
+        if(!answers||!answers.destination||state.shared)return;
+        var list=readTrips();
+        if(list.length)return;
+        list.push({id:'legacy-'+String(answers.destination).toLowerCase().replace(/\s+/g,'-'), legacy:true, destination:answers.destination, start:answers.start||'', end:answers.end||'', title:answers.destination, planId:(last&&last.id)||'', answers:answers, snapshot:null});
+        writeTrips(list);
+        state.tripId=list[0].id;
+    }
+    function openSaved(id, mode){
+        var trip=readTrips().find(function(t){return t.id===id;});
+        if(!trip)return;
+        state.tripId=id;
+        state.answers=Object.assign({}, defaults, trip.answers||{});
+        save();
+        state.viewing=mode==='finished'?'finished':'live';
+        if(mode==='finished'&&!trip.snapshot)return;
+        if(state.plan&&state.plan.id===trip.planId&&mode!=='finished'){
+            state.edits=read(KEY+'edits:'+state.plan.id, {});
+            go(mode==='draft'?'draft':'plan');
+            return;
+        }
+        state.afterPlan=mode==='draft'?'draft':'plan';
+        generate(true);
+    }
+    function home(){
+        migrateLegacyTrip();
+        var trips=readTrips();
+        var cards=trips.map(function(t){
+            var when=(t.start&&t.end)?dateLabel(t.start)+' – '+dateLabel(t.end):'Dates not set';
+            return '<article class="card saved-trip" data-testid="saved-trip"><h2>'+esc(t.destination||t.title||'Trip')+'</h2><p>'+esc(when)+'</p><p class="footer-note">Saved on this device. Not uploaded.</p><div class="row">'+btn('Edit draft','edit-draft','outline','data-trip="'+esc(t.id)+'"')+btn('View finished plan','view-finished','outline','data-trip="'+esc(t.id)+'"'+(t.snapshot?'':' disabled'))+'</div></article>';
+        }).join('');
+        view.innerHTML='<div class="shell home-screen" data-testid="home-screen"><p class="eyebrow">GONOW</p>'+heading(trips.length?'Your trips':'Your next adventure starts here.', trips.length?'Pick up a trip saved on this device.':'A short introduction, then a draft you can shape.')+photo('images/hero.jpg','Aircraft wing and sky','hero-photo')+'<p data-testid="storage-note">Saved on this device only. There is no account and nothing is uploaded.</p><div class="row">'+btn('Start new trip','start-new-trip','primary')+(trips.length?btn('Continue saved trip','continue-saved','outline'):'')+'</div>'+(trips.length?'<div class="saved-trips">'+cards+'</div>':'<p>First visit — no saved trips yet.</p>')+'<div class="demo"><strong>Oahu sample</strong><p>Nov 25–29 · couple, ages 18 and 19.</p>'+btn('Open the Oahu sample ↗','demo-oahu','outline')+'</div></div>';
+        on('start-new-trip', function(){state.viewing='live'; go('start');});
+        on('continue-saved', function(){if(trips[0])openSaved(trips[0].id,'plan');});
+        on('demo-oahu', demo);
+        view.querySelectorAll('[data-testid=edit-draft]').forEach(function(b){b.onclick=function(){openSaved(b.dataset.trip,'draft');};});
+        view.querySelectorAll('[data-testid=view-finished]').forEach(function(b){if(b.disabled)return; b.onclick=function(){openSaved(b.dataset.trip,'finished');};});
+    }
+    function libraryEntries(){
+        var entries=[];
+        var ages=(state.answers.ages||[]).map(Number).filter(function(n){return n>0;});
+        function rule(text, extra){return Object.assign({text:text, source:'', url:'', unconfirmed:false, optional:false, minAge:0}, extra||{});}
+        if(window.DayBuilder&&state.plan&&state.plan.id==='oahu-demo-2026-11'){
+            window.DayBuilder.trayItems().forEach(function(item){
+                var rules=[];
+                if(item.id==='chest-bar'||(item.tags||[]).indexOf('alcohol')>=0){
+                    rules.push(rule('Alcohol service is 21+ in the United States. This stop is the drinks, so the age rule applies to the whole add.', {minAge:21, source:'23 U.S.C. § 158, national minimum drinking age', url:'https://www.law.cornell.edu/uscode/text/23/158'}));
+                }
+                if(item.id==='chest-0'){
+                    rules.push(rule('The intro dive says no certification is required. Medical fitness is unconfirmed here.', {unconfirmed:true, source:'Dive Oʻahu', url:'https://www.diveoahu.com/tours-charters'}));
+                }
+                if(item.id==='chest-1'){
+                    rules.push(rule('Operator age and weight limits are unconfirmed in our sources. Check with the operator.', {unconfirmed:true, source:'X-Treme Parasail', url:'https://www.xtremeparasail.com/parasailing'}));
+                }
+                if(/Diamond Head/.test(item.title)){
+                    rules.push(rule('A reservation is required. No age minimum is stated for this party.', {source:'Diamond Head State Monument', url:'https://dlnr.hawaii.gov/dsp/parks/oahu/diamond-head-state-monument/'}));
+                }
+                if(/Pillbox|Lanikai/.test(item.title)){
+                    rules.push(rule('The ridge is steep and can be slippery. No minimum age is stated in our source.', {unconfirmed:true, source:'Lanikai beach notes', url:'https://loveoahu.org/beaches/lanikai-beach/'}));
+                }
+                entries.push({id:item.id, chestId:item.id, title:item.title, place:item.place, duration:item.duration, estimate:item.estimate!==false, sourceId:item.sourceId, rules:rules});
+            });
+            entries.push({id:'opt-dinner', title:'Hotel dinner with optional drinks', place:'Kahala', duration:90, estimate:true, rules:[rule('Alcohol is 21+. The dinner itself is still available without it.', {optional:true, minAge:21, source:'23 U.S.C. § 158, national minimum drinking age', url:'https://www.law.cornell.edu/uscode/text/23/158'})]});
+        }
+        var dest=Engine.matchDestination(state.answers.destination||'');
+        if(dest&&dest.activities){
+            Object.keys(dest.activities).forEach(function(style){
+                (dest.activities[style]||[]).forEach(function(title){
+                    if(entries.some(function(e){return e.title===title;}))return;
+                    entries.push({id:'cat-'+dest.id+'-'+title.toLowerCase().replace(/[^a-z0-9]+/g,'-'), title:title, place:dest.name, duration:90, estimate:true, rules:[rule('Requirements for this catalog idea are unconfirmed. It is not a checked operator.', {unconfirmed:true, source:'GoNow destination catalog'})]});
+                });
+            });
+        }
+        entries.forEach(function(entry){
+            var blocked=null;
+            (entry.rules||[]).forEach(function(r){
+                if(r.optional||r.unconfirmed)return;
+                if(r.minAge&&!ages.length){r.unconfirmed=true; r.text+=' Party ages are not entered, so this is not confirmed.'; return;}
+                if(r.minAge&&ages.some(function(age){return age<r.minAge;}))blocked='Your party includes age '+ages.filter(function(age){return age<r.minAge;}).join(' and ')+'. '+r.text;
+            });
+            entry.blocked=blocked;
+        });
+        return entries;
+    }
+    function restrictionHTML(entry){
+        return (entry.rules||[]).map(function(r){
+            var tag=r.unconfirmed?'Unconfirmed':(r.optional?'Optional — does not block this outing':(entry.blocked?'Not a match':'Requirement'));
+            return '<p class="library-rule" data-testid="activity-restriction"><strong>'+esc(tag)+'.</strong> '+esc(r.text)+(r.url?' <a href="'+esc(r.url)+'" target="_blank" rel="noopener">'+esc(r.source||'Source')+'</a>':(r.source?' <span>'+esc(r.source)+'</span>':''))+'</p>';
+        }).join('')+(entry.blocked?'<p data-testid="activity-block">'+esc(entry.blocked)+'</p>':'');
+    }
+    function bindLibrary(aside){
+        if(aside.dataset.bound)return;
+        aside.dataset.bound='1';
+        aside.addEventListener('input', function(e){if(e.target&&e.target.dataset.testid==='activity-search')renderLibraryResults(aside, e.target.value);});
+        aside.addEventListener('click', function(e){
+            var add=e.target.closest('[data-testid=activity-add]');
+            if(!add||add.disabled)return;
+            var card=add.closest('[data-testid=activity-result]');
+            var entry=libraryEntries().find(function(item){return item.id===card.dataset.id;});
+            if(!entry||entry.blocked)return;
+            var day=card.querySelector('[data-testid=activity-day]').value;
+            var result=window.DayBuilder.addToDay(day, entry.chestId?{chestId:entry.chestId}:{title:entry.title, place:entry.place, duration:entry.duration});
+            var note=card.querySelector('[data-testid=activity-add-note]');
+            if(note)note.textContent=result&&result.ok?'Added to the draft. This does not book it or confirm availability.':(result&&result.reason)||'Could not add';
+        });
+        aside.addEventListener('submit', function(e){
+            if(!e.target.matches('[data-testid=add-own-form]'))return;
+            e.preventDefault();
+            var name=aside.querySelector('[data-testid=add-own-name]').value.trim();
+            var day=aside.querySelector('[data-testid=add-own-day]').value;
+            var result=window.DayBuilder.addToDay(day, {title:name, place:'Other', duration:60});
+            aside.querySelector('[data-testid=add-own-note]').textContent=result&&result.ok?'Added to the draft. This does not book it or confirm availability.':(result&&result.reason)||'Add a name';
+        });
+    }
+    function renderLibraryResults(aside, query){
+        var q=String(query||'').trim().toLowerCase();
+        var all=libraryEntries();
+        var list=all.filter(function(entry){return !q||(entry.title+' '+entry.place).toLowerCase().indexOf(q)>=0;}).slice(0, 12);
+        var days=state.plan?state.plan.days:[];
+        var dayOpts=days.map(function(d){return '<option value="'+esc(d.date)+'">'+esc(dateLabel(d.date))+'</option>';}).join('');
+        var host=aside.querySelector('[data-testid=activity-results]');
+        if(!list.length){
+            host.innerHTML='<p data-testid="activity-no-results">No matches in the on-device library. Add your own below. This is not a failed live search.</p>';
+            return;
+        }
+        host.innerHTML=list.map(function(entry){
+            var photoSrc=entry.sourceId&&ITEM_PHOTOS[entry.sourceId];
+            var img=photoSrc?photo(photoSrc, entry.title, 'library-photo'):'';
+            return '<article class="library-card" data-testid="activity-result" data-id="'+esc(entry.id)+'">'+img+'<h3>'+esc(entry.title)+'</h3><p>'+esc(entry.place)+' · '+(entry.estimate?'~':'')+esc(String(entry.duration))+' min'+(entry.estimate?' estimate':'')+'</p>'+restrictionHTML(entry)+'<label>Day <select data-testid="activity-day">'+dayOpts+'</select></label><button type="button" data-testid="activity-add"'+(entry.blocked?' disabled':'')+'>Add to trip</button><p data-testid="activity-add-note"></p></article>';
+        }).join('');
+    }
+    function ensureLibrary(aside){
+        if(!aside.querySelector('[data-testid=activity-search]')){
+            aside.insertAdjacentHTML('afterbegin','<div class="library-search"><p data-testid="search-honesty">Search this device’s activity library for your destination. It is not a live worldwide place search. That would need a places provider and an API key, which this page does not use.</p><label>Search activities<input data-testid="activity-search" type="search" placeholder="Try dive, sunset, walk"></label><p>Adding a stop does not book it or confirm availability.</p><div data-testid="activity-results"></div><form data-testid="add-own-form"><label>Add your own<input data-testid="add-own-name" maxlength="100" placeholder="Name"></label><label>Day <select data-testid="add-own-day">'+ (state.plan?state.plan.days:[]).map(function(d){return '<option value="'+esc(d.date)+'">'+esc(dateLabel(d.date))+'</option>';}).join('')+'</select></label><button type="submit">Add your own</button><p data-testid="add-own-note"></p></form></div>');
+            bindLibrary(aside);
+            renderLibraryResults(aside, '');
+        }
+    }
+    function draftScreen(){
+        if(!state.plan){go('home');return;}
+        state.viewing='live';
+        state.edits=read(KEY+'edits:'+state.plan.id, state.edits||{});
+        var dirty=draftDirty();
+        view.innerHTML='<div class="shell draft-screen" data-testid="draft-screen">'+heading('Draft', esc(state.plan.title))+'<p>'+esc(state.answers.destination||'')+' · '+esc(dateLabel(state.answers.start||state.plan.start))+' – '+esc(dateLabel(state.answers.end||state.plan.end))+'</p><p data-testid="storage-note">Saved on this device only. Edits stay in the draft until you generate.</p>'+(dirty?'<p class="banner" data-testid="changes-pending">Changes not yet generated</p>':'')+'<div class="row">'+btn('Generate my plan','generate-plan','primary')+btn('Activities','tray-toggle','outline','aria-expanded="false" aria-controls="activity-tray"')+btn('Home','draft-home','')+'</div><section class="db-root db-dock" data-testid="db-root" aria-label="Draft days"></section></div>';
+        var db=view.querySelector('.db-root');
+        var ctx=builderContext();
+        ctx.dock=true;
+        ctx.shared=false;
+        ctx.initial=null;
+        var previous=ctx.afterRender;
+        ctx.afterRender=function(scope){
+            if(previous)previous(scope);
+            var aside=db.querySelector('.db-dock-tray');
+            if(aside)ensureLibrary(aside);
+            if(draftDirty()){
+                if(!view.querySelector('[data-testid=changes-pending]'))view.querySelector('.draft-screen').insertAdjacentHTML('afterbegin','<p class="banner" data-testid="changes-pending">Changes not yet generated</p>');
+            }
+        };
+        window.DayBuilder.mount(db, ctx);
+        on('generate-plan', function(){
+            var list=readTrips();
+            var trip=list.find(function(t){return t.id===state.tripId;})||{id:state.tripId, snapshot:null};
+            if(!list.some(function(t){return t.id===trip.id;}))list.unshift(trip);
+            trip.snapshot={builder:window.DayBuilder.exportState(), edits:cloneData(state.edits), packed:cloneData(state.packed), at:new Date().toISOString(), weather:weatherBlock()};
+            trip.destination=state.answers.destination||trip.destination;
+            trip.start=state.answers.start||trip.start;
+            trip.end=state.answers.end||trip.end;
+            trip.planId=state.plan.id;
+            trip.answers=cloneData(state.answers);
+            writeTrips(list);
+            state.viewing='finished';
+            go('plan');
+        });
+        on('tray-toggle', function(){
+            var aside=document.querySelector('.db-dock-tray');
+            var open=!aside.classList.contains('is-open');
+            aside.classList.toggle('is-open', open);
+            get('tray-toggle').setAttribute('aria-expanded', String(open));
+        });
+        on('draft-home', function(){go('home');});
     }
     function option(value, label, sub, key, multi) {
         var a=state.answers, selected=multi?(a[key]||[]).indexOf(value)>=0:a[key]===value;
@@ -665,10 +902,15 @@
     }
     function showPlan(plan, resume) {
             state.plan=plan;
-            state.edits=state.shared?state.sharedEdits:read(KEY+'edits:'+plan.id,  {});
             state.packed=state.shared?{}:read(KEY+'packing:'+plan.id,  {});
             state.packMeta=state.shared?{}:read(KEY+'packing-meta:'+plan.id,  {});
-            if(state.edits.quantities||state.edits.customPacking) {
+            if(state.viewing==='finished'){
+                var frozen=currentTrip();
+                state.edits=frozen&&frozen.snapshot?cloneData(frozen.snapshot.edits):{};
+            } else {
+                state.edits=state.shared?state.sharedEdits:read(KEY+'edits:'+plan.id, {});
+            }
+            if(state.viewing!=='finished'&&(state.edits.quantities||state.edits.customPacking)) {
                 state.packMeta.quantities=Object.assign({}, state.edits.quantities||{}, state.packMeta.quantities||{});
                 state.packMeta.customPacking=(state.packMeta.customPacking||[]).concat(state.edits.customPacking||[]);
                 delete state.edits.quantities;
@@ -678,11 +920,15 @@
             }
             state.tab='plan';
             write(KEY+'lastTrip',  {
-                answers:state.answers
+                answers:state.answers,
+                id:plan.id
             });
             if(!resume){earn('Finished a plan');if(extra.every(function(k){return (state.answers.completed||[]).includes(k);}))earn('Personalized food, pace and musts');}
-            go('plan');
-            if(!resume)toast('Your plan is ready.');
+            var next=state.afterPlan||'plan';
+            state.afterPlan=null;
+            go(next);
+            rememberTrip();
+            if(!resume&&next==='plan')toast('Your plan is ready.');
     }
     function packingGroups() {
         var p=state.plan, groups=JSON.parse(JSON.stringify(p.packing));
@@ -710,6 +956,7 @@
         write(KEY+'packing-meta:'+state.plan.id, state.packMeta);
     }
     function persistEdits() {
+        if(state.viewing==='finished')return;
         write(KEY+'edits:'+state.plan.id, state.edits);
     }
     function tick(id, value) {
@@ -852,7 +1099,7 @@
         function model(date){var x=day(date);return x.d?dayModel(x.d,x.i):{items:[]};}
         function find(id,date){return model(date).items.find(function(it){return it.id===id;});}
         return {
-            ages:state.answers.ages, shared:!!state.shared, initial:state.sharedBuilder||null,
+            ages:state.answers.ages, shared:!!state.shared||state.viewing==='finished', initial:(state.viewing==='finished'&&currentTrip()&&currentTrip().snapshot)?(currentTrip().snapshot.builder||null):(state.sharedBuilder||null),
             dayHead:function(date){var x=day(date);return x.d?dayHeadHTML(x.d,x.i,dayModel(x.d,x.i)):'';},
             dayFooter:function(date){var x=day(date);return x.d?dayFooterHTML(x.d,x.i,dayModel(x.d,x.i)):'';},
             // Stops the builder does not schedule: your own added items and the relaxed-day swap.
@@ -936,7 +1183,13 @@
             var db=document.createElement('section');db.className='db-root';db.dataset.testid='db-root';db.setAttribute('aria-label','Your days');
             document.querySelector('#tab-content .tile-grid').insertAdjacentElement('beforebegin',db);
             db.hidden=get('treasure-map')?!get('treasure-map').hidden:false;
-            window.DayBuilder.mount(db,builderContext());
+            var built=builderContext();
+            if(state.viewing==='finished'){
+                var tripNow=currentTrip();
+                var weather=tripNow&&tripNow.snapshot&&tripNow.snapshot.weather;
+                if(weather)view.querySelector('.shell').insertAdjacentHTML('afterbegin','<aside class="banner" data-testid="finished-banner">Finished plan. This copy stays as generated. '+esc(weather.label)+'</aside><p data-testid="snapshot-weather">'+esc(weather.text)+'</p>');
+            }
+            window.DayBuilder.mount(db,built);
         }
         on('build-template', function() {
             state.answers.templateOahu=true;
@@ -1412,6 +1665,8 @@
     }
     function render() {
         if(state.screen==='credits')creditsScreen();
+        else if(state.screen==='home')home();
+        else if(state.screen==='draft')draftScreen();
         else if(state.screen==='start')start();
         else if(steps.indexOf(state.screen)>=0||extra.indexOf(state.screen)>=0)question();
         else if(state.screen==='fork')fork();
@@ -1443,11 +1698,12 @@
         state.plan=null;
         state.excluded=[];
         state.recOffset=0;
-        go('start');
+        go('home');
     };
     document.querySelector('.logo').onclick=function(e) {
         e.preventDefault();
-        go('start');
+        state.viewing='live';
+        go('home');
     };
     window.__gonow= {
         state:state, go:go, buildICS:buildICS, planText:planText
@@ -1456,8 +1712,7 @@
     updateRank();
     var last=read(KEY+'lastTrip', null);
     if(location.hash.indexOf('#trip=')===0)restoreShared();
-    else if(last&&state.answers.destination)generate(true);
-    else go('start');
+    else { migrateLegacyTrip(); go('home'); }
 }
 ());
 

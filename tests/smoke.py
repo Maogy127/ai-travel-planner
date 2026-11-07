@@ -26,6 +26,8 @@ async def main():
   await page.get_by_test_id('tab-packing').click()
   assert await page.locator('input[data-pack-id="'+pid+'"]').is_checked()
   await page.reload()
+  if await page.get_by_test_id('continue-saved').count():
+    await page.get_by_test_id('continue-saved').first.click()
   await page.get_by_test_id('age-rules').wait_for(state='attached')
   await page.get_by_test_id('tab-packing').click()
   assert await page.locator('input[data-pack-id="'+pid+'"]').is_checked()
@@ -37,6 +39,8 @@ async def main():
   await page.locator('#day-1 [data-testid=relax-toggle]').check()
   assert await page.locator('h3',has_text='Diamond Head —').count()==0
   await page.reload()
+  if await page.get_by_test_id('continue-saved').count():
+    await page.get_by_test_id('continue-saved').first.click()
   await page.get_by_test_id('age-rules').wait_for(state='attached')
   assert await page.locator('#day-1 [data-testid=relax-toggle]').is_checked()
   await page.locator('[data-testid=item-edit]').first.evaluate("""e=>{const d=e.closest('.db-detail');if(d&&d.hidden){const b=document.querySelector('[aria-controls=\"'+d.id+'\"]');if(b)b.click();}}""")
@@ -44,9 +48,12 @@ async def main():
   await page.get_by_test_id('edit-note').fill('Testing saved note')
   await page.get_by_test_id('edit-save').click()
   await page.reload()
+  if await page.get_by_test_id('continue-saved').count():
+    await page.get_by_test_id('continue-saved').first.click()
   await page.get_by_test_id('age-rules').wait_for(state='attached')
   assert await page.get_by_text('Your note: Testing saved note').count()==1
   await page.get_by_test_id('start-over').click()
+  await page.get_by_test_id('start-new-trip').click()
   await page.get_by_test_id('start-from').fill('Seattle')
   await page.get_by_test_id('start-unsure').click()
   await page.get_by_test_id('start-next').click()

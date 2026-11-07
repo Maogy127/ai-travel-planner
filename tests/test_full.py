@@ -69,7 +69,15 @@ async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=F
   # Fulfill external fonts locally so offline verification has no network dependency.
   await pg.route('https://fonts.googleapis.com/**', lambda route: route.fulfill(status=200, content_type='text/css', body=''))
   await pg.goto(base+'?fast=1'); return ctx, pg
+async def reopen(pg):
+  # A reload lands on Home when a trip is saved on this device.
+  if await pg.get_by_test_id('continue-saved').count():
+    await pg.get_by_test_id('continue-saved').first.click()
+async def open_form(pg):
+  if await pg.get_by_test_id('start-from').count()==0:
+    await pg.get_by_test_id('start-new-trip').click()
 async def answer(pg, dest, unsure=False, ages=('18','19'), who='couple', styles=('relaxing','scenic'), start='2026-11-25', end='2026-11-29'):
+  await open_form(pg)
   await pg.get_by_test_id('start-from').fill('Los Angeles')
   if unsure: await pg.get_by_test_id('start-unsure').click()
   else: await pg.get_by_test_id('start-to').fill(dest)
@@ -105,6 +113,7 @@ async def extra(b, base, label):
   css=(SITE/'css/styles.css').read_text()
   ok(f'{label} no invalid "x: :y" / "button: hover" selectors', not _re.search(r'^[a-z]+: :?[a-z]+\{', css, _re.M) and 'button:disabled{' in css and 'dialog::backdrop{' in css)
   # place validation
+  await open_form(pg)
   await pg.get_by_test_id('start-to').fill('zz'); await pg.get_by_test_id('start-next').click()
   ok(f'{label} place validation message', "couldn’t find that place" in await pg.locator('main').text_content())
   await pg.get_by_test_id('start-to').fill('Oahu'); await pg.get_by_test_id('start-from').fill('Los Angeles'); await pg.get_by_test_id('start-next').click()
@@ -168,7 +177,7 @@ async def extra(b, base, label):
     localStorage.setItem(old+'lastTrip', JSON.stringify({id:'oahu-demo-2026-11'}));
     localStorage.setItem(old+'packing:oahu-demo-2026-11', JSON.stringify({holo:true}));
     localStorage.setItem(old+'edits:oahu-demo-2026-11', JSON.stringify({customPacking:[{id:'pack-1',name:'Old custom item',qty:2,group:'Documents',from:[]}], quantities:{holo:3}}));}""", old)
-  await pg.reload(); await pg.get_by_test_id('age-rules').wait_for(state='attached', timeout=10000)
+  await pg.reload(); await reopen(pg); await pg.get_by_test_id('age-rules').wait_for(state='attached', timeout=10000)
   keys=await pg.evaluate('Object.keys(localStorage)')
   ok(f'{label} old keys migrated to gonow:*', all(k.startswith('gonow:') for k in keys) and 'gonow:answers' in keys, str(keys))
   await pg.get_by_test_id('tab-packing').click()
@@ -202,6 +211,7 @@ async def pirate_plan_checks(pg,label):
   await toggles.first.click()
 async def motion_checks(b,base,label):
   ctx,pg=await new(b,base,1280,800,reduced_motion='reduce')
+  await open_form(pg)
   await pg.get_by_test_id('start-from').fill('Seattle'); await pg.get_by_test_id('start-to').fill('Oahu'); await pg.get_by_test_id('start-next').click()
   ok(f'{label} reduced flip disabled', await pg.locator('[data-flip=true]').evaluate("e=>getComputedStyle(e).animationName")=='none')
   ok(f'{label} reduced motion class', await pg.locator('html').evaluate("e=>e.classList.contains('reduce-motion')"))
@@ -215,6 +225,7 @@ async def run(base, label, shots):
     # Start screen screenshot (desktop)
     ctx,pg=await new(b, base, 1280, 800)
     await pg.wait_for_timeout(600)
+    await open_form(pg)
     ok(f'{label} destination above fold', (await pg.get_by_test_id('start-to').bounding_box())['y']+(await pg.get_by_test_id('start-to').bounding_box())['height']<800)
     if shots: await pg.screenshot(path=str(ROOT/'screenshots/pirate-local-start.png'))
     await ctx.close()
@@ -256,7 +267,7 @@ async def run(base, label, shots):
     ok(f'{label} packing no h-scroll', not await overflow(pg))
     t2=pg.locator('input[data-testid=pack-item]').nth(5) if await pg.locator('input[data-testid=pack-item]').count() else pg.locator('[data-testid=pack-item] input').nth(5)
     pid2=await t2.get_attribute('data-pack-id'); await t2.check()
-    await pg.reload(); await pg.get_by_test_id('age-rules').wait_for(state='attached')
+    await pg.reload(); await reopen(pg); await pg.get_by_test_id('age-rules').wait_for(state='attached')
     await pg.get_by_test_id('tab-packing').click()
     ok(f'{label} packing ticks persist after reload', await pg.locator(f'input[data-pack-id="{pid}"]').first.is_checked() and await pg.locator(f'input[data-pack-id="{pid2}"]').first.is_checked())
     await pg.get_by_test_id('tab-plan').click()
@@ -272,7 +283,7 @@ async def run(base, label, shots):
     await pg.get_by_test_id('undo').click(); ok(f'{label} undo', await pg.locator('.item').count()==before)
     await show_day(pg,3); await pg.get_by_test_id('rain-toggle').first.check(); await show_day(pg,1); await pg.get_by_test_id('relax-toggle').first.check()
     await open_for(pg.get_by_test_id('item-edit').first); await pg.get_by_test_id('item-edit').first.click(); await pg.get_by_test_id('edit-note').fill('My test note'); await pg.get_by_test_id('edit-save').click()
-    await pg.reload(); await pg.get_by_test_id('age-rules').wait_for(state='attached')
+    await pg.reload(); await reopen(pg); await pg.get_by_test_id('age-rules').wait_for(state='attached')
     relaxed=await pg.get_by_test_id('relax-toggle').first.is_checked(); note=await pg.get_by_text('My test note').count()>=1
     await show_day(pg,3); ok(f'{label} relax+rain toggles persist', relaxed and await pg.get_by_test_id('rain-toggle').first.is_checked())
     ok(f'{label} edit note persists', note)
@@ -299,6 +310,7 @@ async def run(base, label, shots):
     await ctx.close()
     # C. Not sure -> recommendations
     ctx,pg=await new(b, base)
+    await open_form(pg)
     await pg.get_by_test_id('start-from').fill('Seattle'); await pg.get_by_test_id('start-unsure').click(); await pg.get_by_test_id('start-next').click()
     await pg.get_by_test_id('date-start').fill('2027-02-10'); await pg.get_by_test_id('date-end').fill('2027-02-16'); await pg.get_by_test_id('q-continue').click()
     await pg.get_by_test_id('opt-3000').click(); await pg.get_by_test_id('q-continue').click()
@@ -352,7 +364,7 @@ async def batch_a_checks(b,base,label):
   ok(f'{label} map has five day buttons and no overflow', await pg.get_by_test_id('treasure-map').is_visible() and await pg.get_by_test_id('map-day').count()==5 and not await overflow(pg))
   await pg.get_by_test_id('map-day').nth(2).focus(); await pg.keyboard.press('Enter')
   ok(f'{label} map keyboard opens and focuses day in list', await pg.get_by_test_id('view-list').get_attribute('aria-pressed')=='true' and await pg.get_by_test_id('db-day-2026-11-27').get_attribute('aria-pressed')=='true' and await pg.get_by_test_id('db-day-2026-11-27').evaluate('e=>e===document.activeElement') and await pg.locator('#day-2').is_visible())
-  await pg.get_by_test_id('view-map').click(); await pg.reload(); await pg.get_by_test_id('age-rules').wait_for(state='attached')
+  await pg.get_by_test_id('view-map').click(); await pg.reload(); await reopen(pg); await pg.get_by_test_id('age-rules').wait_for(state='attached')
   ok(f'{label} map preference persists', await pg.get_by_test_id('treasure-map').is_visible())
   await pg.get_by_test_id('view-list').click()
   # Edit a note and remove a different stop before both exports.
@@ -379,7 +391,7 @@ async def batch_a_checks(b,base,label):
   ok(f'{label} real actions increase rank', 'Deckhand' not in rank_text)
   await pg.get_by_test_id('rank-badge').click()
   ok(f'{label} rank details list earned actions', await pg.get_by_test_id('rank-details').is_visible() and 'Downloaded a calendar' in await pg.locator('#sheet').inner_text() and 'Created a share link' in await pg.locator('#sheet').inner_text())
-  await pg.get_by_test_id('modal-0').click(); await pg.reload(); await pg.get_by_test_id('age-rules').wait_for(state='attached')
+  await pg.get_by_test_id('modal-0').click(); await pg.reload(); await reopen(pg); await pg.get_by_test_id('age-rules').wait_for(state='attached')
   ok(f'{label} rank persists on reload', await pg.get_by_test_id('rank-badge').inner_text()==rank_text)
   await pg.get_by_test_id('start-over').click()
   ok(f'{label} Start over preserves rank', await pg.get_by_test_id('rank-badge').inner_text()==rank_text)
@@ -450,7 +462,7 @@ async def local_info_checks(b,base,label):
   ok(f'{label} weather request dates',query['start_date']==['2026-11-25' if forecast else '2025-11-25'] and ('archive-api.' in weather_calls[0])!=forecast)
   count=len(weather_calls)
   await tile.get_by_test_id('tile-toggle').click();await tile.get_by_test_id('tile-toggle').click()
-  await pg.reload();await pg.get_by_test_id('age-rules').wait_for(state='attached')
+  await pg.reload(); await reopen(pg); await pg.get_by_test_id('age-rules').wait_for(state='attached')
   tile=pg.get_by_test_id('local-info');await tile.get_by_test_id('tile-toggle').click();await tile.get_by_test_id('info-asof').first.wait_for()
   ok(f'{label} weather session cache',len([u for u in calls if 'open-meteo.com/v1/' in u])==count)
   await ctx.close()
@@ -614,7 +626,7 @@ async def daybuilder_checks(b,base,label,shots):
   handle=day.locator('[data-db-id=photos]').get_by_test_id('db-handle')
   await handle.focus();await pg.keyboard.press('Space');await pg.keyboard.press('ArrowDown');await pg.keyboard.press('Space')
   ok(label+' db afterdark keyboard','After dark — sunset ~5:48 PM' in await day.locator('[data-db-id=photos]').inner_text())
-  edited=await timeline();await pg.reload();await pg.get_by_test_id('db-root').wait_for()
+  edited=await timeline();await pg.reload(); await reopen(pg); await pg.get_by_test_id('db-root').wait_for()
   ok(label+' db persistence',await timeline()==edited)
   await pg.get_by_test_id('db-booking-toggle').click()
   await pg.get_by_test_id('db-booking-name').fill('Harbor reservation')
@@ -740,7 +752,7 @@ async def merged_checks(b,base,label,shots):
   ok(label+' reorder works around lock',o.index('lunch-1127')<o.index('dive-1127') and await t('dive-1127')==before,str(o))
   ok(label+' conflict warning when pushed into lock',('Dive' in notes or 'dive' in notes) and await day.locator('.db-conflict').count()>0,notes)
   # Persistence across reload
-  await pg.reload(); await pg.get_by_test_id('db-root').wait_for(); await pg.get_by_test_id('db-day-2026-11-27').click()
+  await pg.reload(); await reopen(pg); await pg.get_by_test_id('db-root').wait_for(); await pg.get_by_test_id('db-day-2026-11-27').click()
   dive=day.locator('[data-db-id=dive-1127]')
   ok(label+' lock persists across reload',await dive.get_by_test_id('db-lock').get_attribute('aria-pressed')=='true' and await t('dive-1127')==before and (await order27())==o)
   saved=await pg.evaluate("JSON.parse(localStorage.getItem('gonow:daybuilder:oahu-demo-2026-11')).days['2026-11-27'].items.find(i=>i.id==='dive-1127')")
@@ -819,7 +831,7 @@ async def daybuilder_round5_checks(b,base,label):
     saved.days['2026-11-28'].items=[{...DayBuilder.trayItems()[0],preferred:540}];
     localStorage.setItem(key,JSON.stringify(saved));
   }""")
-  await pg.reload();await pg.get_by_test_id('db-day-2026-11-28').click()
+  await pg.reload(); await reopen(pg); await pg.get_by_test_id('db-day-2026-11-28').click()
   ok(label+' db flight late clears','Keep 24 hrs between diving and flying' not in await day.inner_text())
   await pg.get_by_test_id('db-day-2026-11-29').click()
   ok(label+' db flight persisted',await pg.get_by_test_id('db-flight-time').input_value()=='23:00')

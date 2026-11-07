@@ -391,7 +391,10 @@ function mount(root, ctx = {}) {
     const days = saved.days || {};
     if (ctx.shared) saved.days = days;
     let flightTime = saved.flightTime || '';
-    root.innerHTML = '<div class="db-content"></div><div class="db-print-all"></div><div class="db-sr" role="status" aria-live="polite" data-testid="db-live"></div>';
+    if (ctx.dock) root.classList.add('db-dock');
+    root.innerHTML = ctx.dock
+        ? '<div class="db-workspace"><div class="db-content"></div><aside class="db-dock-tray" id="activity-tray" data-testid="activity-tray"></aside></div><div class="db-print-all"></div><div class="db-sr" role="status" aria-live="polite" data-testid="db-live"></div>'
+        : '<div class="db-content"></div><div class="db-print-all"></div><div class="db-sr" role="status" aria-live="polite" data-testid="db-live"></div>';
     const content = root.querySelector('.db-content');
     const printAll = root.querySelector('.db-print-all');
     const live = root.querySelector('[data-testid=db-live]');
@@ -409,6 +412,29 @@ function mount(root, ctx = {}) {
     function current() {
         if (!days[date]) days[date] = {...buildSuggested(date), tray: trayItems()};
         return days[date];
+    }
+    function addToDay(nextDate, spec) {
+        if (!spec) return {ok: false, reason: 'Missing activity'};
+        selectDay(nextDate, false);
+        const d = current();
+        let item = null;
+        if (spec.chestId) {
+            const base = trayItems().find(candidate => candidate.id === spec.chestId);
+            if (!base) return {ok: false, reason: 'That activity is not in the library'};
+            if (d.items.some(existing => existing.id === base.id || existing.title === base.title)) return {ok: false, reason: 'Already on this day'};
+            item = clone(base);
+        } else {
+            const title = String(spec.title || '').trim().slice(0, 100);
+            if (!title) return {ok: false, reason: 'Name the activity'};
+            item = {id: 'lib-' + Date.now(), title, place: String(spec.place || 'Other').slice(0, 40),
+                duration: Math.max(15, Math.min(480, Number(spec.duration) || 60)), estimate: true,
+                preferred: null, locked: false, custom: true, tags: Array.isArray(spec.tags) ? spec.tags : []};
+        }
+        d.items.push(item);
+        save();
+        render({id: item.id, zone: 'day'});
+        announce(item.title + ' added. Times reflow around locks. This does not book the stop.');
+        return {ok: true, id: item.id};
     }
     function announce(message) {
         live.textContent = message + (addedConflicts.length ? ' Heads-up: ' + addedConflicts[0] + (addedConflicts.length > 1 ? ' +' + (addedConflicts.length - 1) + ' more' : '') : '');
@@ -548,6 +574,18 @@ function mount(root, ctx = {}) {
             });
         }
         root.querySelectorAll('[aria-describedby]').forEach(row => row.matches('[data-db-id]') && row.querySelector('[data-db-action=handle]')?.setAttribute('aria-describedby', row.getAttribute('aria-describedby')));
+        if (ctx.dock) {
+            const aside = root.querySelector('.db-dock-tray');
+            if (aside) {
+                aside.querySelectorAll('.db-tray,.db-tools,.db-form').forEach(node => node.remove());
+                const tools = content.querySelector('.db-tools');
+                const tray = content.querySelector('.db-tray');
+                const form = content.querySelector('.db-form');
+                if (tools) aside.append(tools);
+                if (tray) { tray.hidden = false; aside.append(tray); }
+                if (form) aside.append(form);
+            }
+        }
         if (ctx.afterRender) ctx.afterRender(content, date);
         if (focus) {
             const row = Array.from(root.querySelectorAll('[data-db-id]')).find(e => e.dataset.dbId === focus.id && e.dataset.dbZone === focus.zone);
@@ -882,6 +920,7 @@ function mount(root, ctx = {}) {
         date: () => date,
         exportState: () => exportDays(days, flightTime),
         schedule,
+        addToDay,
         persist: () => { try { localStorage.setItem(KEY, JSON.stringify({days, flightTime})); } catch (e) {} }
     };
     session.active = api;
@@ -905,5 +944,6 @@ window.DayBuilder = {buildSuggested, reflow, commuteMinutes, mount, render: moun
     },
     print: on => active()?.renderPrint(on),
     schedule: () => active()?.schedule() || null,
+    addToDay: (date, spec) => active()?.addToDay(date, spec) || {ok: false, reason: 'Open a draft first'},
     resetSession: () => { session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
 })();

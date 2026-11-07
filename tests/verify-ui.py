@@ -33,6 +33,8 @@ async def main():
         assert await page.get_by_test_id("curated-notice").count() == 0
         await page.locator("#day-1 [data-testid=rain-toggle]").check()
         await page.reload()
+        if await page.get_by_test_id("continue-saved").count():
+            await page.get_by_test_id("continue-saved").first.click()
         await page.get_by_test_id("age-rules").wait_for(state="attached")
         assert await page.locator("#day-1 [data-testid=rain-toggle]").is_checked()
         details = page.locator("details").filter(has=page.locator("summary", has_text="What to bring")).first

@@ -1174,6 +1174,26 @@ html.reduce-motion .db-detail.db-pop,html.reduce-motion .db-expand-mark{animatio
 .db-controls{align-items:center}.db-controls>.db-lock{margin:0 4px 0 0;align-self:center}
 /* Merged plan on phones: the day card is the frame, so all five box controls fit on one row. */
 @media(max-width:600px){.db-root:has(.db-daycard){padding:0;border:0;background:none;box-shadow:none}.db-daycard{padding:12px 8px}.db-daycard .db-activity{padding:8px 6px}.db-daycard .db-controls{gap:4px}.db-daycard .db-time{flex-basis:80px}}
+.home-screen .hero-photo{max-height:240px;margin-top:12px}
+.saved-trip{margin:12px 0}
+.saved-trip h2{font-size:28px;margin:0 0 4px}
+.library-search{margin-bottom:8px}
+.library-card{border-top:1px solid #e4d8c4;padding:10px 0}
+.library-card h3{font-size:16px;margin:4px 0}
+.library-photo{height:110px;margin:0 0 8px}
+.library-rule{font-size:13px;margin:6px 0}
+@media(min-width:960px){
+ .db-root.db-dock .db-workspace{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:16px;align-items:start}
+ .db-root.db-dock .db-dock-tray{position:sticky;top:76px;max-height:calc(100vh - 92px);overflow:auto;background:#fffcf5;border:1px solid #b9a57f;border-radius:8px;padding:12px}
+ .draft-screen [data-testid=tray-toggle]{display:none}
+}
+@media(max-width:959px){
+ .db-root.db-dock .db-dock-tray{position:fixed;z-index:60;left:0;right:0;bottom:0;max-height:78vh;overflow:auto;background:#fffcf5;border-top:2px solid #b9a57f;padding:12px 12px 28px;transform:translateY(105%);transition:transform .2s ease}
+ .db-root.db-dock .db-dock-tray.is-open{transform:translateY(0)}
+}
+@media(prefers-reduced-motion:reduce){.db-root.db-dock .db-dock-tray{transition:none}}
+html.reduce-motion .db-root.db-dock .db-dock-tray{transition:none}
+@media print{.db-dock-tray,.library-search{display:none!important}}
 /* Printed Oahu days: one day per page, every detail open, controls gone. */
 @media print{
  .db-root.db-printing .db-print-all .db-print-day{break-before:page!important;page-break-before:always!important;break-inside:auto!important;page-break-inside:auto!important}

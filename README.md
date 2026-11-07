@@ -1,6 +1,6 @@
 # GoNow
 
-Open `index.html` directly, or serve this directory with any static HTTP server. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Google Fonts supplies Playfair Display and DM Sans when online; system fallbacks keep the site usable offline. Use `?fast=1` to skip the simulated planning delay.
+Open `index.html` directly, or serve this directory with any static HTTP server. Home lists trips saved on this device. Start a trip, shape it in Draft, then Generate my plan to freeze a finished copy. Draft edits do not change that copy until you generate again. Activity search uses the on-device library only. It is not a live worldwide place search. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Google Fonts supplies Playfair Display and DM Sans when online; system fallbacks keep the site usable offline. Use `?fast=1` to skip the simulated planning delay.
 
 Files: `index.html`, `css/styles.css`, `js/catalog.js`, `js/oahu.js`, `js/daybuilder.js`, `js/engine.js`, `js/ai.js`, `js/credits.js`, `js/localinfo.js`, `js/affiliates.js`, `js/app.js`, `credits.json` and `images/*.jpg`.
 
