@@ -386,7 +386,7 @@
                 if(/Pillbox|Lanikai/.test(item.title)){
                     rules.push(rule('The ridge is steep and can be slippery. No minimum age is stated in our source.', {unconfirmed:true, source:'Lanikai beach notes', url:'https://loveoahu.org/beaches/lanikai-beach/'}));
                 }
-                entries.push({id:item.id, chestId:item.id, title:item.title, place:item.place, duration:item.duration, estimate:item.estimate!==false, sourceId:item.sourceId, rules:rules});
+                entries.push({id:item.id, chestId:item.id, title:item.title, place:item.place, duration:item.duration, estimate:true, sourceId:item.sourceId, rules:rules});
             });
             entries.push({id:'opt-dinner', title:'Hotel dinner with optional drinks', place:'Kahala', duration:90, estimate:true, rules:[rule('Alcohol is 21+. The dinner itself is still available without it.', {optional:true, minAge:21, source:'23 U.S.C. § 158, national minimum drinking age', url:'https://www.law.cornell.edu/uscode/text/23/158'})]});
         }
