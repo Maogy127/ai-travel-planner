@@ -70,7 +70,9 @@
         return'<button data-testid="'+id+'" '+(attrs||'')+' class="'+(cls||'')+'">'+label+'</button>';
     }
     function creditHTML(credit) {
-        return credit?'<span class="image-label">'+icon('info')+' Photo: <a href="'+esc(credit.photoUrl)+'" target="_blank" rel="noopener">'+esc(credit.photographer)+'</a> / Pexels</span>':'';
+        if(!credit) return '';
+        var source=credit.source||'Pexels';
+        return '<span class="image-label">'+icon('info')+' Photo: <a href="'+esc(credit.photoUrl)+'" target="_blank" rel="noopener">'+esc(credit.photographer)+'</a> / '+esc(source)+'</span>';
     }
     function photo(src, alt, cls, caption) {
         var eager=/hero-photo|banner-photo/.test(cls||'');
@@ -81,8 +83,8 @@
         return'<div class="photo '+(cls||'')+'"><img src="'+esc(src)+'" '+(eager?'loading="eager" fetchpriority="high"':'loading="lazy"')+' alt="'+esc(credit?credit.alt:alt)+'">'+creditHTML(credit)+(caption||'')+'</div>';
     }
     function creditsScreen() {
-        view.innerHTML='<div class="shell">'+heading('Photo credits', 'All photos are real photos from Pexels, used under the Pexels License.')+btn('← Back', 'credits-back', 'outline')+'<div class="credits-grid">'+window.PHOTO_CREDITS.map(function(c) {
-            return'<article class="card credit-card">'+photo('images/'+c.id+'.jpg', c.alt)+'<h2>'+esc(c.alt)+'</h2><p>'+esc(c.photographer)+'</p><div class="row"><a href="'+esc(c.photoUrl)+'" target="_blank" rel="noopener">Pexels ↗</a><a href="'+esc(c.licenseUrl)+'" target="_blank" rel="noopener">Pexels License ↗</a></div></article>';
+        view.innerHTML='<div class="shell">'+heading('Photo credits', 'Real photographs only. Destination photos are from Pexels. Activity photos are from Wikimedia Commons, each with the photographer and license. Stops without a verified picture are left without one.')+btn('← Back', 'credits-back', 'outline')+'<div class="credits-grid">'+window.PHOTO_CREDITS.map(function(c) {
+            return'<article class="card credit-card">'+photo('images/'+c.id+'.jpg', c.alt)+'<h2>'+esc(c.alt)+'</h2><p>'+esc(c.photographer)+'</p><div class="row"><a href="'+esc(c.photoUrl)+'" target="_blank" rel="noopener">'+(c.source||'Source')+' ↗</a><a href="'+esc(c.licenseUrl)+'" target="_blank" rel="noopener">'+esc(c.license)+' ↗</a></div></article>';
         }).join('')+'</div></div>';
         on('credits-back', function() {
             go(state.creditsFrom||'start');
@@ -563,7 +565,7 @@
             toggle.onclick=function(){var on=toggle.getAttribute('aria-expanded')!=='true';view.querySelectorAll('[data-testid="tile-toggle"]').forEach(function(t){t.setAttribute('aria-expanded','false');t.nextElementSibling.hidden=true;t.closest('.tile').classList.remove('is-open');});set(on);openTile=on?id:null;if(on&&id==='local-info')loadLocal();};
             if(openTile===id&&id==='local-info')loadLocal();
         });
-        view.querySelectorAll('.daynav a').forEach(function(a,i){a.addEventListener('click',function(){var t=view.querySelectorAll('.day .tile-toggle')[i];if(t.getAttribute('aria-expanded')!=='true')t.click();});});
+        view.querySelectorAll('.daynav a').forEach(function(a,i){a.addEventListener('click',function(){var t=view.querySelectorAll('.day .tile-toggle')[i];if(t&&t.getAttribute('aria-expanded')!=='true')t.click();});});
     }
     function recommendations() {
         var a=state.answers, all=Engine.recommend(a).filter(function(d) {
@@ -755,16 +757,36 @@
         return '<h2>Book this</h2><p data-testid="affiliate-disclosure">'+esc(window.GONOW_AFFILIATES.disclosure)+'</p><p>Hotels</p><div class="row">'+partnerLink('booking')+partnerLink('expedia')+'</div><p>Flights</p><div class="row">'+partnerLink('skyscanner')+'</div><small>Choose airports on Skyscanner if your route is unknown. Confirm dates and travelers on every partner site.</small>';
     }
     function itemHTML(it, dayIndex) {
-        var edit=state.edits.items&&state.edits.items[it.id]|| {}, title=edit.title||it.title, note=edit.note||'', time=edit.time||it.time;
+        var edit=state.edits.items&&state.edits.items[it.id]|| {}, time=edit.time||it.time;
+        return'<li data-item-id="'+esc(it.id)+'" id="item-'+esc(it.id)+'"><time>'+esc(time)+'</time>'+itemArticle(it)+'</li>';
+    }
+    // Real photos that show the stop itself (credited in credits.js).
+    // Verified photographs of the stop itself. Generic island art is not reused here.
+    var ITEM_PHOTOS={
+        '2026-11-25-0':'images/activity-hnl.jpg',
+        '2026-11-25-1':'images/activity-kahala-hotel.jpg',
+        '2026-11-26-1':'images/activity-diamond-head.jpg',
+        '2026-11-26-5':'images/activity-kualoa.jpg',
+        '2026-11-26-8':'images/activity-kahala-lagoon.jpg',
+        '2026-11-26-11':'images/activity-halekulani.jpg',
+        '2026-11-27-1':'images/activity-kewalo.jpg',
+        '2026-11-28-1':'images/activity-lanikai.jpg',
+        '2026-11-28-4':'images/activity-makapuu.jpg',
+        '2026-11-28-9':'images/activity-waikiki-sunset.jpg',
+        '2026-11-29-0':'images/activity-hnl.jpg'
+    };
+    function itemArticle(it, opts) {
+        opts=opts||{};
+        var edit=state.edits.items&&state.edits.items[it.id]|| {}, title=edit.title||it.title, note=edit.note||'';
         if(edit.swapped)it=Object.assign( {}, it,  {
             sources:[], bring:[], prep:[], tips:[], price:'', bestTime:'', bookable:false
         });
-        return'<li data-item-id="'+esc(it.id)+'" id="item-'+esc(it.id)+'"><time>'+esc(time)+'</time><article class="item '+esc(it.kind)+'"><div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bookable&&!/\bspa\b/i.test(title||'')?'<p class="partner-search"><small>Find/Book this · Secondary search options</small><br>'+partnerLink('getyourguide',title,true)+' · '+partnerLink('viator',title,true)+'</p>':'')+(it.bring&&it.bring.length?'<details><summary data-testid="disclosure">What to bring ('+it.bring.length+')</summary><small>Ticking here also ticks it on your packing list.</small>'+it.bring.map(function(id) {
+        return'<article class="item '+esc(it.kind)+'">'+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):'')+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bookable&&!/\bspa\b/i.test(title||'')?'<p class="partner-search"><small>Find/Book this · Secondary search options</small><br>'+partnerLink('getyourguide',title,true)+' · '+partnerLink('viator',title,true)+'</p>':'')+(it.bring&&it.bring.length?'<details><summary data-testid="disclosure">What to bring ('+it.bring.length+')</summary><small>Ticking here also ticks it on your packing list.</small>'+it.bring.map(function(id) {
             var p=packingItem(id);
             return p?checkHTML(p, 'bring-item'):'';
         }).join('')+'</details>':'')+(it.prep&&it.prep.length?'<p class="section-label" style="margin-top:15px">Prep reminders</p>'+prep(it.prep):'')+(it.tips?it.tips.map(function(t) {
             return'<a class="badge tip-chip" data-testid="activity-tip" href="'+esc(t.url)+'" target="_blank" rel="noopener noreferrer">'+esc(t.sourceType)+' · '+esc(t.text)+' ↗</a>';
-        }).join(''):'')+'<div class="row">'+(it.bookable?btn('Book this', 'item-book', 'outline', 'data-book="'+esc(it.id)+'"'):'')+btn('Edit', 'item-edit', '', 'data-edit="'+esc(it.id)+'"')+btn('Swap', 'item-swap', '', 'data-swap="'+esc(it.id)+'"')+btn('Remove', 'item-remove', '', 'data-remove="'+esc(it.id)+'"')+'</div><div id="edit-'+esc(it.id)+'"></div></article></li>';
+        }).join(''):'')+(opts.noActions?'':'<div class="row">'+(it.bookable?btn('Book this', 'item-book', 'outline', 'data-book="'+esc(it.id)+'"'):'')+btn('Edit', 'item-edit', '', 'data-edit="'+esc(it.id)+'"')+btn('Swap', 'item-swap', '', 'data-swap="'+esc(it.id)+'"')+btn('Remove', 'item-remove', '', 'data-remove="'+esc(it.id)+'"')+'</div><div id="edit-'+esc(it.id)+'"></div>')+(opts.travel&&it.travelToNext?'<p class="travel-chip db-next" data-testid="travel-chip">'+travelIcon(it.travelToNext)+' <strong>Getting to the next stop:</strong> '+esc(it.travelToNext)+'</p>':'')+'</article>';
     }
     function dayNotes(items, notes) {
         var bookings=items.filter(function(it){return it.bookable;});
@@ -778,7 +800,7 @@
             return '<a href="#item-'+esc(it.id)+'">'+esc(it.title.split(' — ')[0])+'</a>';
         }).join(' · ')+'</p>';
     }
-    function dayHTML(d, i) {
+    function dayModel(d, i) {
         var edits=state.edits, relaxed=edits.relax&&edits.relax[i], rain=edits.rain&&edits.rain[i];
         var items=d.items.concat((edits.added|| {})[i]||[]).filter(function(it) {
             if((edits.removed||[]).indexOf(it.id)>=0)return false;
@@ -803,13 +825,80 @@
                 return Object.assign({}, it, { time:'~7:30 AM', title:'Uber to Kailua (later start, no sunrise hike)', desc:'Same ride as the sunrise plan, just later: approx. $38–55 one way, about 40 min; verify the fare in the app.', prep:[] });
             });
         }
-        return'<section class="card day" id="day-'+i+'" data-testid="plan-day"><div class="day-head"><span class="section-label">'+new Date(d.date+'T12:00:00').toLocaleDateString('en-US',  {
+        return {items:items, relaxed:relaxed, rain:rain};
+    }
+    function dayHeadHTML(d, i, m) {
+        var label=new Date(d.date+'T12:00:00').toLocaleDateString('en-US',  {
             weekday:'short', month:'short', day:'numeric'
-        })+'</span><h2>Day '+(i+1)+' · '+new Date(d.date+'T12:00:00').toLocaleDateString('en-US',  {
-            weekday:'short', month:'short', day:'numeric'
-        })+'</h2><p>'+esc(d.theme)+'</p><span class="badge">'+icon('hotel')+' '+esc(state.plan.stay)+'</span>'+(/no rental car|not needed/i.test(d.car.level+' '+d.car.note)?'<span class="badge">'+icon('who')+' No rental car — rideshare, shuttle and walking</span>':'<span class="badge">'+icon('transport')+' Car: '+esc(d.car.level)+' — '+esc(d.car.note)+'</span>')+'<span class="badge">'+icon('style')+' Typical conditions</span></div>'+dayNotes(items,d.prep)+(relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'')+'<ol class="timeline">'+items.map(function(it, j) {
+        });
+        return '<div class="day-head"><span class="section-label">'+label+'</span><h2>Day '+(i+1)+' · '+label+'</h2><p>'+esc(d.theme)+'</p><span class="badge">'+icon('hotel')+' '+esc(state.plan.stay)+'</span>'+(/no rental car|not needed/i.test(d.car.level+' '+d.car.note)?'<span class="badge">'+icon('who')+' No rental car — rideshare, shuttle and walking</span>':'<span class="badge">'+icon('transport')+' Car: '+esc(d.car.level)+' — '+esc(d.car.note)+'</span>')+'<span class="badge">'+icon('style')+' Typical conditions</span></div>'+dayNotes(m.items,d.prep)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
+    }
+    function dayFooterHTML(d, i, m) {
+        return '<div class="day-footer row">'+(d.relax?'<label><input type="checkbox" data-testid="relax-toggle" data-relax="'+i+'" '+(m.relaxed?'checked':'')+'>Make this day more relaxing</label>':'')+(d.rain?'<label><input type="checkbox" data-testid="rain-toggle" data-rain="'+i+'" '+(m.rain?'checked':'')+'>Rain backup</label>':'')+btn('+ Add your own item', 'day-add', '', 'data-add-day="'+i+'"')+'</div>';
+    }
+    function dayHTML(d, i) {
+        var m=dayModel(d, i), items=m.items;
+        return'<section class="card day" id="day-'+i+'" data-testid="plan-day">'+dayHeadHTML(d, i, m)+'<ol class="timeline">'+items.map(function(it, j) {
             return itemHTML(it, i)+(j<items.length-1?'<li class="travel-chip" data-testid="travel-chip" style="display:block">'+travelIcon(it.travelToNext)+' '+esc(it.travelToNext||'approx. 5–10 min walk / local transfer — confirm route')+'</li>':'');
-        }).join('')+'</ol><div class="day-footer row">'+(d.relax?'<label><input type="checkbox" data-testid="relax-toggle" data-relax="'+i+'" '+(relaxed?'checked':'')+'>Make this day more relaxing</label>':'')+(d.rain?'<label><input type="checkbox" data-testid="rain-toggle" data-rain="'+i+'" '+(rain?'checked':'')+'>Rain backup</label>':'')+btn('+ Add your own item', 'day-add', '', 'data-add-day="'+i+'"')+'</div></section>';
+        }).join('')+'</ol>'+dayFooterHTML(d, i, m)+'</section>';
+    }
+    // The Oahu demo shows each day once, inside the day builder.
+    function mergedPlan() {
+        return !!(state.plan&&state.plan.id==='oahu-demo-2026-11'&&state.tab==='plan'&&window.DayBuilder);
+    }
+    function builderContext() {
+        var p=state.plan;
+        function day(date){var i=p.days.findIndex(function(d){return d.date===date;});return {d:p.days[i],i:i};}
+        function model(date){var x=day(date);return x.d?dayModel(x.d,x.i):{items:[]};}
+        function find(id,date){return model(date).items.find(function(it){return it.id===id;});}
+        return {
+            ages:state.answers.ages, shared:!!state.shared, initial:state.sharedBuilder||null,
+            dayHead:function(date){var x=day(date);return x.d?dayHeadHTML(x.d,x.i,dayModel(x.d,x.i)):'';},
+            dayFooter:function(date){var x=day(date);return x.d?dayFooterHTML(x.d,x.i,dayModel(x.d,x.i)):'';},
+            // Stops the builder does not schedule: your own added items and the relaxed-day swap.
+            dayExtras:function(date){
+                var x=day(date);if(!x.d)return '';
+                var known=x.d.items.map(function(it){return it.id;});
+                var extra=dayModel(x.d,x.i).items.filter(function(it){return known.indexOf(it.id)<0;});
+                return extra.length?'<div class="db-extras"><h3 class="section-label">Your added stops</h3><ol class="timeline">'+extra.map(function(it){return itemHTML(it,x.i);}).join('')+'</ol></div>':'';
+            },
+            hidden:function(date){
+                var x=day(date);if(!x.d)return new Set();
+                var shown=dayModel(x.d,x.i).items.map(function(it){return it.id;});
+                return new Set(x.d.items.map(function(it){return it.id;}).filter(function(id){return shown.indexOf(id)<0;}));
+            },
+            // Relax and a hand-edited clock time change the builder's start, not only the label.
+            // Locked reservations and user locks keep the time the traveler pinned.
+            adjust:function(src, date, item){
+                if(!item||item.locked)return null;
+                var edit=(state.edits.items||{})[src]||{};
+                var raw=day(date).d&&day(date).d.items.find(function(o){return o.id===src;});
+                if(edit.time&&raw&&edit.time!==raw.time){
+                    var edited=parseClock(edit.time);
+                    if(edited!=null)return {preferred:edited};
+                }
+                var idx=day(date).i;
+                if(date==='2026-11-28'&&state.edits.relax&&state.edits.relax[idx]&&src==='2026-11-28-0'){
+                    return {preferred:7*60+30, duration:40};
+                }
+                return null;
+            },
+            titleFor:function(src,date,item){
+                var it=find(src,date);if(!it)return '';
+                var edit=(state.edits.items||{})[src]||{}, original=day(date).d.items.find(function(o){return o.id===src;});
+                if(item&&item.flight)return '';
+                if(edit.title)return edit.title;
+                return original&&it.title!==original.title?it.title.replace(/\p{Extended_Pictographic}/gu,'').trim():'';
+            },
+            detail:function(src,date,item){
+                var chest=item&&/^chest-/.test(item.id);
+                var it=find(src,date)||(chest?p.days.flatMap(function(d){return d.items;}).find(function(o){return o.id===src;}):null);if(!it)return '';
+                var html='<div class="db-item" data-item-id="'+esc(it.id)+'"'+(chest?'':' id="item-'+esc(it.id)+'"')+'>'+itemArticle(it,{photo:true,travel:!chest,noActions:chest})+'</div>';
+                (item&&item.extraSources||[]).forEach(function(id){var ride=find(id,date);if(ride)html+='<div class="db-item db-item-ride" data-item-id="'+esc(ride.id)+'" id="item-'+esc(ride.id)+'"><p class="section-label">Getting there and back</p>'+itemArticle(ride,{travel:true})+'</div>';});
+                return html;
+            },
+            afterRender:function(scope){bindItems(scope);}
+        };
     }
     function planRender(moveFocus) {
         if(!undoPending) {
@@ -834,20 +923,20 @@
             return'<p>'+icon('dates')+' '+esc(item?item.title:'Your activity')+' — confirm and book direct.</p>';
         }).join('')+'</details>':'')+'<div class="tabs" role="tablist" aria-label="Trip view">'+['plan', 'packing', 'tips'].map(function(t) {
             return btn(t[0].toUpperCase()+t.slice(1), 'tab-'+t, '', 'role="tab" id="tabbtn-'+t+'" aria-controls="tab-content" tabindex="'+(state.tab===t?0:-1)+'" aria-selected="'+(state.tab===t)+'"');
-        }).join('')+'</div><div id="tab-content" role="tabpanel" aria-labelledby="tabbtn-'+state.tab+'">'+(state.tab==='plan'?'<nav class="daynav" aria-label="Jump to day">'+p.days.map(function(d, i) {
+        }).join('')+'</div><div id="tab-content" role="tabpanel" aria-labelledby="tabbtn-'+state.tab+'">'+(state.tab==='plan'?(mergedPlan()?'':'<nav class="daynav" aria-label="Jump to day">'+p.days.map(function(d, i) {
             return'<a href="#day-'+i+'" data-testid="day-nav-'+i+'">Day '+(i+1)+' · '+dateLabel(d.date,  {
                 weekday:'short'
             })+' '+dateLabel(d.date,  {
                 day:'numeric'
             })+'</a>';
-        }).join('')+'</nav>'+p.days.map(dayHTML).join(''):state.tab==='packing'?packingHTML():subheading('A little local knowledge', 'Useful notes, with a way back to the source.')+tipsHTML(p.tips)+'<p class="footer-note">Tips shown here link to their sources. Live social/review data comes later; real-data tips will show platform, link and retrieval date.</p>')+'</div><footer class="row" style="padding:25px 0">'+btn('Open packing list', 'open-packing', 'primary')+'<span data-testid="print">'+btn('Print / Save as PDF', 'print-plan', 'outline')+'</span>'+btn('Copy as text', 'copy', 'outline')+'<span data-testid="share">'+btn('Share link', 'share-link', 'outline')+'</span>'+btn('Download calendar', 'download-ics', 'outline')+'</footer><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
+        }).join('')+'</nav>'+p.days.map(dayHTML).join('')):state.tab==='packing'?packingHTML():subheading('A little local knowledge', 'Useful notes, with a way back to the source.')+tipsHTML(p.tips)+'<p class="footer-note">Tips shown here link to their sources. Live social/review data comes later; real-data tips will show platform, link and retrieval date.</p>')+'</div><footer class="row" style="padding:25px 0">'+btn('Open packing list', 'open-packing', 'primary')+'<span data-testid="print">'+btn('Print / Save as PDF', 'print-plan', 'outline')+'</span>'+btn('Copy as text', 'copy', 'outline')+'<span data-testid="share">'+btn('Share link', 'share-link', 'outline')+'</span>'+btn('Download calendar', 'download-ics', 'outline')+'</footer><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
         planTiles();
         expeditionUI();
-        if(p.id==='oahu-demo-2026-11'&&state.tab==='plan'&&window.DayBuilder){
-            var db=document.createElement('section');db.className='db-root';db.dataset.testid='db-root';
-            document.querySelector('#tab-content .daynav').insertAdjacentElement('afterend',db);
+        if(mergedPlan()){
+            var db=document.createElement('section');db.className='db-root';db.dataset.testid='db-root';db.setAttribute('aria-label','Your days');
+            document.querySelector('#tab-content .tile-grid').insertAdjacentElement('beforebegin',db);
             db.hidden=get('treasure-map')?!get('treasure-map').hidden:false;
-            window.DayBuilder.mount(db,{ages:state.answers.ages});
+            window.DayBuilder.mount(db,builderContext());
         }
         on('build-template', function() {
             state.answers.templateOahu=true;
@@ -912,12 +1001,22 @@
         on('share-link', shareTrip);
         on('download-ics', downloadICS);
         on('copy', copyPlan);
-        view.querySelectorAll('[data-pack-id]').forEach(function(el) {
+        bindItems(view);
+        bindPacking();
+        if(moveFocus!==false) {
+            var h=document.getElementById('step-title');
+            if(h)h.focus( {
+                preventScroll:true
+            });
+        }
+    }
+    function bindItems(scope) {
+        scope.querySelectorAll('[data-pack-id]').forEach(function(el) {
             el.onchange=function() {
                 tick(el.dataset.packId, el.checked);
             };
         });
-        view.querySelectorAll('[data-relax],[data-rain]').forEach(function(el) {
+        scope.querySelectorAll('[data-relax],[data-rain]').forEach(function(el) {
             el.onchange=function() {
                 var type=el.hasAttribute('data-relax')?'relax':'rain', idx=el.dataset[type], y=window.scrollY;
                 state.edits[type]=state.edits[type]|| {};
@@ -927,7 +1026,7 @@
                 window.scrollTo(0, y);
             };
         });
-        view.querySelectorAll('[data-remove]').forEach(function(el) {
+        scope.querySelectorAll('[data-remove]').forEach(function(el) {
             el.onclick=function() {
                 var id=el.dataset.remove, y=window.scrollY;
                 state.edits.removed=state.edits.removed||[];
@@ -944,12 +1043,12 @@
                 });
             };
         });
-        view.querySelectorAll('[data-edit]').forEach(function(el) {
+        scope.querySelectorAll('[data-edit]').forEach(function(el) {
             el.onclick=function() {
                 editItem(el.dataset.edit);
             };
         });
-        view.querySelectorAll('[data-swap]').forEach(function(el) {
+        scope.querySelectorAll('[data-swap]').forEach(function(el) {
             el.onclick=function() {
                 var id=el.dataset.swap, it=state.plan.days.flatMap(function(d) {
                     return d.items;
@@ -976,7 +1075,7 @@
                 ]);
             };
         });
-        view.querySelectorAll('[data-book]').forEach(function(el) {
+        scope.querySelectorAll('[data-book]').forEach(function(el) {
             el.onclick=function() {
                 showModal('Book this', 'Booking links are not live in this demo. In the full version this opens the operator’s booking page.', [ {
                     text:'Got it'
@@ -991,18 +1090,11 @@
                 ]);
             };
         });
-        view.querySelectorAll('[data-add-day]').forEach(function(el) {
+        scope.querySelectorAll('[data-add-day]').forEach(function(el) {
             el.onclick=function() {
                 addItem(Number(el.dataset.addDay));
             };
         });
-        bindPacking();
-        if(moveFocus!==false) {
-            var h=document.getElementById('step-title');
-            if(h)h.focus( {
-                preventScroll:true
-            });
-        }
     }
     function editItem(id) {
         var it=state.plan.days.flatMap(function(d) {
@@ -1110,8 +1202,48 @@
             };
         });
     }
-    function copyPlan() {
-        var p=state.plan, text=p.title+'\n'+p.meta+'\n'+p.stay+'\n'+p.banner+'\n'+p.days.map(function(d) {
+    function parseClock(text) {
+        var m=String(text||'').match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
+        return m?(Number(m[1])%12)*60+Number(m[2])+( /pm/i.test(m[3])?720:0):null;
+    }
+    // Oahu days follow the builder's current order and reflowed start/end, including after a reorder or Relax.
+    function builderExport() {
+        var p=state.plan;
+        if(!p||p.id!=='oahu-demo-2026-11'||!window.DayBuilder||!window.DayBuilder.schedule)return null;
+        var sched=window.DayBuilder.schedule();
+        if(!sched||!sched.days)return null;
+        var ctx=builderContext();
+        return sched.days.map(function(day) {
+            var info=p.days.find(function(d){return d.date===day.date;});
+            var index=p.days.indexOf(info);
+            var known={};
+            var rows=day.items.map(function(item) {
+                var src=window.DayBuilder.sourceOf(item, day.date);
+                known[src]=true; known[item.id]=true;
+                var card=dayModel(info, index).items.find(function(it){return it.id===src;});
+                var edit=(state.edits.items||{})[src]||{};
+                var title=(ctx.titleFor&&ctx.titleFor(src, day.date, item))||item.title;
+                var desc=edit.desc||(card&&card.desc)||item.detail||'';
+                if(edit.note)desc+=(desc?'\n':'')+'Note: '+edit.note;
+                var start=item.start, end=item.end, time='';
+                if(item.flight&&sched.flightTime){
+                    start=parseClock(sched.flightTime); end=start==null?null:start+60; time=sched.flightTime;
+                } else if(item.start!=null&&item.end!=null) {
+                    time=window.DayBuilder.range(item.start, item.end);
+                } else time=item.textTime||'';
+                return {id:item.id, title:title, desc:desc, time:time, start:start, end:end, kind:item.kind||(card&&card.kind), location:(card&&(card.location||card.address))||''};
+            });
+            dayModel(info, index).items.forEach(function(it) {
+                if(known[it.id])return;
+                var edit=(state.edits.items||{})[it.id]||{};
+                var time=edit.time||it.time, start=parseClock(time);
+                rows.push({id:it.id, title:edit.title||it.title, desc:(edit.desc||it.desc||'')+(edit.note?'\nNote: '+edit.note:''), time:time, start:start, end:start==null?null:start+60, kind:it.kind, location:it.location||it.address||''});
+            });
+            return {date:day.date, theme:info.theme, items:info.items, rows:rows};
+        });
+    }
+    function staticPlanBody(p) {
+        return p.days.map(function(d) {
             return dateLabel(d.date)+' — '+d.theme+'\n'+d.items.filter(function(it) {
                 return(state.edits.removed||[]).indexOf(it.id)<0;
             }).map(function(it) {
@@ -1119,6 +1251,20 @@
                 return(e.time||it.time)+' '+(e.title||it.title)+'\n'+(e.desc||it.desc)+(e.note?'\nNote: '+e.note:'');
             }).join('\n');
         }).join('\n\n');
+    }
+    function planText() {
+        var p=state.plan;
+        if(!p)return '';
+        var built=builderExport();
+        var body=built?built.map(function(day) {
+            return dateLabel(day.date)+' — '+day.theme+'\n'+day.rows.map(function(row) {
+                return (row.time?row.time+' ':'')+row.title+(row.desc?'\n'+row.desc:'');
+            }).join('\n');
+        }).join('\n\n'):staticPlanBody(p);
+        return p.title+'\n'+p.meta+'\n'+p.stay+'\n'+p.banner+'\n'+body;
+    }
+    function copyPlan() {
+        var text=planText();
         function fallback() {
             var ta=document.createElement('textarea');
             ta.value=text;
@@ -1182,7 +1328,21 @@
             if(original&&(original.location||original.address||original.kind==='stay'))lines.push('LOCATION:'+icsEscape(original.location||original.address||p.stay));
             lines.push('END:VEVENT');
         }
-        p.days.forEach(function(day,i){
+        function stampOn(date, minutes){var d=new Date(date+'T00:00:00Z');d.setUTCMinutes(minutes);return d.toISOString().slice(0,19).replace(/[-:]/g,'');}
+        var built=builderExport();
+        if(built){
+            built.forEach(function(day,i){
+                var timed=day.rows.filter(function(row){return row.start!=null;});
+                if(!timed.length){
+                    if(day.rows.length){var next=new Date(day.date+'T12:00:00Z');next.setUTCDate(next.getUTCDate()+1);event(day,'day-'+i,day.theme,day.rows.map(function(row){return row.title+'\n'+row.desc;}).join('\n'),day.date.replace(/-/g,''),next.toISOString().slice(0,10).replace(/-/g,''),true);}
+                    return;
+                }
+                timed.forEach(function(row){
+                    var end=row.end!=null&&row.end>row.start?row.end:row.start+60;
+                    event(day,row.id,row.title,row.desc,stampOn(day.date,row.start),stampOn(day.date,end),false);
+                });
+            });
+        } else p.days.forEach(function(day,i){
             var items=visibleItems(day,i),timed=0;
             items.forEach(function(it){var m=it.time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);if(!m)return;
                 var h=Number(m[1])%12+(/pm/i.test(m[3])?12:0),minutes=h*60+Number(m[2]);
@@ -1201,9 +1361,10 @@
         if(!state.plan)return;
         printSnapshot={tab:state.tab,details:[]};
         if(state.tab!=='plan'){state.tab='plan';planRender(false);}
+        if(mergedPlan())window.DayBuilder.print(true);
         view.querySelectorAll('details').forEach(function(d){printSnapshot.details.push([d,d.open]);d.open=true;});
     });
-    window.addEventListener('afterprint',function(){if(!printSnapshot)return;printSnapshot.details.forEach(function(pair){pair[0].open=pair[1];});if(state.tab!==printSnapshot.tab){state.tab=printSnapshot.tab;planRender(false);}printSnapshot=null;});
+    window.addEventListener('afterprint',function(){if(window.DayBuilder&&window.DayBuilder.print)window.DayBuilder.print(false);if(!printSnapshot)return;printSnapshot.details.forEach(function(pair){pair[0].open=pair[1];});if(state.tab!==printSnapshot.tab){state.tab=printSnapshot.tab;planRender(false);}printSnapshot=null;});
     function downloadICS(){
         var url=URL.createObjectURL(new Blob([buildICS()],{type:'text/calendar;charset=utf-8'})),a=document.createElement('a');
         a.href=url;a.download='gonow-'+Engine.matchDestination(state.answers.destination).id+'-'+state.plan.days[0].date+'.ics';document.body.append(a);a.click();a.remove();setTimeout(function(){URL.revokeObjectURL(url);},1000);earn('Downloaded a calendar');
@@ -1211,6 +1372,7 @@
     function encodeTrip(data){var bytes=new TextEncoder().encode(JSON.stringify(data)),binary='';bytes.forEach(function(b){binary+=String.fromCharCode(b);});return 'j.'+btoa(binary).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');}
     function shareTrip(){
         var data={answers:state.answers,edits:state.edits,id:state.plan.id};
+        if(state.plan.id==='oahu-demo-2026-11'&&window.DayBuilder){var builder=window.DayBuilder.exportState();if(builder)data.db=builder;}
         var url=location.href.split('#')[0]+'#trip='+encodeTrip(data);
         showModal('Share & export', 'Anyone with this link can open a copy. Packing ticks stay private.<label>Trip link<input readonly data-testid="share-url" value="'+esc(url)+'"></label>',[{text:'Close'}]);
         var field=get('share-url');field.onclick=function(){field.select();};field.select();
@@ -1230,12 +1392,13 @@
             Object.values(edits.added||{}).forEach(function(items){if(!Array.isArray(items)||!items.every(function(it){return it&&typeof it.id==='string'&&typeof it.title==='string'&&typeof it.time==='string';}))throw new Error('added');});
             var a=Object.assign({},defaults,data.answers);
             if(!Array.isArray(a.ages)||!Array.isArray(a.styles)||!Array.isArray(a.food)||!(a.length>=2&&a.length<=30)||(!a.flexible&&(!/^\d{4}-\d{2}-\d{2}$/.test(a.start)||!/^\d{4}-\d{2}-\d{2}$/.test(a.end)||!(new Date(a.end)>=new Date(a.start))||(new Date(a.end)-new Date(a.start)>29*864e5))))throw new Error('answers');
-            state.shared=true;state.sharedEdits=data.edits;state.answers=a;generate(true);
+            if(data.db!==undefined&&(!data.db||typeof data.db!=='object'||Array.isArray(data.db)))throw new Error('builder');
+            state.shared=true;state.sharedEdits=data.edits;state.sharedBuilder=data.db||null;state.answers=a;generate(true);
         }catch(e){state.shared=true;state.answers=Object.assign({},defaults);go('start');view.insertAdjacentHTML('afterbegin','<p class="banner" role="status">This trip link couldn’t be opened. Start a new adventure below.</p>');}
     }
     function expeditionUI(){
         var shell=view.querySelector('.shell');
-        if(state.shared){shell.insertAdjacentHTML('afterbegin','<aside class="banner" data-testid="shared-banner">Shared trip — view only copy; changes stay on this device '+btn('Make it mine','adopt-shared','outline')+'</aside>');on('adopt-shared',function(){state.shared=false;save();persistEdits();write(KEY+'lastTrip',{answers:state.answers});history.replaceState({screen:'plan'},'','#plan');planRender(false);});}
+        if(state.shared){shell.insertAdjacentHTML('afterbegin','<aside class="banner" data-testid="shared-banner">Shared trip — view only copy; changes stay on this device '+btn('Make it mine','adopt-shared','outline')+'</aside>');on('adopt-shared',function(){if(window.DayBuilder&&window.DayBuilder.persist)window.DayBuilder.persist();state.shared=false;state.sharedBuilder=null;save();persistEdits();write(KEY+'lastTrip',{answers:state.answers});history.replaceState({screen:'plan'},'','#plan');planRender(false);});}
         shell.insertAdjacentHTML('beforeend','<p class="stamped-footer '+(state.shared?'shared-stamp':'')+'" data-testid="stamped-footer">Stamped by GoNow · maogy127.github.io/ai-travel-planner</p>');
         var toolbar=get('print-plan').closest('footer');toolbar.setAttribute('aria-label','Share & export');toolbar.insertAdjacentHTML('afterbegin','<strong>Share & export</strong>');
         if(state.tab!=='plan')return;
@@ -1243,9 +1406,9 @@
         var map= pref==='map';
         var content=document.getElementById('tab-content');
         content.insertAdjacentHTML('afterbegin','<div class="view-switch row" role="group" aria-label="Itinerary view">'+btn('List','view-list','outline','aria-pressed="'+!map+'"')+btn('Treasure map','view-map','outline','aria-pressed="'+map+'"')+'</div><section class="treasure-map" data-testid="treasure-map" '+(!map?'hidden':'')+'><h2>Your treasure route</h2><p>Illustrative route, not to scale</p><svg viewBox="0 0 600 '+(state.plan.days.length*95+40)+'" role="img" aria-label="Dotted illustrative route through each day">'+state.plan.days.map(function(d,i){var x=i%2?430:170,y=55+i*95;return (i?'<path d="M'+(i%2?170:430)+' '+(y-95)+' Q300 '+(y-45)+' '+x+' '+y+'" fill="none" stroke="currentColor" stroke-dasharray="3 8"/>':'')+d.items.map(function(it,j){return '<circle cx="'+(x-45+j%9*11)+'" cy="'+(y+30+Math.floor(j/9)*7)+'" r="2" fill="currentColor"/>';}).join('')+'<circle cx="'+x+'" cy="'+y+'" r="22" fill="#f8eed7" stroke="currentColor"/><text x="'+x+'" y="'+(y+6)+'" text-anchor="middle">'+(i+1)+'</text>'+(i===state.plan.days.length-1?'<path d="M'+(x+32)+' '+(y-12)+'l24 24m0-24l-24 24" stroke="#963a29" stroke-width="3"/>':'');}).join('')+'</svg><ol>'+state.plan.days.map(function(d,i){return '<li>'+btn('Day '+(i+1)+' · '+d.date+' · '+esc(d.theme),'map-day','outline','data-map-day="'+i+'"')+'</li>';}).join('')+'</ol></section>');
-        function setMap(value,persist){map=value;get('treasure-map').hidden=!value;content.querySelector('.tile-grid').hidden=value;content.querySelector('.daynav').hidden=value;var builder=content.querySelector('.db-root');if(builder)builder.hidden=value;get('view-list').setAttribute('aria-pressed',String(!value));get('view-map').setAttribute('aria-pressed',String(value));if(persist){try{localStorage.setItem(KEY+'view',value?'map':'list');}catch(e){}if(value)earn('Viewed the treasure map');}}
+        function setMap(value,persist){map=value;get('treasure-map').hidden=!value;content.querySelector('.tile-grid').hidden=value;if(content.querySelector('.daynav'))content.querySelector('.daynav').hidden=value;var builder=content.querySelector('.db-root');if(builder)builder.hidden=value;get('view-list').setAttribute('aria-pressed',String(!value));get('view-map').setAttribute('aria-pressed',String(value));if(persist){try{localStorage.setItem(KEY+'view',value?'map':'list');}catch(e){}if(value)earn('Viewed the treasure map');}}
         setMap(map,false);on('view-map',function(){setMap(true,true);});on('view-list',function(){setMap(false,true);});
-        view.querySelectorAll('[data-map-day]').forEach(function(b){b.onclick=function(){setMap(false,true);var t=document.querySelector('#day-'+b.dataset.mapDay+' .tile-toggle');if(t.getAttribute('aria-expanded')!=='true')t.click();t.scrollIntoView({block:'start',behavior:'auto'});t.focus({preventScroll:true});};});
+        view.querySelectorAll('[data-map-day]').forEach(function(b){b.onclick=function(){setMap(false,true);if(mergedPlan()&&window.DayBuilder.selectedDate){var date=state.plan.days[b.dataset.mapDay].date;window.DayBuilder.selectDay(date,false);var chip=document.querySelector('[data-testid="db-day-'+date+'"]'),card=document.querySelector('.db-daycard');(card||chip).scrollIntoView({block:'start',behavior:'auto'});chip.focus({preventScroll:true});return;}var t=document.querySelector('#day-'+b.dataset.mapDay+' .tile-toggle');if(t.getAttribute('aria-expanded')!=='true')t.click();t.scrollIntoView({block:'start',behavior:'auto'});t.focus({preventScroll:true});};});
     }
     function render() {
         if(state.screen==='credits')creditsScreen();
@@ -1287,7 +1450,7 @@
         go('start');
     };
     window.__gonow= {
-        state:state, go:go, buildICS:buildICS
+        state:state, go:go, buildICS:buildICS, planText:planText
     };
     window.addEventListener('hashchange',function(){if(location.hash.indexOf('#trip=')===0)restoreShared();});
     updateRank();

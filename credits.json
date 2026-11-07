@@ -106,5 +106,95 @@
   "license": "Pexels License (free to use)",
   "licenseUrl": "https://www.pexels.com/license/",
   "alt": "New York City skyline seen from the harbor"
+ },
+ {
+  "id": "activity-diamond-head",
+  "photographer": "Farragutful",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:2022%20Diamond%20Head%20Crater%2001.jpg",
+  "license": "CC BY-SA 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+  "alt": "Interior of Diamond Head crater, Honolulu"
+ },
+ {
+  "id": "activity-kualoa",
+  "photographer": "Famartin",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:2021-10-06%2010%2027%2000%20The%20Kualoa%20Ranch%20main%20entrance%20on%20Oahu%2C%20Hawaii.jpg",
+  "license": "CC BY-SA 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+  "alt": "Main entrance of Kualoa Ranch on Oahu"
+ },
+ {
+  "id": "activity-halekulani",
+  "photographer": "ErgoSum88",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:Halekulani04.JPG",
+  "license": "Public domain",
+  "licenseUrl": "https://commons.wikimedia.org/wiki/File:Halekulani04.JPG",
+  "alt": "View of Diamond Head, the pool, and the beach at Halekulani hotel in Waikiki. This photograph does not show the La Mer dining room."
+ },
+ {
+  "id": "activity-kewalo",
+  "photographer": "Daniel Ramirez",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:Ships%20lined%20up%20at%20Kewalo%20Basin%20(5629994981).jpg",
+  "license": "CC BY 2.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/2.0",
+  "alt": "Boats lined up at Kewalo Basin harbor, Honolulu"
+ },
+ {
+  "id": "activity-kahala-hotel",
+  "photographer": "Studio Sarah Lou",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:Kahala%20Hotel%20%26%20Resort.jpg",
+  "license": "CC BY 2.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/2.0",
+  "alt": "The Kahala Hotel and Resort, Honolulu"
+ },
+ {
+  "id": "activity-kahala-lagoon",
+  "photographer": "Images Alight",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:Kahala%20Hotel%20Lagoon.jpg",
+  "license": "CC BY 2.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/2.0",
+  "alt": "Private lagoon at the Kahala Hotel and Resort, Oahu"
+ },
+ {
+  "id": "activity-lanikai",
+  "photographer": "MahaloMichael",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:KH6ML%20Mokulua%20Sunrise%20from%20Lanikai%20Pillbox.jpg",
+  "license": "CC BY-SA 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+  "alt": "Sunrise over the Mokulua Islands from the Lanikai Pillbox trail, Oahu"
+ },
+ {
+  "id": "activity-makapuu",
+  "photographer": "Ewen Roberts",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:Makapuu%20Point%20Light%20-%20Oahu.jpg",
+  "license": "CC BY 2.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/2.0",
+  "alt": "Makapuu Point Lighthouse on Oahu"
+ },
+ {
+  "id": "activity-waikiki-sunset",
+  "photographer": "shanstap",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:Diamond%20Head%20Crater%20from%20Waikiki%20Beach.jpg",
+  "license": "CC BY-SA 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by-sa/4.0",
+  "alt": "Diamond Head crater seen from Waikiki Beach at sunset"
+ },
+ {
+  "id": "activity-hnl",
+  "photographer": "Coolcaesar",
+  "source": "Wikimedia Commons",
+  "photoUrl": "https://commons.wikimedia.org/wiki/File:Aerial%20Photo%20of%20Daniel%20K.%20Inouye%20International%20Airport.jpg",
+  "license": "CC BY 4.0",
+  "licenseUrl": "https://creativecommons.org/licenses/by/4.0",
+  "alt": "Aerial view of Daniel K. Inouye International Airport, Honolulu"
  }
 ]

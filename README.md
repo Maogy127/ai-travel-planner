@@ -2,9 +2,9 @@
 
 Open `index.html` directly, or serve this directory with any static HTTP server. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Google Fonts supplies Playfair Display and DM Sans when online; system fallbacks keep the site usable offline. Use `?fast=1` to skip the simulated planning delay.
 
-Files: `index.html`, `css/styles.css`, `js/catalog.js`, `js/oahu.js`, `js/engine.js`, `js/ai.js`, `js/credits.js`, `js/localinfo.js`, `js/affiliates.js`, `js/app.js`, `credits.json` and `images/*.jpg`.
+Files: `index.html`, `css/styles.css`, `js/catalog.js`, `js/oahu.js`, `js/daybuilder.js`, `js/engine.js`, `js/ai.js`, `js/credits.js`, `js/localinfo.js`, `js/affiliates.js`, `js/app.js`, `credits.json` and `images/*.jpg`.
 
-The 12 JPGs are real Pexels photos. `js/credits.js` supplies descriptions and photographer/license links for image overlays and the Photo credits screen; `credits.json` retains the same data.
+Destination JPGs are real Pexels photos. Activity photos are separate real photographs from Wikimedia Commons, credited with the photographer and license; a stop is left without a picture when no verified photo of that place was available. The island banner is not reused as a photo of a specific venue. `js/credits.js` supplies descriptions and photographer/license links for image overlays and the Photo credits screen; `credits.json` retains the same data.
 
 Oahu uses the supplied Nov 1, 2026 research, with linked sources and the specified 18/19-year-old itinerary. A notice explains when the fixed Oahu demo differs from the answers and offers a personalized template. Other destinations use labeled template guidance and rough climate/cost estimates. There is no live booking. Sharing uses a self-contained URL hash; no server receives the plan. The API integration boundary is documented in `js/ai.js`.
 
@@ -31,7 +31,7 @@ Run `python3 tests/test_full.py` from the project root. Regression screenshots u
 
 ## Share, export and explorer tools
 
-The Share & export toolbar prints every day and detail with source URLs and a GoNow stamp, downloads an RFC 5545 calendar, or copies a trip link. `window.__gonow.buildICS()` returns the calendar string. Oahu events use Pacific/Honolulu (fixed HST); template events use floating local times or all-day summaries. Where no end time is supplied, timed events end at the next stop or one hour later. Calendar times remain suggestions to verify against bookings.
+The Share & export toolbar prints every day and detail with source URLs and a GoNow stamp, downloads an RFC 5545 calendar, or copies a trip link. `window.__gonow.buildICS()` returns the calendar string and `window.__gonow.planText()` returns the copied text. On the Oahu demo, calendar events and the copied text use the day builder's current order and reflowed start and end, including after a reorder and after Relax changes 11/28. Each printed Oahu day starts on a new page with its details open and its move controls hidden. Template events use floating local times or all-day summaries, and end at the next stop or one hour later when no end time is supplied. Calendar times remain suggestions to verify against bookings.
 
 Links contain UTF-8 JSON encoded as base64url (`#trip=j.…`): answers, plan ID and itinerary edits, without packing ticks. Shared copies regenerate locally and keep the recipient’s saved trip intact until **Make it mine**. Links are readable by anyone who has them, including any notes and answers you include. Invalid links show a friendly start screen.
 

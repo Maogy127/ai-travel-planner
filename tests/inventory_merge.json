@@ -1,0 +1,97 @@
+{
+ "2026-11-25": {
+  "old": {
+   "texts": 25,
+   "hrefs": 10,
+   "packs": 2,
+   "imgs": 0
+  },
+  "new": {
+   "texts": 34,
+   "hrefs": 12,
+   "packs": 2,
+   "imgs": 2
+  },
+  "day cards": 1,
+  "missing_text": [],
+  "missing_href": [],
+  "missing_pack": [],
+  "missing_img": []
+ },
+ "2026-11-26": {
+  "old": {
+   "texts": 78,
+   "hrefs": 21,
+   "packs": 16,
+   "imgs": 0
+  },
+  "new": {
+   "texts": 98,
+   "hrefs": 25,
+   "packs": 16,
+   "imgs": 4
+  },
+  "day cards": 1,
+  "missing_text": [],
+  "missing_href": [],
+  "missing_pack": [],
+  "missing_img": []
+ },
+ "2026-11-27": {
+  "old": {
+   "texts": 61,
+   "hrefs": 16,
+   "packs": 13,
+   "imgs": 0
+  },
+  "new": {
+   "texts": 74,
+   "hrefs": 17,
+   "packs": 13,
+   "imgs": 1
+  },
+  "day cards": 1,
+  "missing_text": [],
+  "missing_href": [],
+  "missing_pack": [],
+  "missing_img": []
+ },
+ "2026-11-28": {
+  "old": {
+   "texts": 68,
+   "hrefs": 15,
+   "packs": 12,
+   "imgs": 0
+  },
+  "new": {
+   "texts": 86,
+   "hrefs": 18,
+   "packs": 12,
+   "imgs": 3
+  },
+  "day cards": 1,
+  "missing_text": [],
+  "missing_href": [],
+  "missing_pack": [],
+  "missing_img": []
+ },
+ "2026-11-29": {
+  "old": {
+   "texts": 12,
+   "hrefs": 7,
+   "packs": 0,
+   "imgs": 0
+  },
+  "new": {
+   "texts": 18,
+   "hrefs": 8,
+   "packs": 0,
+   "imgs": 1
+  },
+  "day cards": 1,
+  "missing_text": [],
+  "missing_href": [],
+  "missing_pack": [],
+  "missing_img": []
+ }
+}

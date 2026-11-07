@@ -69,7 +69,7 @@ function duration(item) {
 }
 function convert(item) {
     return {
-        id: item.id, title: clean(item.title), place: place(item.title), preferred: parse(item.time),
+        id: item.id, sourceId: item.id, title: clean(item.title), place: place(item.title), preferred: parse(item.time),
         duration: duration(item), walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
@@ -108,6 +108,8 @@ function buildSuggested(date) {
         Object.assign(items[12], {id: 'lamer', place: WAIKIKI, locked: true, dressy: true});
         // Dinner travel becomes a connector; the hotel return remains on the day card.
         items[12].inboundRide = {...items[11], duration: 20};
+        // The absorbed rides keep their card details inside the dinner box.
+        items[12].extraSources = [items[11].sourceId, items[13].sourceId];
         items.splice(13, 1);
         items.splice(11, 1);
         items[items.findIndex(i => i.id === 'lamer')].prepBlock = items.find(i => i.kind === 'prep');
@@ -126,7 +128,8 @@ function buildSuggested(date) {
         Object.assign(prep, {id: 'prep-senia', kind: 'prep', place: HOTEL, duration: 60});
         Object.assign(dinner, {id: 'senia', place: 'Chinatown', locked: true, dressy: true, short: 'Senia', venue: 'Senia',
             duration: 120, prepBlock: prep,
-            inboundRide: {...toDinner, place: HOTEL, duration: 35, label: 'Uber ~30–40 min, est. $20–30'}});
+            inboundRide: {...toDinner, place: HOTEL, duration: 35, label: 'Uber ~30–40 min, est. $20–30'},
+            extraSources: [toDinner.sourceId]});
         Object.assign(home, {id: 'uber-home', place: 'Chinatown', to: HOTEL, duration: 35, pickup: true});
         items = [ride, dive, lunch, shop, toHotel, dinner, home];
     }
@@ -202,7 +205,7 @@ function reflow(day, ctx = {}) {
         if (item.pickup && previous && (previous.to || previous.place) === item.place) travel = {minutes: 0, label: ''};
         const earliest = previous ? previous.end + travel.minutes + (item.walkBack ? 10 : 0) : 0;
         item.start = item.locked && item.preferred !== null ? item.preferred : Math.max(earliest, item.preferred ?? (previous ? 0 : 540));
-        if (item.flex) {
+        if (item.flex && !item.locked) {
             // Work backwards from the next anchor, reserving every intervening
             // activity, ride, automatic rinse and the dressy arrival buffer.
             const anchor = raw.findIndex((next, at) => at > index && next.locked && !next.textTime);
@@ -273,6 +276,8 @@ const icons = {
     up: svg('<path d="M5 12l7-7 7 7M12 5v14"/>'),
     down: svg('<path d="M5 12l7 7 7-7M12 5v14"/>'),
     remove: svg('<path d="M3 11h18v10H3ZM3 11V8a5 5 0 015-5h8a5 5 0 015 5v3M10 10h4v5h-4Z"/>'),
+    lock: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 018 0v4M12 15v2"/>'),
+    unlock: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 017.6-1.7M12 15v2"/>'),
     add: '+ Add', delete: svg('<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>')
 };
 const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'To chest', add: 'Add to day', delete: 'Delete booking'};
@@ -281,22 +286,125 @@ function button(action, title) {
     return `<button type="button" data-testid="db-${action}" data-db-action="${action}" aria-label="${label}" title="${label}">${icons[action]}</button>`;
 }
 
+// Page-session state that survives planRender remounts (selected day, open boxes, shared copy).
+const session = {date: '2026-11-26', open: new Set(), shared: null, sharedKey: null, active: null};
+const reducedMotion = () => (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) ||
+    document.documentElement.classList.contains('reduce-motion');
+const sourceCache = {};
+// Saved days from before sourceId existed map renamed ids back to their card item.
+function sourceOf(item, date) {
+    if (item.sourceId) return item.sourceId;
+    if (!sourceCache[date]) sourceCache[date] = new Map(buildSuggested(date).items.map(i => [i.id, i.sourceId]));
+    return sourceCache[date].get(item.id) || item.id;
+}
+const lockable = item => !item.textTime && item.kind !== 'prep';
+const uidFor = (date, id) => (date + '-' + id).replace(/[^\w-]/g, '_');
+// Locking pins the shown start and end; unlocking restores the item's own preference.
+function toggleLock(item, shown) {
+    if (item.locked) {
+        item.locked = false;
+        if (item.userLocked) {
+            item.preferred = item.basePreferred ?? null;
+            if (item.baseDuration != null) item.duration = item.baseDuration;
+        }
+        delete item.userLocked; delete item.basePreferred; delete item.baseDuration;
+        return false;
+    }
+    item.basePreferred = item.preferred ?? null;
+    item.baseDuration = item.duration;
+    if (shown && shown.start != null) {
+        item.preferred = shown.start;
+        item.duration = shown.end - shown.start;
+    }
+    item.locked = true;
+    item.userLocked = true;
+    return true;
+}
+// Compact share form: only days that differ from the suggested day.
+function exportDays(days, flightTime) {
+    const out = {};
+    const tray = trayItems();
+    Object.entries(days || {}).forEach(([date, day]) => {
+        const base = buildSuggested(date).items;
+        const pool = base.concat(tray);
+        const items = day.items.map(item => {
+            if (item.custom) return {c: 1, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, l: item.locked ? 1 : 0};
+            const original = pool.find(candidate => candidate.id === item.id);
+            if (original && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
+            const entry = {id: item.id, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
+            if (item.userLocked) Object.assign(entry, {u: 1, bp: item.basePreferred, bd: item.baseDuration});
+            return entry;
+        });
+        const trayIds = day.tray.map(item => item.id);
+        if (JSON.stringify(items) !== JSON.stringify(base.map(item => item.id)) || JSON.stringify(trayIds) !== JSON.stringify(tray.map(item => item.id))) {
+            out[date] = {i: items, t: trayIds};
+        }
+    });
+    return Object.keys(out).length || flightTime ? {f: flightTime || '', d: out} : null;
+}
+function importDays(data) {
+    const days = {};
+    const minutes = value => (value === null || (Number.isFinite(value) && value >= 0 && value <= 1440)) ? value : undefined;
+    if (!data || typeof data !== 'object') return {days, flightTime: ''};
+    const dates = new Set(window.OAHU_SAMPLE.days.map(day => day.date));
+    Object.entries(data.d && typeof data.d === 'object' ? data.d : {}).forEach(([date, day]) => {
+        if (!dates.has(date) || !day || !Array.isArray(day.i) || !Array.isArray(day.t)) return;
+        const tray = trayItems();
+        const pool = buildSuggested(date).items.concat(tray);
+        const find = id => { const found = pool.find(item => item.id === id); return found ? clone(found) : null; };
+        const items = day.i.map(entry => {
+            if (typeof entry === 'string') return find(entry);
+            if (!entry || typeof entry !== 'object' || typeof entry.id !== 'string') return null;
+            if (entry.c) {
+                const start = minutes(entry.p), length = minutes(entry.d);
+                if (typeof entry.t !== 'string' || !entry.t.trim() || start == null || !length) return null;
+                return {id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
+                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, custom: true};
+            }
+            const item = find(entry.id);
+            if (!item) return null;
+            item.locked = !!entry.l;
+            if (minutes(entry.p) !== undefined) item.preferred = entry.p;
+            if (minutes(entry.d)) item.duration = entry.d;
+            if (entry.u && item.locked) Object.assign(item, {userLocked: true, basePreferred: minutes(entry.bp) ?? null, baseDuration: minutes(entry.bd) ?? item.duration});
+            return item;
+        }).filter(Boolean);
+        days[date] = {date, items, tray: day.t.map(id => tray.find(item => item.id === id)).filter(Boolean)};
+    });
+    return {days, flightTime: typeof data.f === 'string' && parse(data.f) !== null ? data.f : ''};
+}
+
 function mount(root, ctx = {}) {
     let saved = {};
-    try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+    if (ctx.shared) {
+        const key = JSON.stringify(ctx.initial || null);
+        if (!session.shared || session.sharedKey !== key) {
+            session.shared = importDays(ctx.initial);
+            session.sharedKey = key;
+        }
+        saved = session.shared;
+    } else {
+        session.shared = null;
+        session.sharedKey = null;
+        try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
+    }
     const days = saved.days || {};
+    if (ctx.shared) saved.days = days;
     let flightTime = saved.flightTime || '';
-    root.innerHTML = '<div class="db-content"></div><div class="db-sr" role="status" aria-live="polite" data-testid="db-live"></div>';
+    root.innerHTML = '<div class="db-content"></div><div class="db-print-all"></div><div class="db-sr" role="status" aria-live="polite" data-testid="db-live"></div>';
     const content = root.querySelector('.db-content');
+    const printAll = root.querySelector('.db-print-all');
     const live = root.querySelector('[data-testid=db-live]');
     let previousConflicts = new Map();
     let addedConflicts = [];
     let formStatus = '';
-    let date = '2026-11-26';
+    let date = session.date;
     let expanded = false;
     let bookingOpen = false;
     let picked = null;
     let drag = null;
+    let lastResult = {items: []};
+    let suppressClick = false;
 
     function current() {
         if (!days[date]) days[date] = {...buildSuggested(date), tray: trayItems()};
@@ -307,85 +415,186 @@ function mount(root, ctx = {}) {
         addedConflicts = [];
     }
     function save() {
+        if (ctx.shared) { saved.flightTime = flightTime; return; }
         try { localStorage.setItem(KEY, JSON.stringify({days, flightTime})); } catch (e) {}
+    }
+    function hiddenSet(on) {
+        return ctx.hidden ? ctx.hidden(on) : new Set();
+    }
+    function visibleItems(day, on) {
+        const hidden = hiddenSet(on);
+        return day.items.filter(item => !hidden.has(sourceOf(item, on)));
+    }
+    // Mode changes (Relax, an edited clock time) adjust a copy used for reflow.
+    // Saved order, locks and custom items stay as the traveler left them.
+    function adjustedItems(items, on) {
+        if (!ctx.adjust) return items;
+        return items.map(item => {
+            const change = ctx.adjust(sourceOf(item, on), on, item);
+            return change ? {...item, ...change} : item;
+        });
+    }
+    function dayResult(stored, on) {
+        return reflow({...stored, items: adjustedItems(visibleItems(stored, on), on)}, {...ctx, flightTime});
+    }
+    function schedule() {
+        return {
+            flightTime,
+            days: window.OAHU_SAMPLE.days.map(day => {
+                const stored = days[day.date] || buildSuggested(day.date);
+                return {date: day.date, items: dayResult(stored, day.date).items};
+            })
+        };
     }
     function listFor(zone) {
         return zone === 'tray' ? current().tray : current().items;
     }
     function positionMessage(id, zone) {
-        const list = listFor(zone);
+        const list = zone === 'tray' ? current().tray : visibleItems(current(), date);
         const index = list.findIndex(i => i.id === id);
         return `${list[index].title}, position ${index + 1} of ${list.length}.`;
     }
-    function pair(i, tray) {
-        const movable = !i.locked && i.kind !== 'prep';
-        const classes = ['db-pair', i.notes && 'db-conflict', i.locked && 'db-locked',
-            i.kind === 'prep' && 'db-prep', i.flex && 'db-free',
+    function lockButton(i, title, uid) {
+        const label = i.locked ? 'Unlock time' : 'Lock time';
+        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${label}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}</button>`;
+    }
+    function pair(i, tray, options = {}) {
+        const on = options.date || date;
+        const print = !!options.print;
+        const uid = uidFor(on, i.id);
+        const src = tray ? null : sourceOf(i, on);
+        const detail = !tray && ctx.detail ? ctx.detail(src, on, i) : '';
+        const open = !!detail && (print || session.open.has(on + '|' + i.id));
+        const title = (!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
+        const movable = !i.locked && i.kind !== 'prep' && !print;
+        const canLock = !tray && !print && lockable(i);
+        const classes = ['db-pair', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
+            i.kind === 'prep' && 'db-prep', i.flex && 'db-free', detail && 'db-expandable', open && 'is-open',
             picked?.id === i.id && picked.zone === (tray ? 'tray' : 'day') && 'db-picked'].filter(Boolean).join(' ');
-        const controls = movable ? `<div class="db-controls">${button('handle', i.title)}${tray
-            ? button('add', i.title)
-            : button('up', i.title) + button('down', i.title) + button('remove', i.title)}</div>` : '';
+        const moves = movable ? button('handle', title) + (tray ? button('add', title) : button('up', title) + button('down', title) + button('remove', title)) : '';
+        const lockChip = i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : '';
+        const controls = moves || canLock ? `<div class="db-controls">${canLock ? lockChip : ''}${moves}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
         const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
-        const noteId = 'db-note-' + i.id;
+        const noteId = 'db-note-' + uid;
         const described = i.notes?.length ? ` aria-describedby="${esc(noteId)}"` : '';
-        return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${described}${i.locked ? ' tabindex="0" aria-label="' + esc(i.title + '. Locked booking — times are fixed') + '"' : ''}>
+        const placeText = `${esc(i.place)}${tray || i.estimate ? ' · ' + durationText : ''}`;
+        const heading = detail
+            ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"><strong>${esc(title)}</strong><small>${placeText}</small><span class="db-expand-mark" aria-hidden="true">＋</span></button>`
+            : `<strong id="db-title-${uid}">${esc(title)}</strong><small>${placeText}</small>`;
+        const lockedLabel = i.userLocked ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
+        return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
             ${tray ? '' : `<div class="db-time" data-testid="db-time" aria-label="${esc(i.flight ? flightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end))}">${i.flight ? esc(flightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}</span>`}</div>`}
             <div class="db-activity" data-testid="db-activity">
-                <strong>${esc(i.title)}</strong>
-                <small>${esc(i.place)}${tray || i.estimate ? ' · ' + durationText : ''}</small>
-                ${i.flight ? `<label>Flight time<input type="time" aria-label="Flight time" data-testid="db-flight-time" value="${flightTime ? String(Math.floor(parse(flightTime) / 60)).padStart(2, '0') + ':' + String(parse(flightTime) % 60).padStart(2, '0') : ''}"></label>` : ''}
+                ${heading}
+                ${i.flight && !print ? `<label>Flight time<input type="time" aria-label="Flight time" data-testid="db-flight-time" value="${flightTime ? String(Math.floor(parse(flightTime) / 60)).padStart(2, '0') + ':' + String(parse(flightTime) % 60).padStart(2, '0') : ''}"></label>` : ''}
                 ${i.detail ? `<small>${esc(i.detail)}</small>` : ''}
-                ${i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : ''}
+                ${canLock ? '' : lockChip}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
-                ${controls}${i.custom ? button('delete', i.title) : ''}
+                ${controls}${i.custom && !print ? button('delete', title) : ''}
                 ${(i.notes || []).map(note => `<p class="db-note" id="${esc(noteId)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
-            </div></div>`;
+            </div>
+            ${detail ? `<div class="db-detail" id="db-detail-${uid}" data-testid="db-detail" role="region" aria-labelledby="db-title-${uid}"${open ? '' : ' hidden'}>${detail}</div>` : ''}</div>`;
     }
     function alreadyOnDay(item) {
         const sourceId = item.sourceId || trayItems().find(candidate => candidate.id === item.id)?.sourceId;
         return current().items.some(existing => existing.id === sourceId || existing.title === item.title);
     }
+    function timelineHTML(result, options) {
+        return result.items.map(i => {
+            const travel = i.travel ? `<div class="db-travel${i.travel.late ? ' db-travel-late' : ''}" data-testid="db-travel">${i.travel.late ? esc(i.travel.label) + ' · leave by ' + clock(i.travel.depart) : clock(i.travel.depart) + ' · ' + esc(i.travel.label) + (i.travel.minutes ? ' · arrive ' + clock(i.travel.arrive) : '')}</div>` : '';
+            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">${clock(i.walkBack.depart)} · Walk ~10 min · arrive ${clock(i.walkBack.arrive)}</div>` : '') + travel + pair(i, false, options);
+        }).join('');
+    }
+    function dayIndex(on) {
+        return window.OAHU_SAMPLE.days.findIndex(day => day.date === on);
+    }
     function render(focus) {
         const d = current();
-        const result = reflow(d, {...ctx, flightTime});
+        const result = dayResult(d, date);
+        lastResult = result;
         addedConflicts = result.conflicts.filter(c => previousConflicts.get(c.id) !== c.note).map(c => result.items.find(i => i.id === c.id).title + ' — ' + c.note);
         previousConflicts = new Map(result.conflicts.map(c => [c.id, c.note]));
         const availableTray = d.tray.filter(item => !alreadyOnDay(item));
         const summary = result.conflicts.length ? `${result.conflicts.length} heads-up` : 'All clear';
-        const chips = window.OAHU_SAMPLE.days.map(day => {
+        const chips = window.OAHU_SAMPLE.days.map((day, index) => {
             const weekday = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', timeZone: 'UTC'});
             const label = weekday + ' ' + Number(day.date.slice(-2));
-            return `<button type="button" data-db-action="day" data-date="${day.date}" data-testid="db-day-${day.date}" aria-pressed="${day.date === date}">${label}</button>`;
+            return `<button type="button" data-db-action="day" data-date="${day.date}" data-testid="db-day-${day.date}" aria-pressed="${day.date === date}"${ctx.dayHead ? ` aria-label="Day ${index + 1} · ${label}"` : ''}>${ctx.dayHead ? `<span class="db-day-num">Day ${index + 1}</span> ` : ''}${label}</button>`;
         }).join('');
-        const timeline = result.items.map(i => {
-            const travel = i.travel ? `<div class="db-travel${i.travel.late ? ' db-travel-late' : ''}" data-testid="db-travel">${i.travel.late ? esc(i.travel.label) + ' · leave by ' + clock(i.travel.depart) : clock(i.travel.depart) + ' · ' + esc(i.travel.label) + (i.travel.minutes ? ' · arrive ' + clock(i.travel.arrive) : '')}</div>` : '';
-            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">${clock(i.walkBack.depart)} · Walk ~10 min · arrive ${clock(i.walkBack.arrive)}</div>` : '') + travel + pair(i, false);
-        }).join('');
-        content.innerHTML = `<div class="db-heading"><h2>Build your day</h2><span class="db-summary" data-testid="db-summary">${summary}</span><button type="button" data-testid="db-reset" data-db-action="reset">Reset to suggested</button></div>
+        const index = dayIndex(date);
+        const card = inner => ctx.dayHead
+            ? `<section class="card day db-daycard" id="day-${index}" data-testid="plan-day" data-date="${date}">${ctx.dayHead(date)}${inner}${ctx.dayFooter ? ctx.dayFooter(date) : ''}</section>`
+            : inner;
+        content.innerHTML = `<div class="db-heading"><h2>${ctx.dayHead ? 'Your days' : 'Build your day'}</h2><span class="db-summary" data-testid="db-summary">${summary}</span><button type="button" data-testid="db-reset" data-db-action="reset">Reset to suggested</button></div>
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
-            <div class="db-day" data-testid="db-day-list">${timeline}</div>
+            ${card(`<div class="db-day" data-testid="db-day-list">${timelineHTML(result)}</div>
+            ${ctx.dayExtras ? ctx.dayExtras(date) : ''}
+            <div class="db-tools">
             <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Treasure chest <span class="db-count">${availableTray.length}</span></button>
-            <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}><small>~ = estimate</small>${availableTray.map(i => pair(i, true)).join('')}</div>
             <button type="button" data-testid="db-booking-toggle" data-db-action="booking" aria-expanded="${bookingOpen}" aria-controls="db-booking">+ Add booking</button>
+            </div>
+            <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}><small>~ = estimate</small>${availableTray.map(i => pair(i, true)).join('')}</div>
             <form id="db-booking" class="db-form" data-testid="db-booking-form" ${bookingOpen ? '' : 'hidden'}>
                 <label>Name<input name="name" data-testid="db-booking-name" required maxlength="100"></label>
                 <label>Start<input name="start" data-testid="db-booking-start" type="time" required></label>
                 <label>End<input name="end" data-testid="db-booking-end" type="time" required></label>
                 <label>Place<select name="place" data-testid="db-booking-place">${[HOTEL, WAIKIKI, 'Kewalo Basin', 'Kualoa Ranch', 'Diamond Head', 'Ala Moana', 'Kailua', 'Makapuu', 'HNL', 'Other'].map(p => `<option>${p}</option>`).join('')}</select></label>
                 <button data-testid="db-booking-add">Anchor it</button><p data-testid="db-form-note" role="status">${esc(formStatus)}</p>
-            </form>`;
-        if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches && !document.documentElement.classList.contains('reduce-motion')) {
+            </form>`)}`;
+        if (!reducedMotion()) {
             root.querySelectorAll('.db-conflict').forEach(element => {
                 element.classList.add('db-shake');
                 element.addEventListener('animationend', () => element.classList.remove('db-shake'), {once: true});
             });
         }
+        root.querySelectorAll('[aria-describedby]').forEach(row => row.matches('[data-db-id]') && row.querySelector('[data-db-action=handle]')?.setAttribute('aria-describedby', row.getAttribute('aria-describedby')));
+        if (ctx.afterRender) ctx.afterRender(content, date);
         if (focus) {
             const row = Array.from(root.querySelectorAll('[data-db-id]')).find(e => e.dataset.dbId === focus.id && e.dataset.dbZone === focus.zone);
             (row?.querySelector(`[data-db-action="${focus.action || 'handle'}"]`) || row)?.focus({preventScroll: true});
         }
-        root.querySelectorAll('[aria-describedby]').forEach(row => row.querySelector('[data-db-action=handle]')?.setAttribute('aria-describedby', row.getAttribute('aria-describedby')));
         return result;
+    }
+    // Print shows every day once, with every box open and no controls.
+    function renderPrint(on) {
+        if (!on) { printAll.innerHTML = ''; root.classList.remove('db-printing'); return; }
+        printAll.innerHTML = window.OAHU_SAMPLE.days.map(day => {
+            const stored = days[day.date] || buildSuggested(day.date);
+            const result = dayResult(stored, day.date);
+            return `<section class="card day db-print-day" data-date="${day.date}">${ctx.dayHead ? ctx.dayHead(day.date, {print: true}) : ''}<div class="db-day">${timelineHTML(result, {print: true, date: day.date})}</div>${ctx.dayExtras ? ctx.dayExtras(day.date, {print: true}) : ''}</section>`;
+        }).join('');
+        printAll.querySelectorAll('[data-testid]').forEach(element => element.removeAttribute('data-testid'));
+        printAll.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
+        printAll.querySelectorAll('[tabindex]').forEach(element => element.removeAttribute('tabindex'));
+        printAll.querySelectorAll('input[type=checkbox]').forEach(box => box.replaceWith(document.createTextNode(box.checked || box.hasAttribute('checked') ? '☑ ' : '☐ ')));
+        printAll.querySelectorAll('details').forEach(element => { element.open = true; });
+        root.classList.add('db-printing');
+    }
+    function setExpanded(row, force) {
+        const toggle = row?.querySelector('[data-db-action=expand]');
+        if (!toggle) return false;
+        const panel = row.querySelector('.db-detail');
+        const on = force ?? toggle.getAttribute('aria-expanded') !== 'true';
+        const key = date + '|' + row.dataset.dbId;
+        toggle.setAttribute('aria-expanded', String(on));
+        panel.hidden = !on;
+        row.classList.toggle('is-open', on);
+        if (on) session.open.add(key); else session.open.delete(key);
+        panel.classList.remove('db-pop');
+        if (on && !reducedMotion()) {
+            void panel.offsetWidth;
+            panel.classList.add('db-pop');
+        }
+        return true;
+    }
+    function selectDay(next, focusChip = true) {
+        if (!window.OAHU_SAMPLE.days.some(day => day.date === next)) return;
+        date = next;
+        session.date = next;
+        formStatus = '';
+        picked = null;
+        render();
+        if (focusChip) root.querySelector(`[data-testid="db-day-${date}"]`).focus({preventScroll: true});
     }
 
     // Position is an insertion boundary in the destination list, before removal.
@@ -403,28 +612,62 @@ function mount(root, ctx = {}) {
             const photos = destination.findIndex(i => i.id === 'photos');
             at = target ?? (action === 'add' && photos >= 0 ? photos : destination.length);
         } else if (action === 'up' || action === 'down') {
-            at = Math.max(0, Math.min(list.length - 1, index + (action === 'up' ? -1 : 1)));
+            // Step over items hidden by Remove or the relaxed version of the day.
+            const hidden = zone === 'day' ? hiddenSet(date) : new Set();
+            const step = action === 'up' ? -1 : 1;
+            at = index + step;
+            while (at >= 0 && at < list.length && hidden.has(sourceOf(list[at], date))) at += step;
+            at = Math.max(0, Math.min(list.length - 1, at));
         } else if (action === 'position') {
             at = target > index ? target - 1 : target;
         }
         list.splice(index, 1);
         destination.splice(at, 0, item);
+        session.open.delete(date + '|' + id);
         save();
         render({id, zone});
         announce(positionMessage(id, zone));
     }
+    function lock(id) {
+        const item = current().items.find(i => i.id === id);
+        if (!item || !lockable(item)) return;
+        const shown = lastResult.items.find(i => i.id === id);
+        const locked = toggleLock(item, shown);
+        save();
+        const result = render({id, zone: 'day', action: 'lock'});
+        const now = result.items.find(i => i.id === id);
+        announce(locked ? `Locked ${item.title} at ${now && now.start != null ? range(now.start, now.end) : 'its time'}.` : `Unlocked ${item.title} — it moves with the day again.`);
+    }
 
     root.addEventListener('click', e => {
+        if (suppressClick) { suppressClick = false; if (e.target.closest('[data-db-id]')) return; }
+        const anchor = e.target.closest('a[href^="#item-"]');
+        const href = anchor && anchor.getAttribute && anchor.getAttribute('href');
+        if (href && href.startsWith('#item-')) {
+            const id = href.slice(6).replace(/["\\]/g, '\\$&');
+            const row = root.querySelector(`.db-content [data-db-source="${id}"]`);
+            if (row && setExpanded(row, true)) {
+                e.preventDefault();
+                row.scrollIntoView({block: 'center', behavior: reducedMotion() ? 'auto' : 'smooth'});
+                row.querySelector('[data-db-action=expand]').focus({preventScroll: true});
+            }
+            return;
+        }
         const b = e.target.closest('[data-db-action]');
-        if (!b) return;
+        if (!b) {
+            // A click on the box itself (not a control, link, field or the open panel) toggles it.
+            const row = e.target.closest('.db-content [data-db-id][data-db-zone=day]');
+            if (row && !e.target.closest('a,button,input,select,textarea,label,summary,details,.db-detail')) setExpanded(row);
+            return;
+        }
         const action = b.dataset.dbAction;
         const row = b.closest('[data-db-id]');
         if (action === 'day') {
-            date = b.dataset.date;
-            formStatus = '';
-            picked = null;
-            render();
-            root.querySelector(`[data-testid="db-day-${date}"]`).focus();
+            selectDay(b.dataset.date);
+        } else if (action === 'expand') {
+            setExpanded(row);
+        } else if (action === 'lock') {
+            lock(row.dataset.dbId);
         } else if (action === 'toggle') {
             expanded = !expanded;
             render();
@@ -463,6 +706,7 @@ function mount(root, ctx = {}) {
         }
     });
     root.addEventListener('submit', e => {
+        if (!e.target.matches('.db-form')) return;
         e.preventDefault();
         const values = new FormData(e.target);
         const toMinutes = s => {
@@ -499,9 +743,16 @@ function mount(root, ctx = {}) {
             return;
         }
         const row = e.target.closest('[data-db-id]');
-        if (!e.target.matches('input,select') && row?.classList.contains('db-locked') && [' ', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        if (!row || e.target.closest('.db-detail')) return;
+        // A focused locked box opens with Enter or Space, like its title button.
+        if (e.target === row && (e.key === ' ' || e.key === 'Enter')) {
             e.preventDefault();
-            announce('Locked booking — times are fixed');
+            setExpanded(row);
+            return;
+        }
+        if (!e.target.matches('input,select') && row.classList.contains('db-locked') && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+            e.preventDefault();
+            announce(row.classList.contains('db-user-locked') ? 'Locked time — unlock to move' : 'Locked booking — times are fixed');
             return;
         }
         const handle = e.target.closest('[data-db-action="handle"]');
@@ -538,8 +789,13 @@ function mount(root, ctx = {}) {
         root.querySelectorAll('.db-drop-target').forEach(e => e.classList.remove('db-drop-target'));
         drag.ghost?.remove();
         drag.indicator?.remove();
-        const {handle, pointerId} = drag;
+        const {handle, pointerId, active} = drag;
         drag = null;
+        if (active) {
+            // The click that ends a drag never toggles a box open.
+            suppressClick = true;
+            setTimeout(() => { suppressClick = false; }, 0);
+        }
         if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
         root.classList.remove('db-dragging');
     }
@@ -583,10 +839,15 @@ function mount(root, ctx = {}) {
         if (!drag) return;
         if (!drag.active && Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 5) {
             drag.active = true;
-            drag.ghost = drag.handle.closest('[data-db-id]').cloneNode(true);
+            const row = drag.handle.closest('[data-db-id]');
+            // A box being dragged travels closed.
+            setExpanded(row, false);
+            drag.ghost = row.cloneNode(true);
             drag.ghost.className = 'db-pair db-ghost';
             drag.ghost.removeAttribute('data-testid');
             drag.ghost.querySelectorAll('[data-testid]').forEach(el => el.removeAttribute('data-testid'));
+            drag.ghost.querySelectorAll('[id]').forEach(el => el.removeAttribute('id'));
+            drag.ghost.querySelector('.db-detail')?.remove();
             drag.ghost.setAttribute('aria-hidden', 'true');
             document.body.appendChild(drag.ghost);
             drag.indicator = document.createElement('div');
@@ -615,8 +876,34 @@ function mount(root, ctx = {}) {
     });
     root.addEventListener('pointercancel', cancelDrag);
     root.addEventListener('lostpointercapture', () => { if (drag) cancelDrag(); });
+    const api = {
+        render, selectDay, renderPrint, root,
+        getDay: () => clone(current()),
+        date: () => date,
+        exportState: () => exportDays(days, flightTime),
+        schedule,
+        persist: () => { try { localStorage.setItem(KEY, JSON.stringify({days, flightTime})); } catch (e) {} }
+    };
+    session.active = api;
     render();
-    return {render, getDay: () => clone(current())};
+    return api;
 }
-window.DayBuilder = {buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range};
+const active = () => (session.active && session.active.root.isConnected ? session.active : null);
+window.DayBuilder = {buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+    toggleLock, exportDays, importDays, sourceOf,
+    selectDay: (date, focus) => active()?.selectDay(date, focus),
+    selectedDate: () => active()?.date() || session.date,
+    exportState: () => {
+        if (active()) return active().exportState();
+        if (session.shared) return exportDays(session.shared.days, session.shared.flightTime);
+        try { const saved = JSON.parse(localStorage.getItem(KEY)) || {}; return exportDays(saved.days, saved.flightTime); } catch (e) { return null; }
+    },
+    persist: () => {
+        const data = active() ? null : session.shared;
+        if (active()) return active().persist();
+        if (data) try { localStorage.setItem(KEY, JSON.stringify({days: data.days, flightTime: data.flightTime || ''})); } catch (e) {}
+    },
+    print: on => active()?.renderPrint(on),
+    schedule: () => active()?.schedule() || null,
+    resetSession: () => { session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
 })();
