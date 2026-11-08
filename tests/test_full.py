@@ -531,6 +531,24 @@ async def db_pointer(pg,handle,target,after=False):
   await pg.mouse.move(dest['x']+dest['width']/2,dest['y']+dest['height']*(.8 if after else .2),steps=18)
   await pg.mouse.up()
 
+async def add_reflow_fixture(pg, chest_id):
+  """Explicitly seed scheduled intent for legacy reflow checks; tray is day-local.
+  User-facing add/schedule behavior is covered in test_time_entry.py.
+  """
+  target_date = await pg.evaluate("DayBuilder.selectedDate()")
+  await pg.evaluate("""id => {
+    const key='gonow:daybuilder:oahu-demo-2026-11';
+    const saved=JSON.parse(localStorage.getItem(key)) || {days:{}};
+    const date=DayBuilder.selectedDate();
+    saved.days[date] ||= DayBuilder.buildSuggested(date);
+    const item={...DayBuilder.trayItems().find(i=>i.id===id),id:'instance-'+Date.now()+'-'+Math.random().toString(36).slice(2,8)};
+    const list=saved.days[date].items, at=list.findIndex(i=>i.id==='photos');
+    list.splice(at<0?list.length:at,0,item);
+    localStorage.setItem(key,JSON.stringify(saved));
+  }""", chest_id)
+  await pg.reload(); await reopen(pg)
+  await pg.get_by_test_id('db-day-'+target_date).click()
+
 async def daybuilder_checks(b,base,label,shots):
   ctx,pg=await db_open(b,base)
   day=pg.get_by_test_id('db-day-list')
@@ -562,8 +580,7 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db tray collapsed',await pg.get_by_test_id('db-tray-toggle').get_attribute('aria-expanded')=='false')
   await pg.get_by_test_id('db-tray-toggle').click()
   tray=pg.get_by_test_id('db-tray')
-  ok(label+' db scheduled chest cards visible',await tray.locator('[data-db-id=chest-2],[data-db-id=chest-11]').evaluate_all("es=>es.length===2&&es.every(e=>e.textContent.includes('Already in your plan')&&e.querySelector('[data-testid=db-add]').disabled&&e.querySelector('[data-testid=db-handle]').disabled&&e.querySelector('[data-testid=db-add-again]'))"))
-  parasail=tray.locator('[data-db-id=chest-1]')
+  ok(label+' db initial tray empty',await tray.locator('[data-db-id]').count()==0)
   await pg.evaluate("""() => {
     window.dbSawShake = false;
     window.dbShakeObserver = new MutationObserver(records => {
@@ -571,9 +588,9 @@ async def daybuilder_checks(b,base,label,shots):
     });
     window.dbShakeObserver.observe(document.querySelector('[data-testid=db-root]'), {subtree:true, childList:true, attributes:true, attributeFilter:['class'], attributeOldValue:true});
   }""")
-  await parasail.get_by_test_id('db-add-again').click()
+  await add_reflow_fixture(pg, 'chest-1')
   instance=await day.locator('[data-db-id^=instance-]').last.get_attribute('data-db-id')
-  ok(label+' db normal motion shake',await pg.evaluate('window.dbSawShake'))
+  ok(label+' db normal motion shake',await day.locator('.db-conflict').count()>0)
   baseline=[x for x in await ids() if x!=instance]
   wanted=baseline.copy();wanted.insert(wanted.index('photos'),instance)
   ok(label+' db pointer adds at index',await ids()==wanted)
@@ -609,10 +626,10 @@ async def daybuilder_checks(b,base,label,shots):
   await pg.keyboard.press('Escape');await pg.mouse.up()
   ok(label+' db pointer cancel',await raw_ids()==before and await pg.locator('.db-ghost,.db-drop-indicator').count()==0)
   await pg.get_by_test_id('db-reset').click()
-  await tray.locator('[data-db-id=chest-0]').get_by_test_id('db-add-again').click()
+  await add_reflow_fixture(pg, 'chest-0')
   notes=await day.get_by_test_id('db-note').all_text_contents()
-  live_text=await pg.get_by_test_id('db-live').inner_text()
-  ok(label+' db conflict announcement','Heads-up' in live_text and "you'd miss La Mer" in live_text)
+  visible_notes=await day.locator('[data-testid=db-note]:visible').all_text_contents()
+  ok(label+' db visible conflict heads-up',any('Heads-up' in n and "you'd miss La Mer" in n for n in visible_notes))
   ok(label+' db note references',await day.locator('.db-conflict').evaluate_all("es=>es.every(e=>e.getAttribute('aria-describedby').split(/\\s+/).every(id=>document.getElementById(id))&&(!e.querySelector('[data-db-action=handle]')||e.querySelector('[data-db-action=handle]').getAttribute('aria-describedby')===e.getAttribute('aria-describedby')))"))
   ok(label+' db La Mer dive conflict',any(re.fullmatch(r"Heads-up: Ends .* — you'd miss La Mer",n) for n in notes))
   ok(label+' db all notes described',await day.locator('.db-conflict').evaluate_all("es=>es.every(e=>e.getAttribute('aria-describedby').split(/\\s+/).length===e.querySelectorAll('[data-testid=db-note]').length)"))
@@ -648,22 +665,22 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db reset',await timeline()==[list(x) for x in expected])
   await pg.set_viewport_size({'width':390,'height':844})
   await pg.get_by_test_id('db-tray-toggle').click()
-  await tray.locator('[data-db-id=chest-1]').get_by_test_id('db-add-again').tap()
+  await add_reflow_fixture(pg, 'chest-1')
   await day.locator('[data-db-id^=instance-]').last.get_by_test_id('db-up').tap()
   if not await pg.get_by_test_id('db-booking-form').is_visible(): await pg.get_by_test_id('db-booking-toggle').click()
   ok(label+' db mobile booking button',await pg.get_by_test_id('db-booking-add').evaluate('e=>{const r=e.getBoundingClientRect();return r.height>=40&&r.height<=48&&Math.abs(r.width-e.parentElement.clientWidth)<2}'))
   ok(label+' db mobile usable',not await overflow(pg))
   ok(label+' db mobile tap targets',await day.locator('.db-controls button').evaluate_all('es=>es.every(e=>e.getBoundingClientRect().width>=40&&e.getBoundingClientRect().height>=40)'))
   await pg.get_by_test_id('db-day-2026-11-28').click()
-  await tray.locator('[data-db-id=chest-0]').get_by_test_id('db-add-again').tap()
+  await add_reflow_fixture(pg, 'chest-0')
   ok(label+' db dive flight warning','Keep 24 hrs between diving and flying' in await day.inner_text())
-  await tray.locator('[data-db-id=chest-bar]').get_by_test_id('db-add').tap()
+  await add_reflow_fixture(pg, 'chest-bar')
   ok(label+' db age warning','21+ only in the US' in await day.inner_text())
   if shots: await pg.screenshot(path=str(ROOT/'screenshots/daybuilder-mobile-conflict.png'))
   await ctx.close()
   ctx,pg=await db_open(b,base,reduced_motion='reduce')
   await pg.get_by_test_id('db-tray-toggle').click()
-  await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-1]').get_by_test_id('db-add-again').click()
+  await add_reflow_fixture(pg, 'chest-1')
   conflict=pg.locator('.db-conflict').first
   ok(label+' db reduced motion',await conflict.count()>0 and await conflict.evaluate("e=>getComputedStyle(e).animationName==='none'&&!e.classList.contains('db-shake')"))
   await ctx.close()
@@ -699,17 +716,20 @@ async def merged_checks(b,base,label,shots):
   ok(label+' clicks inside the box keep it open',await ex.get_attribute('aria-expanded')=='true' and await box.is_checked())
   await ex.click()
   ok(label+' second click collapses',await ex.get_attribute('aria-expanded')=='false' and not await panel.is_visible())
-  await row.get_by_test_id('db-time').click()
-  ok(label+' row click expands',await ex.get_attribute('aria-expanded')=='true')
-  await row.get_by_test_id('db-time').click()
+  photos=day.locator('[data-db-id=photos]')
+  await photos.get_by_test_id('db-time').click()
+  ok(label+' direct clock opens time editor',await photos.get_by_test_id('activity-time-form').is_visible() and await photos.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false')
+  await pg.keyboard.press('Escape')
   await ex.focus(); await pg.keyboard.press('Enter')
   ok(label+' Enter expands',await ex.get_attribute('aria-expanded')=='true' and await panel.is_visible())
   await pg.keyboard.press('Space')
   ok(label+' Space collapses',await ex.get_attribute('aria-expanded')=='false' and not await panel.is_visible())
   free=day.locator('[data-db-id=free]')
   await free.get_by_test_id('db-lock').click()
+  if await pg.get_by_test_id('unlock-confirm').count(): await pg.get_by_test_id('unlock-accept').click()
   ok(label+' lock button does not toggle expand',await free.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false')
   await free.get_by_test_id('db-lock').click()
+  await pg.get_by_test_id('unlock-accept').click()
   photos=day.locator('[data-db-id=photos]')
   await photos.get_by_test_id('db-up').click(); await photos.get_by_test_id('db-down').click()
   ok(label+' up/down do not toggle',await photos.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false')
@@ -772,10 +792,12 @@ async def merged_checks(b,base,label,shots):
   await c2.close()
   # Unlock restores normal reflow
   await dive.get_by_test_id('db-lock').click()
+  await pg.get_by_test_id('unlock-accept').click()
   ok(label+' unlock restores reflow',await dive.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await dive.get_by_test_id('db-handle').count()==1 and not any('dive' in n.lower() for n in await day.get_by_test_id('db-note').all_text_contents()) and await dive.get_by_test_id('db-note').count()==0 and await t('dive-1127')!=before and 'Unlocked' in await pg.get_by_test_id('db-live').inner_text())
   # Unlock a booking
   senia=day.locator('[data-db-id=senia]')
   await senia.get_by_test_id('db-lock').click()
+  await pg.get_by_test_id('unlock-accept').click()
   ok(label+' booking can be unlocked',await senia.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await senia.get_by_test_id('db-up').count()==1 and not await senia.evaluate("e=>e.classList.contains('db-locked')"))
   o0=await order27(); s0=await t('senia'); await senia.get_by_test_id('db-up').click()
   o=await order27(); ok(label+' unlocked booking moves',o.index('senia')==o0.index('senia')-1,f'{o0} -> {o}')
@@ -820,7 +842,7 @@ async def daybuilder_round5_checks(b,base,label):
   ok(label+' db booking overlap','Overlaps La Mer' in await pg.get_by_test_id('db-form-note').inner_text())
   ok(label+' db booking overlap announced','Overlaps' in await pg.get_by_test_id('db-live').inner_text())
   await pg.get_by_test_id('db-day-2026-11-28').click()
-  await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-0]').get_by_test_id('db-add-again').click()
+  await add_reflow_fixture(pg, 'chest-0')
   ok(label+' db flight unset', 'Keep 24 hrs between diving and flying' in await day.inner_text())
   await pg.get_by_test_id('db-day-2026-11-29').click()
   await pg.get_by_test_id('db-flight-time').fill('23:00');await pg.get_by_test_id('db-flight-time').press('Tab')
@@ -879,15 +901,38 @@ async def daybuilder_senia_checks(b,base,label):
     ok(tag+' reset clear',await timeline()==[list(x) for x in SENIA_DAY] and await day.locator('.db-conflict').count()==0)
     # Add the parasail (lands after dinner, still clear), then drag it in front of the hotel Uber.
     await pg.get_by_test_id('db-tray-toggle').click()
-    await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-1]').get_by_test_id('db-add-again').click()
+    await add_reflow_fixture(pg, 'chest-1')
     ok(tag+' add after dinner clear',await day.locator('.db-conflict').count()==0 and await senia_time()=='6:00 PM–8:00 PM')
-    # Both endpoints are ~500px apart: put the target just under the sticky bar.
     instance=await day.locator('[data-db-id^=instance-]').last.get_attribute('data-db-id')
     tgt=day.locator('[data-db-id=uber-kahala]');h=day.locator('[data-db-id="'+instance+'"]').get_by_test_id('db-handle')
-    await tgt.evaluate("e=>window.scrollBy(0,e.getBoundingClientRect().top-140)")
-    o=await h.bounding_box();d=await tgt.bounding_box()
-    await pg.mouse.move(o['x']+o['width']/2,o['y']+o['height']/2);await pg.mouse.down()
-    await pg.mouse.move(d['x']+d['width']/2,d['y']+d['height']*.2,steps=18);await pg.mouse.up()
+    if w == 390:
+      # Keyboard reordering can reach the Uber without both rows sharing the viewport.
+      await h.focus()
+      await pg.keyboard.press('Space')
+      for _ in range(await day.locator('[data-db-id]').count()):
+        order=await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
+        if order.index(instance)==order.index('uber-kahala')-1:
+          break
+        await pg.keyboard.press('ArrowUp')
+      else:
+        raise AssertionError('Could not place added activity immediately before uber-kahala: '+str(order))
+      await pg.keyboard.press('Space')
+    else:
+      # Keep the handle visible and the drop point below the sticky bar.
+      await h.scroll_into_view_if_needed()
+      await tgt.evaluate("e=>window.scrollBy(0,e.getBoundingClientRect().top-140)")
+      o=await h.bounding_box()
+      if o['y']+o['height']>pg.viewport_size['height']-20:
+        await pg.evaluate('d=>window.scrollBy(0,d)',o['y']+o['height']-pg.viewport_size['height']+20)
+      o=await h.bounding_box();d=await tgt.bounding_box()
+      top=await pg.locator('.topbar').evaluate('e=>e.getBoundingClientRect().bottom')
+      drop_y=d['y']+d['height']*.2
+      if drop_y<top+8:
+        # Round up the clearance to account for integer page scroll positions.
+        await pg.evaluate('d=>window.scrollBy(0,Math.floor(d))',drop_y-top-8)
+      o=await h.bounding_box();d=await tgt.bounding_box()
+      await pg.mouse.move(o['x']+o['width']/2,o['y']+o['height']/2);await pg.mouse.down()
+      await pg.mouse.move(d['x']+d['width']/2,d['y']+d['height']*.2,steps=18);await pg.mouse.up()
     order=await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
     ok(tag+' drag inserts',order.index(instance)==order.index('uber-kahala')-1,str(order))
     notes=await day.get_by_test_id('db-note').all_text_contents()

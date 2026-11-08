@@ -77,7 +77,7 @@ function convert(item) {
 }
 function buildSuggested(date) {
     const day = window.OAHU_SAMPLE.days.find(day => day.date === date);
-    if (!day) return {date, items: []};
+    if (!day) return {date, items: [], unscheduled: []};
     let items = day.items.map(convert);
     items.forEach((item, index) => {
         if (item.kind === 'travel' && items[index + 1]) {
@@ -143,7 +143,7 @@ function buildSuggested(date) {
         item.detail = '';
         item.preferred = null;
     });
-    return {date, items};
+    return {date, items, unscheduled: []};
 }
 // Ideas no longer on a day card stay available in the treasure chest.
 const chestOnly = [{id: 'magic-island', time: '5:15 PM', kind: 'sight', title: 'Magic Island sunset',
@@ -337,9 +337,10 @@ function exportDays(days, flightTime) {
             if (item.userLocked) Object.assign(entry, {u: 1, bp: item.basePreferred, bd: item.baseDuration});
             return entry;
         });
-        const trayIds = day.tray.map(item => item.id);
-        if (JSON.stringify(items) !== JSON.stringify(base.map(item => item.id)) || JSON.stringify(trayIds) !== JSON.stringify(tray.map(item => item.id))) {
-            out[date] = {i: items, t: trayIds};
+        const trayIds = [];
+        const u = (day.unscheduled || []).map(({id,sourceId,title,place,duration,estimate,locked}) => ({id,sourceId,title,place,duration,estimate,locked}));
+        if (JSON.stringify(items) !== JSON.stringify(base.map(item => item.id)) || u.length) {
+            out[date] = {i: items, t: trayIds, u};
         }
     });
     return Object.keys(out).length || flightTime ? {f: flightTime || '', d: out} : null;
@@ -372,7 +373,7 @@ function importDays(data) {
             if (entry.u && item.locked) Object.assign(item, {userLocked: true, basePreferred: minutes(entry.bp) ?? null, baseDuration: minutes(entry.bd) ?? item.duration});
             return item;
         }).filter(Boolean);
-        days[date] = {date, items, tray: day.t.map(id => tray.find(item => item.id === id)).filter(Boolean)};
+        days[date] = {date, items, unscheduled: (day.u || []).filter(e => e && typeof e.id === "string" && typeof e.title === "string" && e.duration > 0).map(e => ({...clone(pool.find(i => i.sourceId === e.sourceId) || {}), ...e, custom: !pool.some(i => i.sourceId === e.sourceId), preferred:null}))};
     });
     return {days, flightTime: typeof data.f === 'string' && parse(data.f) !== null ? data.f : ''};
 }
@@ -407,13 +408,15 @@ function mount(root, ctx = {}) {
     let date = session.date;
     let expanded = false;
     let bookingOpen = false;
+    let editingTime = null;
     let picked = null;
     let drag = null;
     let lastResult = {items: []};
     let suppressClick = false;
 
     function current() {
-        if (!days[date]) days[date] = {...buildSuggested(date), tray: trayItems()};
+        if (!days[date]) days[date] = buildSuggested(date);
+        days[date].unscheduled ||= [];
         return days[date];
     }
     function draftItems() {
@@ -421,21 +424,25 @@ function mount(root, ctx = {}) {
     }
     function addToDay(nextDate, spec) {
         if (!spec) return {ok: false, reason: 'Missing activity'};
+        if (!window.OAHU_SAMPLE.days.some(d => d.date === nextDate)) return {ok:false, reason:'Choose a trip date'};
+        if (spec.time && toTime(spec.time) === null) return {ok:false, reason:'Enter a clock time'};
         const pool = window.OAHU_SAMPLE.days.flatMap(d => buildSuggested(d.date).items).concat(trayItems());
-        const base = spec.chestId ? pool.find(i => i.id === spec.chestId) : pool.find(i => i.sourceId === spec.sourceId);
+        const base = spec.chestId ? pool.find(i => i.id === spec.chestId)
+            : spec.sourceId ? pool.find(i => i.sourceId === spec.sourceId) : null;
         const identity = spec.sourceId || base?.sourceId || base?.id || ('own:' + String(spec.title || '').trim().toLowerCase());
-        if (!spec.again && draftItems().some(i => (i.sourceId || i.id) === identity)) return {ok:false, reason:'Already in your plan'};
+
         let item = base ? clone(base) : {title:String(spec.title || '').trim().slice(0,100), place:spec.place || 'Other', duration:Number(spec.duration) || 60, estimate:true, custom:true};
         if (!item.title) return {ok:false, reason:'Name the activity'};
-        Object.assign(item, {sourceId:identity, preferred:null, locked:false});
+        Object.assign(item, {sourceId:identity, preferred:null, locked:false, rules:spec.rules || item.rules || [], tags:spec.tags || item.tags || []});
         delete item.textTime; delete item.flight;
-        if (spec.again || draftItems().some(i => i.id === item.id) || !item.id) item.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+        item.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
         selectDay(nextDate, false);
         const d = current();
-        d.items.push(item);
+        if (spec.time) { item.preferred = toTime(spec.time); item.manualTime = true; d.items.push(item); } else d.unscheduled.push(item);
         save();
         render({id: item.id, zone: 'day'});
-        announce(item.title + ' added. Times reflow around locks. This does not book the stop.');
+        if (spec.schedule) openTransfer(item.id, 'tray', 'schedule');
+        announce(item.title + ' added. This does not book the stop.');
         return {ok: true, id: item.id};
     }
     function announce(message) {
@@ -476,10 +483,10 @@ function mount(root, ctx = {}) {
         };
     }
     function listFor(zone) {
-        return zone === 'tray' ? current().tray : current().items;
+        return zone === 'tray' ? current().unscheduled : current().items;
     }
     function positionMessage(id, zone) {
-        const list = zone === 'tray' ? current().tray : visibleItems(current(), date);
+        const list = zone === 'tray' ? current().unscheduled : visibleItems(current(), date);
         const index = list.findIndex(i => i.id === id);
         return `${list[index].title}, position ${index + 1} of ${list.length}.`;
     }
@@ -491,10 +498,12 @@ function mount(root, ctx = {}) {
         const on = options.date || date;
         const print = !!options.print;
         const uid = uidFor(on, i.id);
-        const src = tray ? null : sourceOf(i, on);
+        const src = sourceOf(i, on);
         const hhmm = n => String(Math.floor(n / 60)).padStart(2,'0') + ':' + String(n % 60).padStart(2,'0');
-        const editor = ctx.dock && !tray && !print && !i.textTime && i.kind !== 'prep' && i.kind !== 'travel' ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><fieldset ${i.locked ? 'disabled' : ''}><legend>Activity time${i.locked ? ' — unlock to edit' : ''}</legend><label>Start<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>End ${i.estimate ? '(estimate from default duration)' : ''}<input name="end" type="time" value="${hhmm(i.end)}"></label><label>Duration (minutes)<input name="duration" type="number" min="1" placeholder="${i.duration}"></label><button>Save activity time</button></fieldset><p role="alert" data-testid="activity-time-error"></p></form>` : '';
-        const detail = (!tray && ctx.detail ? ctx.detail(src, on, i) : '') + editor;
+        const canEditTime = !ctx.shared && !tray && !print && !i.textTime && !i.flight && i.kind !== 'prep' && i.kind !== 'travel';
+        const editor = canEditTime && editingTime === on + '|' + i.id ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><p>${i.locked ? 'Unlock first to edit this activity’s time.' : 'Edit scheduled time'}</p><fieldset ${i.locked ? 'disabled' : ''}><legend>Activity time</legend><label>Start<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>End <span data-time-estimate>${i.estimate ? '(estimate from default duration)' : ''}</span><input name="end" type="time" value="${hhmm(i.end)}"></label><label>Duration (minutes)<input name="duration" type="number" min="1" placeholder="${i.duration}"></label><button>Save activity time</button></fieldset><p role="alert" data-testid="activity-time-error"></p><button type="button" data-db-action="close-time">Close time editor</button></form>` : '';
+        const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (ctx.ages || [18,19]).some(age => Number(age) < r.minAge)) : null;
+        const detail = (ctx.detail ? ctx.detail(src, on, i) : '') + (tray ? (i.rules || []).map(r => `<p>${esc(r.text || r)}</p>`).join('') : '');
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
         const title = (!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
         const movable = !i.locked && i.kind !== 'prep' && !print;
@@ -502,31 +511,99 @@ function mount(root, ctx = {}) {
         const classes = ['db-pair', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
             i.kind === 'prep' && 'db-prep', i.flex && 'db-free', detail && 'db-expandable', open && 'is-open',
             picked?.id === i.id && picked.zone === (tray ? 'tray' : 'day') && 'db-picked'].filter(Boolean).join(' ');
-        const duplicate = tray && alreadyOnDay(i);
-        const moves = movable ? button('handle', title, duplicate) + (tray ? button('add', title, duplicate) + (duplicate ? '<span>Already in your plan</span><button type="button" data-testid="db-add-again" data-db-action="again">Add again</button>' : '') : button('up', title) + button('down', title) + button('remove', title)) : '';
+        const moves = tray ? button('handle', title) + '<button type="button" data-testid="schedule-item" data-db-action="schedule">Schedule</button>' : (movable ? button('handle', title) + button('up', title) + button('down', title) + button('remove', title) : '');
+        const actions = !tray && !print && i.kind !== 'prep' ? '<div class="db-item-actions"><button type="button" data-db-action="again">Add it again</button><button type="button" data-db-action="move-day">Move to another day</button></div>' : '';
         const lockChip = i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : '';
         const controls = moves || canLock ? `<div class="db-controls">${canLock ? lockChip : ''}${moves}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
         const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
         const noteId = 'db-note-' + uid;
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
-        const placeText = `${esc(i.place)}${tray || i.estimate ? ' · ' + durationText : ''}`;
+        const placeText = tray ? '' : `${esc(i.place)}${i.estimate ? ' · ' + durationText : ''}`;
         const heading = detail
             ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"><strong>${esc(title)}</strong><small>${placeText}</small><span class="db-expand-mark" aria-hidden="true">＋</span></button>`
             : `<strong id="db-title-${uid}">${esc(title)}</strong><small>${placeText}</small>`;
         const lockedLabel = i.userLocked ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
-            ${tray ? '' : `<div class="db-time" data-testid="db-time" aria-label="${esc(i.flight ? flightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end))}">${i.flight ? esc(flightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}</span>`}</div>`}
+            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? flightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end))}">${i.flight ? esc(flightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}</span>`}</${canEditTime ? 'button' : 'div'}>`}
             <div class="db-activity" data-testid="db-activity">
-                ${heading}
+                ${heading}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
                 ${i.flight && !print ? `<label>Flight time<input type="time" aria-label="Flight time" data-testid="db-flight-time" value="${flightTime ? String(Math.floor(parse(flightTime) / 60)).padStart(2, '0') + ':' + String(parse(flightTime) % 60).padStart(2, '0') : ''}"></label>` : ''}
-                ${i.detail ? `<small>${esc(i.detail)}</small>` : ''}
+                ${!tray && i.detail ? `<small>${esc(i.detail)}</small>` : ''}
                 ${canLock ? '' : lockChip}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
-                ${controls}${i.custom && !print ? button('delete', title) : ''}
+                ${controls}${actions}${i.custom && !print ? button('delete', title) : ''}
                 ${(i.notes || []).map((note, index) => `<p class="db-note" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div>
+            ${editor}
             ${detail ? `<div class="db-detail" id="db-detail-${uid}" data-testid="db-detail" role="region" aria-labelledby="db-title-${uid}"${open ? '' : ' hidden'}>${detail}</div>` : ''}</div>`;
     }
+    function openTime(on, id) {
+        if (ctx.shared) return;
+        const item = (days[on] || buildSuggested(on)).items.find(i => i.id === id);
+        if (item?.locked) { confirmUnlock(item, () => openTime(on, id)); return; }
+        editingTime = on + '|' + id;
+        selectDay(on, false);
+        root.querySelector('.db-dock-tray')?.classList.remove('is-open');
+        document.querySelector('[data-testid=tray-toggle]')?.setAttribute('aria-expanded', 'false');
+        const form = root.querySelector('[data-testid=activity-time-form]');
+        if (form) {
+            form.scrollIntoView({block: 'nearest'});
+            (form.elements.start.disabled ? form.querySelector('[data-db-action=close-time]') : form.elements.start).focus();
+        }
+    }
+    const toTime = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? Number(value.slice(0,2))*60 + Number(value.slice(3)) : null;
+    function confirmUnlock(item, apply) {
+        const dialog = document.createElement('dialog');
+        dialog.dataset.testid = 'unlock-confirm';
+        dialog.addEventListener('cancel', () => dialog.remove());
+        dialog.innerHTML = '<p>Unlock this item’s reserved time before changing it?</p><button data-testid="unlock-accept">Unlock this item</button><button data-testid="unlock-decline">Keep reserved time</button>';
+        root.append(dialog); dialog.showModal();
+        dialog.querySelector('[data-testid=unlock-decline]').onclick = () => dialog.remove();
+        dialog.querySelector('[data-testid=unlock-accept]').onclick = () => { toggleLock(item, lastResult.items.find(i => i.id === item.id)); save(); dialog.remove(); apply(); };
+    }
+    function openTransfer(id, zone, mode) {
+        const list = listFor(zone), item = list.find(i => i.id === id);
+        if (!item) return;
+        if (item.locked && mode !== 'again') { confirmUnlock(item, () => openTransfer(id, zone, mode)); return; }
+        const dialog = document.createElement('dialog');
+        dialog.addEventListener('cancel', () => dialog.remove());
+        dialog.dataset.testid = mode === 'again' ? 'add-again-dialog' : mode === 'move-day' ? 'move-day-dialog' : 'schedule-dialog';
+        const title = mode === 'again' ? 'Add it again' : mode === 'move-day' ? 'Move to another day' : 'Schedule';
+        const explanation = mode === 'again' ? 'Creates a separate copy. The original stays where it is.' : mode === 'move-day' ? 'Moves this same item. It leaves the original day.' : '';
+        dialog.setAttribute('aria-labelledby', 'db-transfer-title');
+        dialog.innerHTML = `<h2 id="db-transfer-title">${title}</h2>${explanation ? `<p>${explanation}</p>` : ''}<form><label>Target date<select name="date">${window.OAHU_SAMPLE.days.map(d => `<option ${d.date === date ? 'selected' : ''}>${d.date}</option>`).join('')}</select></label><label>Start clock time (AM/PM)${mode === 'schedule' ? '' : ' — optional'}<input name="start" type="time" ${mode === 'schedule' ? 'required' : ''}></label>${mode === 'schedule' ? '<label>End clock time (AM/PM) — optional<input name="end" type="time"></label><p>Start only: end is an estimate from default duration.</p>' : ''}<button>${mode === 'again' ? 'Add a copy' : mode === 'move-day' ? 'Move' : 'Schedule'}</button><button type="button" data-cancel>Cancel</button><p role="alert"></p></form>`;
+        root.append(dialog); dialog.showModal();
+        dialog.querySelector('[data-cancel]').onclick = () => dialog.remove();
+        dialog.querySelector('form').onsubmit = e => {
+            e.preventDefault(); const form = e.target, target = form.elements.date.value, start = toTime(form.elements.start.value);
+            const end = form.elements.end?.value ? toTime(form.elements.end.value) : null;
+            if (end !== null && (start === null || end <= start)) { form.querySelector('[role=alert]').textContent = 'End must be after start'; return; }
+            const copy = clone(item);
+            if (mode === 'again') copy.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
+            else list.splice(list.findIndex(i => i.id === id), 1);
+            copy.locked = false; delete copy.start; delete copy.end; delete copy.textTime; delete copy.travel; delete copy.notes; delete copy.userLocked; delete copy.basePreferred; delete copy.baseDuration;
+            copy.preferred = start; delete copy.manualTime;
+            days[target] ||= buildSuggested(target); days[target].unscheduled ||= [];
+            if (start === null) days[target].unscheduled.push(copy);
+            else { copy.manualTime = true; copy.estimate = end === null; if (end !== null) copy.duration = end-start; days[target].items.push(copy); }
+            dialog.remove(); editingTime = null; save(); selectDay(target, false);
+            if (start !== null) { root.querySelector('.db-dock-tray')?.classList.remove('is-open'); document.querySelector('[data-testid=tray-toggle]')?.setAttribute('aria-expanded','false'); }
+        };
+    }
+    function closeTime() {
+        const id = editingTime?.slice(editingTime.indexOf('|') + 1);
+        editingTime = null;
+        render();
+        Array.from(root.querySelectorAll('[data-db-id]')).find(r => r.dataset.dbId === id)?.querySelector('[data-db-action=edit-time]')?.focus();
+    }
+    function timeInstances(identity) {
+        return window.OAHU_SAMPLE.days.flatMap(d => dayResult(days[d.date] || buildSuggested(d.date), d.date).items
+            .filter(i => (i.sourceId || i.id) === identity && !i.textTime && !i.flight && !['prep','travel'].includes(i.kind))
+            .map(i => ({id:i.id, date:d.date, time:range(i.start,i.end)})));
+    }
+    root.addEventListener('keydown', e => {
+        if (e.key === 'Escape' && editingTime) { e.preventDefault(); e.stopImmediatePropagation(); closeTime(); }
+    });
     function alreadyOnDay(item) {
         return draftItems().some(existing => (existing.sourceId || existing.id) === (item.sourceId || item.id));
     }
@@ -545,7 +622,7 @@ function mount(root, ctx = {}) {
         lastResult = result;
         addedConflicts = result.conflicts.filter(c => !previousConflicts.has(c.id + '|' + c.note)).map(c => result.items.find(i => i.id === c.id).title + ' — ' + c.note);
         previousConflicts = new Map(result.conflicts.map(c => [c.id + '|' + c.note, true]));
-        const availableTray = d.tray;
+        const availableTray = ctx.shared ? [] : d.unscheduled;
         const summary = result.conflicts.length ? `${result.conflicts.length} heads-up` : 'All clear';
         const chips = window.OAHU_SAMPLE.days.map((day, index) => {
             const weekday = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', timeZone: 'UTC'});
@@ -560,11 +637,12 @@ function mount(root, ctx = {}) {
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
             ${card(`<div class="db-day" data-testid="db-day-list">${timelineHTML(result)}</div>
             ${ctx.dayExtras ? ctx.dayExtras(date) : ''}
+            ${ctx.shared && d.unscheduled.length ? `<section data-testid="unscheduled-section"><h3>Unscheduled</h3><ul>${d.unscheduled.map(i => `<li>${esc(i.title)}</li>`).join('')}</ul></section>` : ''}
             <div class="db-tools">
             <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Treasure chest <span class="db-count">${availableTray.length}</span></button>
             <button type="button" data-testid="db-booking-toggle" data-db-action="booking" aria-expanded="${bookingOpen}" aria-controls="db-booking">+ Add booking</button>
             </div>
-            <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}><small>~ = estimate</small>${availableTray.map(i => pair(i, true)).join('')}</div>
+            <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}>${availableTray.map(i => pair(i, true)).join('')}</div>
             <form id="db-booking" class="db-form" data-testid="db-booking-form" ${bookingOpen ? '' : 'hidden'}>
                 <label>Name<input name="name" data-testid="db-booking-name" required maxlength="100"></label>
                 <label>Start<input name="start" data-testid="db-booking-start" type="time" required></label>
@@ -587,7 +665,8 @@ function mount(root, ctx = {}) {
                 const tray = content.querySelector('.db-tray');
                 const form = content.querySelector('.db-form');
                 if (tools) aside.append(tools);
-                if (tray && !ctx.dock) { tray.hidden = false; aside.append(tray); }
+                if (tray) { tray.hidden = false; aside.append(tray); }
+                if (tools) tools.hidden = true;
                 if (form) aside.append(form);
             }
         }
@@ -646,19 +725,7 @@ function mount(root, ctx = {}) {
         const index = list.findIndex(i => i.id === id);
         const item = list[index];
         if (!item || item.locked || item.kind === 'prep') return;
-        if (zone === 'tray' && action !== 'again' && alreadyOnDay(item)) return;
-        if (zone === 'tray' && (action === 'add' || action === 'again')) {
-            const copy = clone(item);
-            if (action === 'again') copy.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
-            copy.sourceId = item.sourceId || item.id;
-            const destination = current().items;
-            const photos = destination.findIndex(i => i.id === 'photos');
-            destination.splice(target ?? (photos >= 0 ? photos : destination.length), 0, copy);
-            save();
-            render({id: copy.id, zone: 'day'});
-            announce(positionMessage(copy.id, 'day'));
-            return;
-        }
+        if (zone === 'tray' && action === 'add') { openTransfer(id, zone, 'schedule'); return; }
         let destination = list;
         let at = index;
         if (action === 'add' || action === 'remove') {
@@ -677,6 +744,7 @@ function mount(root, ctx = {}) {
             at = target > index ? target - 1 : target;
         }
         list.splice(index, 1);
+        if (zone === 'tray') { item.preferred = null; delete item.manualTime; delete item.start; delete item.end; }
         if (zone !== 'tray' || !destination.some(existing => existing.id === item.id)) destination.splice(at, 0, item);
         session.open.delete(date + '|' + id);
         save();
@@ -687,10 +755,12 @@ function mount(root, ctx = {}) {
         const item = current().items.find(i => i.id === id);
         if (!item || !lockable(item)) return;
         const shown = lastResult.items.find(i => i.id === id);
+        if (item.locked) { confirmUnlock(item, () => { save(); render({id, zone:'day', action:'lock'}); announce('Unlocked ' + item.title + ' — it moves with the day again.'); }); return; }
         const locked = toggleLock(item, shown);
         save();
         const result = render({id, zone: 'day', action: 'lock'});
         const now = result.items.find(i => i.id === id);
+        if (!locked && editingTime === date + '|' + id) root.querySelector('[data-testid=activity-time-form] [name=start]')?.focus();
         announce(locked ? `Locked ${item.title} at ${now && now.start != null ? range(now.start, now.end) : 'its time'}.` : `Unlocked ${item.title} — it moves with the day again.`);
     }
 
@@ -712,12 +782,17 @@ function mount(root, ctx = {}) {
         if (!b) {
             // A click on the box itself (not a control, link, field or the open panel) toggles it.
             const row = e.target.closest('.db-content [data-db-id][data-db-zone=day]');
-            if (row && !e.target.closest('a,button,input,select,textarea,label,summary,details,.db-detail')) setExpanded(row);
+            if (row && !e.target.closest('a,button,input,select,textarea,label,summary,details,.db-detail,.db-time-editor')) setExpanded(row);
             return;
         }
         const action = b.dataset.dbAction;
         const row = b.closest('[data-db-id]');
-        if (action === 'day') {
+        if (['again','move-day','schedule'].includes(action)) { openTransfer(row.dataset.dbId, row.dataset.dbZone, action);
+        } else if (action === 'edit-time') {
+            openTime(date, row.dataset.dbId);
+        } else if (action === 'close-time') {
+            closeTime();
+        } else if (action === 'day') {
             selectDay(b.dataset.date);
         } else if (action === 'expand') {
             setExpanded(row);
@@ -734,7 +809,7 @@ function mount(root, ctx = {}) {
         } else if (action === 'reset') {
             picked = null;
             formStatus = '';
-            days[date] = {...buildSuggested(date), tray: trayItems()};
+            days[date] = buildSuggested(date);
             save();
             render();
             root.querySelector('[data-testid=db-reset]').focus();
@@ -754,11 +829,21 @@ function mount(root, ctx = {}) {
         }
     });
     root.addEventListener('input', e => {
-        if (e.target.closest('.db-time-editor') && e.target.name === 'end') e.target.dataset.manual = 'true';
+        if (e.target.closest('.db-time-editor') && ['end','duration'].includes(e.target.name)) {
+            e.target.form.dataset.lastManual = e.target.name;
+            if (e.target.name === 'end') e.target.dataset.manual = 'true';
+            e.target.form.querySelector('[data-time-estimate]').textContent = '';
+            if (e.target.name === 'duration' && Number(e.target.value) > 0) {
+                const form = e.target.form, parts = form.elements.start.value.split(':').map(Number);
+                const end = parts[0] * 60 + parts[1] + Number(e.target.value);
+                form.elements.end.value = end < 1440 ? String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0') : '';
+            }
+        }
         if (e.target.closest('.db-time-editor') && e.target.name === 'start') {
             const form = e.target.form, item = current().items.find(i => i.id === form.closest('[data-db-id]').dataset.dbId);
-            if (!form.elements.end.dataset.manual && e.target.value) {
+            if (!form.elements.end.dataset.manual && !form.elements.duration.value && e.target.value) {
                 const [h,m] = e.target.value.split(':').map(Number), end = h*60+m+item.duration;
+                form.querySelector('[data-time-estimate]').textContent = '(estimate from default duration)';
                 form.elements.end.value = String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0');
             }
         }
@@ -780,13 +865,15 @@ function mount(root, ctx = {}) {
             const start = time(form.elements.start.value);
             const durationField = form.elements.duration;
             const endField = form.elements.end;
-            const length = durationField.value ? Number(durationField.value) : endField.dataset.manual ? time(endField.value)-start : item.duration;
+            const explicitDuration = durationField.value && form.dataset.lastManual !== 'end';
+            const length = explicitDuration ? Number(durationField.value) : endField.dataset.manual ? time(endField.value)-start : item.duration;
             if (!Number.isFinite(start) || !Number.isFinite(length) || length <= 0 || start + length > 1440 || !form.checkValidity()) {
                 form.querySelector('[role=alert]').textContent = 'Enter valid times and a positive duration. End must be after start.';
-                form.setAttribute('aria-invalid','true'); return;
+                form.setAttribute('aria-invalid','true');
+                [form.elements.start, endField, durationField].forEach(field => field.setAttribute('aria-invalid','true')); return;
             }
             Object.assign(item,{preferred:start,duration:length,manualTime:true,estimate: !(durationField.value || endField.dataset.manual)});
-            save(); render(); announce('Activity time updated. Travel and prep are estimated separately.');
+            save(); closeTime(); announce('Activity time updated. Travel and prep are estimated separately.');
             return;
         }
         if (!e.target.matches('.db-form')) return;
@@ -881,6 +968,7 @@ function mount(root, ctx = {}) {
         }
         if (handle.hasPointerCapture(pointerId)) handle.releasePointerCapture(pointerId);
         root.classList.remove('db-dragging');
+        root.querySelector('.db-dock-tray')?.classList.remove('db-drag-source');
     }
     function dropTarget(x, y) {
         const hit = document.elementFromPoint(x, y);
@@ -937,6 +1025,7 @@ function mount(root, ctx = {}) {
             drag.indicator.className = 'db-drop-indicator';
             document.body.appendChild(drag.indicator);
             root.classList.add('db-dragging');
+            if (drag.zone === 'tray') root.querySelector('.db-dock-tray')?.classList.add('db-drag-source');
         }
         if (!drag.active) return;
         drag.ghost.style.left = Math.min(e.clientX + 12, window.innerWidth - Math.min(320, window.innerWidth - 24)) + 'px';
@@ -960,7 +1049,7 @@ function mount(root, ctx = {}) {
     root.addEventListener('pointercancel', cancelDrag);
     root.addEventListener('lostpointercapture', () => { if (drag) cancelDrag(); });
     const api = {
-        render, selectDay, renderPrint, root, draftItems: () => clone(draftItems()),
+        render, selectDay, renderPrint, root, openTime, timeInstances, draftItems: () => clone(draftItems()),
         getDay: () => clone(current()),
         date: () => date,
         exportState: () => exportDays(days, flightTime),
@@ -976,6 +1065,8 @@ const active = () => (session.active && session.active.root.isConnected ? sessio
 window.DayBuilder = {buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
     toggleLock, exportDays, importDays, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
+    openTime: (date, id) => active()?.openTime(date, id),
+    timeInstances: identity => active()?.timeInstances(identity) || [],
     selectedDate: () => active()?.date() || session.date,
     exportState: () => {
         if (active()) return active().exportState();
