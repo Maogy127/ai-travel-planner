@@ -83,26 +83,33 @@ assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arri
  assert(content.innerHTML.includes('5:30 PM · Walk ~10 min · arrive 5:40 PM'));
  assert(content.innerHTML.includes('6:40 PM · Walk ~10 min · arrive 6:50 PM'));
  assert(content.innerHTML.includes('6:55 PM · Uber ~20 min · arrive 7:15 PM'));
- assert(content.innerHTML.includes('aria-label="5:40 PM to 6:40 PM"'));
+ assert(content.innerHTML.includes('aria-label="Edit time: 5:40 PM to 6:40 PM"'));
  const click = (action, id, zone='day') => {
   const row = {dataset: {dbId: id, dbZone: zone}};
   const button = {dataset: {dbAction: action}, closest() {return row;}};
   listeners.click({target: {closest() {return button;}}});
  };
- click('add', 'chest-0', 'tray');
- assert(!mounted.getDay().items.some(i=>i.id==='chest-0'));
- click('again', 'chest-0', 'tray');
- const copy=mounted.getDay().items.find(i=>i.id.startsWith('instance-'));
- assert(copy && copy.sourceId===db.trayItems()[0].sourceId);
- assert(db.importDays(mounted.exportState()).days['2026-11-26'].items.some(i=>i.id===copy.id));
- assert(live.textContent.includes('Heads-up:'));
- assert(live.textContent.includes("you'd miss La Mer"));
- assert(content.innerHTML.includes('aria-describedby="db-note-'));
  click('reset');
  click('down', 'photos');
  assert(live.textContent.includes('After dark — sunset ~5:48 PM'));
  assert.equal(rootWrites, 1, 'the live node survives every render');
  assert(mounted.getDay().items.findIndex(i=>i.id==='photos') > mounted.getDay().items.findIndex(i=>i.id==='lamer'));
+ // A title-only add must not match a library item with an omitted sourceId.
+ const added = mounted.addToDay('2026-11-26', {title: 'Unique unscheduled sentinel'});
+ assert.equal(added.ok, true);
+ const custom = mounted.getDay().unscheduled.find(i=>i.id===added.id);
+ assert.equal(custom.title, 'Unique unscheduled sentinel');
+ assert.equal(custom.custom, true);
+ assert.equal(custom.preferred, null);
+ assert.equal(custom.locked, false);
+ assert(!mounted.getDay().items.some(i=>i.id===added.id));
+ assert.equal(mounted.exportState().d['2026-11-26'].u.find(i=>i.id===added.id).title, custom.title);
+ for (const spec of [{chestId: 'chest-bar'}, {sourceId: db.trayItems()[0].sourceId}]) {
+  const base = db.trayItems().find(i=>spec.chestId ? i.id===spec.chestId : i.sourceId===spec.sourceId);
+  const libraryAdd = mounted.addToDay('2026-11-26', {...spec, title: 'Ignored library override'});
+  assert.equal(libraryAdd.ok, true);
+  assert.equal(mounted.getDay().unscheduled.find(i=>i.id===libraryAdd.id).title, base.title);
+ }
 }
 console.log('Mounted rendering and conflict announcements passed.');
 
