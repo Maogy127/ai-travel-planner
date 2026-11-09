@@ -426,13 +426,25 @@
         aside.dataset.bound='1';
         aside.addEventListener('input', function(e){if(e.target&&e.target.dataset.testid==='activity-search')renderLibraryResults(aside, e.target.value);});
         aside.addEventListener('click', function(e){
+            var edit=e.target.closest('[data-testid=activity-edit-time], [data-testid=activity-time-choice]');
+            if(edit){
+                var timeCard=edit.closest('[data-testid=activity-result]');
+                if(edit.dataset.testid==='activity-time-choice'){
+                    window.DayBuilder.openTime(edit.dataset.date, edit.dataset.instance); return;
+                }
+                var timeEntry=libraryEntries().find(function(item){return item.id===timeCard.dataset.id;});
+                var instances=window.DayBuilder.timeInstances(timeEntry.sourceId||timeEntry.id);
+                if(instances.length===1)window.DayBuilder.openTime(instances[0].date,instances[0].id);
+                else timeCard.querySelector('[data-time-choices]').innerHTML='<p>Choose a scheduled instance:</p>'+instances.map(function(i){return '<button type="button" data-testid="activity-time-choice" data-date="'+esc(i.date)+'" data-instance="'+esc(i.id)+'">'+esc(dateLabel(i.date))+' · '+esc(i.time)+'</button>';}).join('');
+                return;
+            }
             var add=e.target.closest('[data-testid=activity-add], [data-testid=activity-add-again]');
             if(!add||add.disabled)return;
             var card=add.closest('[data-testid=activity-result]');
             var entry=libraryEntries().find(function(item){return item.id===card.dataset.id;});
             if(!entry||entry.blocked)return;
             var day=card.querySelector('[data-testid=activity-day]').value;
-            var result=window.DayBuilder.addToDay(day, {chestId:entry.chestId, sourceId:entry.sourceId||entry.id, title:entry.title, place:entry.place, duration:entry.duration, again:add.dataset.testid==='activity-add-again'});
+            var result=window.DayBuilder.addToDay(day, {chestId:entry.chestId, sourceId:entry.sourceId||entry.id, title:entry.title, place:entry.place, duration:entry.duration, time:card.querySelector('[data-testid=activity-add-time]').value, rules:entry.rules, tags:entry.tags});
             var note=card.querySelector('[data-testid=activity-add-note]');
             if(note)note.textContent=result&&result.ok?'Added to the draft. This does not book it or confirm availability.':(result&&result.reason)||'Could not add';
         });
@@ -441,42 +453,62 @@
             if(!card||card.draggable===false){e.preventDefault();return;}
             e.dataTransfer.setData('text/gonow-activity', card.dataset.id);
         });
-        aside.addEventListener('submit', function(e){
-            if(!e.target.matches('[data-testid=add-own-form]'))return;
-            e.preventDefault();
-            var name=aside.querySelector('[data-testid=add-own-name]').value.trim();
-            var day=aside.querySelector('[data-testid=add-own-day]').value;
-            var result=window.DayBuilder.addToDay(day, {title:name, place:'Other', duration:60});
-            aside.querySelector('[data-testid=add-own-note]').textContent=result&&result.ok?'Added to the draft. This does not book it or confirm availability.':(result&&result.reason)||'Add a name';
-        });
+
     }
     function renderLibraryResults(aside, query){
         var q=String(query||'').trim().toLowerCase();
         var all=libraryEntries();
-        var list=all.filter(function(entry){return !q||(entry.title+' '+entry.place).toLowerCase().indexOf(q)>=0;});
+        var list=all.filter(function(entry){return q&&(entry.title+' '+entry.place).toLowerCase().indexOf(q)>=0;});
         var days=state.plan?state.plan.days:[];
         var dayOpts=days.map(function(d){return '<option value="'+esc(d.date)+'">'+esc(dateLabel(d.date))+'</option>';}).join('');
         var host=aside.querySelector('[data-testid=activity-results]');
+        if(!q){host.innerHTML='';return;}
         if(!list.length){
-            host.innerHTML='<p data-testid="activity-no-results">No matches in the on-device library. Add your own below. This is not a failed live search.</p>';
+            host.innerHTML='<p data-testid="activity-no-results">No matches in the on-device library. This is not a live worldwide search.</p>';
             return;
         }
         host.innerHTML=list.map(function(entry){
             var photoSrc=entry.sourceId&&ITEM_PHOTOS[entry.sourceId];
             var img=photoSrc?photo(photoSrc, entry.title, 'library-photo'):'<p class="activity-fallback">'+icon('info')+' '+esc(entry.title)+' in '+esc(entry.place)+'. No verified activity photo.</p>';
             var exists=window.DayBuilder.draftItems().some(function(i){return (i.sourceId||i.id)===(entry.sourceId||entry.id);});
-            return '<article class="library-card" data-testid="activity-result" data-id="'+esc(entry.id)+'" draggable="'+(!entry.blocked&&!exists)+'">'+img+'<h3>'+esc(entry.title)+'</h3><p>'+esc(entry.place)+' · '+(entry.estimate?'~':'')+esc(String(entry.duration))+' min'+(entry.estimate?' estimate':'')+'</p>'+restrictionHTML(entry)+'<label>Day <select data-testid="activity-day">'+dayOpts+'</select></label><button type="button" data-testid="activity-add"'+(entry.blocked||exists?' disabled':'')+'>Add to trip</button>'+(exists?'<p>Already in your plan</p><button type="button" data-testid="activity-add-again"'+(entry.blocked?' disabled':'')+'>Add again</button>':'')+'<p data-testid="activity-add-note"></p></article>';
+            return '<article class="library-card" data-testid="activity-result" data-id="'+esc(entry.id)+'" draggable="'+(!entry.blocked)+'"><h3>'+esc(entry.title)+'</h3>'+(entry.blocked?'<p>'+esc(entry.blocked)+'</p>':'')+'<details><summary>Details</summary>'+img+restrictionHTML(entry)+'</details><label>Day <select data-testid="activity-day">'+dayOpts+'</select></label><label>Optional clock time (AM/PM)<input type="time" data-testid="activity-add-time"></label><button type="button" data-testid="activity-add"'+(entry.blocked?' disabled':'')+'>Add to trip</button>'+(exists?'<button type="button" data-testid="activity-edit-time">Edit scheduled time</button><div data-time-choices></div><button type="button" data-testid="activity-add-again"'+(entry.blocked?' disabled':'')+'>Add again</button>':'')+'<p data-testid="activity-add-note"></p></article>';
+
         }).join('');
         host.querySelectorAll('[data-testid=activity-day]').forEach(function(select){select.value=window.DayBuilder.selectedDate();});
     }
     function ensureLibrary(aside){
         if(!aside.querySelector('[data-testid=activity-search]')){
-            aside.insertAdjacentHTML('afterbegin','<div class="library-search"><h2>Activity treasure chest</h2><p>All activities in your draft and optional library ideas.</p><p data-testid="search-honesty">Search this device’s activity library for your destination. It is not a live worldwide place search. That would need a places provider and an API key, which this page does not use.</p><label>Search activities<input data-testid="activity-search" type="search" placeholder="Try dive, sunset, walk"></label><p>Adding a stop does not book it or confirm availability.</p><div data-testid="activity-results"></div><form data-testid="add-own-form"><label>Add your own<input data-testid="add-own-name" maxlength="100" placeholder="Name"></label><label>Day <select data-testid="add-own-day">'+ (state.plan?state.plan.days:[]).map(function(d){return '<option value="'+esc(d.date)+'">'+esc(dateLabel(d.date))+'</option>';}).join('')+'</select></label><button type="submit">Add your own</button><p data-testid="add-own-note"></p></form></div>');
+            aside.insertAdjacentHTML('afterbegin','<div class="library-search"><p data-testid="search-honesty">Search this device’s activity library for your destination. It is not a live worldwide place search. That would need a places provider and an API key, which this page does not use.</p><label>Search activities<input data-testid="activity-search" type="search" placeholder="Try dive, sunset, walk"></label><div data-testid="activity-results"></div></div>');
             bindLibrary(aside);
         }
+        // The builder replaces the day's tray on every render. Keep its Schedule
+        // controls ahead of search results so they remain reachable in the sheet.
+        var tray=aside.querySelector('[data-testid=db-tray]');
+        var results=aside.querySelector('[data-testid=activity-results]');
+        if(tray)results.before(tray);
         renderLibraryResults(aside, aside.querySelector('[data-testid=activity-search]').value);
-        aside.querySelector('[data-testid=add-own-day]').value=window.DayBuilder.selectedDate();
+
     }
+    function closeActivityTray(){
+        var tray=document.querySelector('.draft-screen .db-dock-tray.is-open');
+        if(!tray)return;
+        tray.classList.remove('is-open');
+        var toggle=get('tray-toggle');
+        toggle.setAttribute('aria-expanded','false');
+        toggle.focus();
+    }
+    document.addEventListener('keydown', function(e){
+        if(e.key!=='Escape' || document.querySelector('dialog[open]'))return;
+        var timeEditorOpen=Array.from(document.querySelectorAll('[data-testid=activity-time-form]')).some(function(form){
+            return form.getClientRects().length>0 && getComputedStyle(form).visibility!=='hidden';
+        });
+        if(timeEditorOpen)return;
+        if(document.querySelector('.draft-screen .db-dock-tray.is-open')){
+            e.preventDefault();
+            e.stopImmediatePropagation();
+            closeActivityTray();
+        }
+    }, true);
     function draftScreen(){
         if(!state.plan){go('home');return;}
         state.viewing='live';
@@ -492,7 +524,17 @@
         ctx.afterRender=function(scope){
             if(previous)previous(scope);
             var aside=db.querySelector('.db-dock-tray');
-            if(aside)ensureLibrary(aside);
+            if(aside){
+                ensureLibrary(aside);
+                if(!aside.querySelector('[data-testid=tray-close]')){
+                    var close=document.createElement('button');
+                    close.type='button';
+                    close.dataset.testid='tray-close';
+                    close.textContent='Close activities';
+                    close.addEventListener('click', closeActivityTray);
+                    aside.prepend(close);
+                }
+            }
             if(draftDirty()){
                 if(!view.querySelector('[data-testid=changes-pending]'))view.querySelector('.draft-screen').insertAdjacentHTML('afterbegin','<p class="banner" data-testid="changes-pending">Changes not yet generated</p>');
             }
@@ -503,9 +545,8 @@
             if(!e.target.closest('[data-testid=db-day-list]'))return;
             e.preventDefault();
             var entry=libraryEntries().find(function(i){return i.id===e.dataTransfer.getData('text/gonow-activity');});
-            if(entry&&!entry.blocked)window.DayBuilder.addToDay(window.DayBuilder.selectedDate(),{chestId:entry.chestId,sourceId:entry.sourceId||entry.id,title:entry.title,place:entry.place,duration:entry.duration});
+            if(entry&&!entry.blocked)window.DayBuilder.addToDay(window.DayBuilder.selectedDate(),{chestId:entry.chestId,sourceId:entry.sourceId||entry.id,title:entry.title,place:entry.place,duration:entry.duration, rules:entry.rules, tags:entry.tags, schedule:true});
         });
-        db.addEventListener('keydown', function(e){if(e.key==='Escape'){var tray=db.querySelector('.db-dock-tray');tray.classList.remove('is-open');get('tray-toggle').setAttribute('aria-expanded','false');get('tray-toggle').focus();}});
         on('generate-plan', function(){
             var list=readTrips();
             var trip=list.find(function(t){return t.id===state.tripId;})||{id:state.tripId, snapshot:null};
