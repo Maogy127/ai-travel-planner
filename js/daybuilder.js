@@ -500,8 +500,12 @@ function mount(root, ctx = {}) {
         const uid = uidFor(on, i.id);
         const src = sourceOf(i, on);
         const hhmm = n => String(Math.floor(n / 60)).padStart(2,'0') + ':' + String(n % 60).padStart(2,'0');
-        const canEditTime = !ctx.shared && !tray && !print && !i.textTime && !i.flight && i.kind !== 'prep' && i.kind !== 'travel';
-        const editor = canEditTime && editingTime === on + '|' + i.id ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><p>${i.locked ? 'Unlock first to edit this activity’s time.' : 'Edit scheduled time'}</p><fieldset ${i.locked ? 'disabled' : ''}><legend>Activity time</legend><label>Start<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>End <span data-time-estimate>${i.estimate ? '(estimate from default duration)' : ''}</span><input name="end" type="time" value="${hhmm(i.end)}"></label><label>Duration (minutes)<input name="duration" type="number" min="1" placeholder="${i.duration}"></label><button>Save activity time</button></fieldset><p role="alert" data-testid="activity-time-error"></p><button type="button" data-db-action="close-time">Close time editor</button></form>` : '';
+        const canEditTime = !ctx.shared && !tray && !print && !i.textTime && !i.flight && i.kind !== 'prep';
+        const travelTime = i.kind === 'travel';
+        // Reuse persisted manualTime/estimate and duration; explicit arrival is start + duration.
+        const arrivalEstimate = travelTime && (!i.manualTime || i.estimate);
+        const showArrivalEstimate = travelTime && i.manualTime && i.estimate;
+        const editor = canEditTime && editingTime === on + '|' + i.id ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><p>${i.locked ? 'Unlock first to edit this activity’s time.' : travelTime ? 'Edit departure time' : 'Edit scheduled time'}</p><fieldset ${i.locked ? 'disabled' : ''}><legend>${travelTime ? 'Travel time' : 'Activity time'}</legend><label>${travelTime ? 'Departure' : 'Start'}<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>${travelTime ? 'Arrival' : 'End'} <span data-time-estimate>${travelTime ? (arrivalEstimate ? '(est. from travel duration)' : '') : i.estimate ? '(estimate from default duration)' : ''}</span><input name="end" type="time" ${travelTime && !arrivalEstimate ? 'data-manual="true"' : ''} value="${hhmm(i.end)}"></label><label ${travelTime ? 'hidden' : ''}>Duration (minutes)<input name="duration" type="number" min="1" placeholder="${i.duration}"></label><button>${travelTime ? 'Save departure time' : 'Save activity time'}</button></fieldset><p role="alert" data-testid="activity-time-error"></p><button type="button" data-db-action="close-time">Close time editor</button></form>` : '';
         const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (ctx.ages || [18,19]).some(age => Number(age) < r.minAge)) : null;
         const detail = (ctx.detail ? ctx.detail(src, on, i) : '') + (tray ? (i.rules || []).map(r => `<p>${esc(r.text || r)}</p>`).join('') : '');
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
@@ -524,7 +528,7 @@ function mount(root, ctx = {}) {
             : `<strong id="db-title-${uid}">${esc(title)}</strong><small>${placeText}</small>`;
         const lockedLabel = i.userLocked ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
-            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? flightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end))}">${i.flight ? esc(flightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}</span>`}</${canEditTime ? 'button' : 'div'}>`}
+            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? flightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight ? esc(flightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
             <div class="db-activity" data-testid="db-activity">
                 ${heading}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
                 ${i.flight && !print ? `<label>Flight time<input type="time" aria-label="Flight time" data-testid="db-flight-time" value="${flightTime ? String(Math.floor(parse(flightTime) / 60)).padStart(2, '0') + ':' + String(parse(flightTime) % 60).padStart(2, '0') : ''}"></label>` : ''}
@@ -843,8 +847,8 @@ function mount(root, ctx = {}) {
             const form = e.target.form, item = current().items.find(i => i.id === form.closest('[data-db-id]').dataset.dbId);
             if (!form.elements.end.dataset.manual && !form.elements.duration.value && e.target.value) {
                 const [h,m] = e.target.value.split(':').map(Number), end = h*60+m+item.duration;
-                form.querySelector('[data-time-estimate]').textContent = '(estimate from default duration)';
-                form.elements.end.value = String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0');
+                form.querySelector('[data-time-estimate]').textContent = item.kind === 'travel' ? '(est. from travel duration)' : '(estimate from default duration)';
+                form.elements.end.value = end < 1440 ? String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0') : '';
             }
         }
     });
@@ -873,7 +877,7 @@ function mount(root, ctx = {}) {
                 [form.elements.start, endField, durationField].forEach(field => field.setAttribute('aria-invalid','true')); return;
             }
             Object.assign(item,{preferred:start,duration:length,manualTime:true,estimate: !(durationField.value || endField.dataset.manual)});
-            save(); closeTime(); announce('Activity time updated. Travel and prep are estimated separately.');
+            save(); closeTime(); announce(item.kind === 'travel' ? 'Departure time updated.' : 'Activity time updated. Travel and prep are estimated separately.');
             return;
         }
         if (!e.target.matches('.db-form')) return;

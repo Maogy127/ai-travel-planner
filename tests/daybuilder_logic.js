@@ -156,3 +156,19 @@ assert(sunsetPhoto.notes.some(n=>n.includes('After dark')));
 assert(sunsetPhoto.notes.some(n=>n.includes('Overlaps')));
 assert.deepEqual([sunsetResult.items.find(i=>i.id==='lamer').start,sunsetResult.items.find(i=>i.id==='lamer').end],[1170,1290]);
 assert(sunsetResult.items.some(i=>i.travel || i.kind==='prep'));
+
+// Travel departures reuse manual activity reflow and compact share persistence.
+{
+ const day=db.buildSuggested('2026-11-27');
+ const automatic=db.reflow(day).items.find(i=>i.id==='uber-home');
+ Object.assign(day.items.find(i=>i.id==='uber-kahala'),{preferred:1080,duration:30,manualTime:true,estimate:true});
+ const result=db.reflow(day), ride=result.items.find(i=>i.id==='uber-kahala');
+ assert.deepEqual([ride.start,ride.end],[1080,1110]);
+ assert(ride.notes.some(n=>n.includes('Overlaps')));
+ assert.deepEqual(result.items.filter(i=>i.id==='senia').map(i=>[i.start,i.end]),[[1080,1200]]);
+ assert.equal(result.items.find(i=>i.id==='prep-senia').start,1110);
+ assert.equal(result.items.find(i=>i.id==='uber-home').start,automatic.start);
+ const restored=db.importDays(db.exportDays({'2026-11-27':day},''));
+ assert.deepEqual(db.reflow(restored.days['2026-11-27']).items.map(i=>[i.start,i.end]),result.items.map(i=>[i.start,i.end]));
+ console.log('Travel departure reflow and persistence passed.');
+}
