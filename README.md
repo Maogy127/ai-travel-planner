@@ -66,3 +66,10 @@ on touch screens. Builder edits save under
 Planning estimates and warnings require checking routes and actual reservations.
 Run `node tests/daybuilder_logic.js` from the project root for pure scheduling
 checks, and `python3 tests/shots_daybuilder.py` for the ten builder screenshots.
+
+In Draft, click a travel time box to edit its departure. Arrival updates from the
+travel duration and shows “est.” until you explicitly edit the arrival. Saved
+departures reflow following unlocked items; locked bookings stay fixed and any
+conflicts show heads-up notes. Prep stays automatic and flights use their own input.
+Run `python3 tests/test_travel_time.py` for travel UI and versioned-asset checks
+(on its own HTTP port 8817).
