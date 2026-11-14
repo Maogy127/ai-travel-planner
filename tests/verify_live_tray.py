@@ -1,3 +1,4 @@
+from test_full import card_action
 """Draft coverage for the unmocked GitHub Pages site.
 
 Run python3 tests/verify_live.py for existing and draft live checks together.
@@ -69,7 +70,7 @@ async def verify_draft(browser, url, ok):
             before = await ids()
             # Exercise native disabled click and the pointer path without bypassing the guard.
             await card.get_by_test_id('db-add').evaluate('e=>e.click()')
-            handle = card.get_by_test_id('db-handle')
+            handle = (await card_action(pg, card, 'db-handle'))
             await handle.dispatch_event('pointerdown', {'button': 0, 'pointerId': 1, 'clientX': 400, 'clientY': 400})
             await pg.mouse.move(600, 300, steps=8)
             await pg.mouse.up()
@@ -80,7 +81,7 @@ async def verify_draft(browser, url, ok):
                 ok('draft parasail real source is 2026-11-28-7', source == '2026-11-28-7')
             originals = await pg.evaluate('(s)=>DayBuilder.draftItems().filter(i=>(i.sourceId||i.id)===s)', source)
             ok('draft chest has original scheduled copy ' + chest_id, len(originals) == 1)
-            await card.get_by_test_id('db-add-again').click()
+            await (await card_action(pg, card, 'db-add-again')).click()
             copies = await pg.evaluate('(ids)=>DayBuilder.draftItems().filter(i=>!ids.includes(i.id))', before)
             valid = len(copies) == 1 and copies[0]['id'].startswith('instance-') and copies[0]['sourceId'] == source
             ok('draft Add again unique id and real source ' + chest_id, valid, str(copies))
@@ -88,7 +89,7 @@ async def verify_draft(browser, url, ok):
                 raise AssertionError('Cannot continue instance lifecycle without one valid copy')
             instance = copies[0]['id']
             await roundtrip(instance, source, True)
-            await day.locator('[data-db-id="' + instance + '"]').get_by_test_id('db-remove').click()
+            await (await card_action(pg, day.locator('[data-db-id="' + instance + '"]'), 'db-remove')).click()
             await roundtrip(instance, source, False)
             ok('draft original still guards chest after instance removal ' + chest_id, await card.get_by_test_id('db-add').is_disabled())
             for original in originals:
@@ -97,7 +98,7 @@ async def verify_draft(browser, url, ok):
                 if original_day is None:
                     raise AssertionError('Cannot find scheduled day for original ' + original['id'])
                 await select(original_day)
-                await day.locator('[data-db-id="' + original['id'] + '"]').get_by_test_id('db-remove').click()
+                await (await card_action(pg, day.locator('[data-db-id="' + original['id'] + '"]'), 'db-remove')).click()
             await select('2026-11-26')
             chest = await chest_open()
             ok('draft last copy removal reenables chest ' + chest_id,
@@ -156,7 +157,7 @@ async def verify_draft(browser, url, ok):
             order = await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
             if order.index('photos') > order.index('lamer'):
                 break
-            await photos.get_by_test_id('db-down').click()
+            await (await card_action(pg, photos, 'db-down')).click()
         draft_ics = await pg.evaluate('window.__gonow.buildICS()')
         ok('draft changed export follows reorder', '20261126T220000' in draft_ics and '20261126T174000' not in draft_ics)
         await pg.get_by_test_id('logo').click()

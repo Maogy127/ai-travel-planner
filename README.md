@@ -97,7 +97,7 @@ Diet labels use only dedicated `tags` values or explicit “vegan options”,
 “vegetarian menu” (and equivalent selected-diet meals/dishes) wording in an item's
 own `title`/`desc`. A generated title repeating the user's cuisine choice is not
 confirmation. The current Oahu/catalog/engine meals contain no such dietary
-claims: they show “Diet info not confirmed — check the menu”. No ingredients,
+claims: they show no diet tags. Tags appear only with confirmed data. No ingredients,
 allergen safety or restaurant suitability are inferred. `GoNowDiet.match` is pure;
 explicitly supported meal suggestions sort first in the activity library, retaining
 order otherwise. Free-text food notes are saved for reference, not interpreted as
@@ -106,3 +106,56 @@ verified menu facts.
 Supervisor browser regressions: `tests/test_pace.py` (8833) and
 `tests/test_wellness_questions.py` (8834), each at 1280 and 390 pixels.
 Node checks: `node tests/test_rings.js`, `node tests/test_diet.js`.
+
+## v2 preview
+
+Home controls put pace first, activity chips second, and destination/voice/language
+and Start planning last. The optional pace question uses the same four choices;
+`normalizePace` alone derives legacy engine pace (Gentle → Easy, Active → Moderate,
+Athlete → Full-on, Not sure → Moderate). Saved answers without level migrate
+Easy → Gentle, Moderate → Active, Full-on → Athlete. Sleep remains optional.
+
+Ring estimates count only explicit wellness metadata or conservative title/description
+keywords. Travel, prep, meal and stay blocks never count. Generic tours, vehicle
+sightseeing, shopping, photos and free time count zero; incidental walking in a
+photo/tour description is not a movement session. Walk/stroll weight 0.5;
+hike, swim, surf, cycle/bike, class, yoga, pilates, easy run/jog weight 1;
+tempo/interval run, strength/gym/weights and steep hike weight 1.5.
+Movement credit is duration × weight capped at 90 minutes per block.
+Spa, massage, stretch, meditation, breathwork, nap and sauna credit duration capped
+at 60 minutes; pool/beach downtime is capped at 30 minutes. Kind alone supplies
+no wellness credit. Oahu source-backed wellness metadata survives DayBuilder copies.
+Diamond Head is a 1.0 hike (stairs/tunnels, about 1.5 hours); steep Lanikai Pillbox
+is 1.5; the paved Makapuʻu walk is 0.5. Each ring set has a tap/keyboard breakdown.
+
+Actual DayBuilder Nov 26: Movement **150 → 90 minutes**, Recovery **120 → 30 minutes**.
+Diamond Head 90 × 1 = 90 (block cap 90); Kualoa safari truck, transfers, meals,
+prep and sunset photos = 0. Kahala pool/beach downtime 120 → cap 30.
+Sleep stays **8 h 15 m**. `tests/test_rings.js` computes this from the actual reflowed
+DayBuilder items and next day, and tests caps. `tests/test_ring_breakdown.py` uses
+port 8835 at 1280 and 390 pixels for click and Enter behavior.
+
+DayBuilder cards keep time editing, thumbnails, lock state and lock toggles visible.
+More holds drag/reorder/archive/copy/move-day actions, with native keyboard opening,
+arrow navigation, Escape focus return, Tab dismissal and outside-click dismissal.
+The drag handle retains pointer and Space/arrow/Space reordering. Browser layout,
+coarse targets and interactions need supervisor verification; Playwright was not
+run in this sandbox. Existing assertion/interaction edits are listed in TEST-CHANGES.md.
+
+Morning check-ins and sweet moments are optional, device-local records in
+`gonow.checkin.v1` and `gonow.moments.v1`: date → stable traveler index ID → record.
+Done or skipped check-ins collapse to one line and never prompt again. Voice input
+uses the browser's existing Web Speech service, with English and Chinese parsing;
+recognition availability and microphone permission depend on the browser.
+
+Day ring goal precedence: an explicit day pace overrides every traveler's trip
+pace for that day. “Same as trip” uses each traveler's own pace. Then that
+traveler's low energy, some/a lot of soreness, or poor sleep multiplies the
+movement goal by **0.6**, adds **15 minutes** to recovery, and leaves sleep
+unchanged. These are planning estimates, not medical advice. Skipped check-ins
+leave goals unchanged. Suggestions require an explicit Swap/Add; Keep plan/No
+thanks dismisses them persistently. Locks are always preserved. Solo swaps use
+DayBuilder's persisted update path; group swaps store a personal alternative,
+show it on the card, and score it for that traveler without editing the shared
+schedule. High energy offers a 30-minute optional run if soreness and poor sleep
+are absent. Sweet moments appear by day and in “Your sweet moments.”

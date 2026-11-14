@@ -1,3 +1,4 @@
+from test_full import card_action
 """Home, draft tray, on-device search, restrictions, and finished-plan isolation."""
 import asyncio, sys
 from pathlib import Path
@@ -53,7 +54,7 @@ async def flow(b, base):
   for _ in range(8):
     ids = await pg.get_by_test_id('db-day-list').locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
     if ids.index('photos')>ids.index('lamer'): break
-    await pg.get_by_test_id('db-day-list').locator('[data-db-id=photos]').get_by_test_id('db-down').click()
+    await (await card_action(pg, pg.get_by_test_id('db-day-list').locator('[data-db-id=photos]'), 'db-down')).click()
   ok('draft shows pending changes', await pg.get_by_test_id('changes-pending').is_visible())
   draft_ics = await pg.evaluate("window.__gonow.buildICS()")
   ok('draft export follows reorder', '20261126T220000' in draft_ics and '20261126T174000' not in draft_ics)

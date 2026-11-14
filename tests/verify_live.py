@@ -1,3 +1,4 @@
+from test_full import card_action
 # Unmocked live verification of the day builder on GitHub Pages + screenshots.
 import asyncio, json, time, sys
 from verify_live_tray import verify_draft
@@ -49,7 +50,7 @@ async def one(b,w,name):
     return await pg.evaluate("(()=>{const s=JSON.parse(localStorage.getItem('gonow:daybuilder:oahu-demo-2026-11')||'null');return s&&s.days['2026-11-26']?s.days['2026-11-26'].items.map(i=>i.id):null})()")
   before=await vis()
   # keyboard move: pick up free time, move down one, drop
-  free=day.locator('.db-pair:not(.db-locked)').filter(has_text='Free time').get_by_test_id('db-handle')
+  free=(await card_action(pg, day.locator('.db-pair:not(.db-locked)').filter(has_text='Free time'), 'db-handle'))
   await free.focus();await pg.keyboard.press('Space');await pg.keyboard.press('ArrowDown');await pg.keyboard.press('Space')
   after=await ids()
   ok(f'{name} keyboard move',after and after.index('free')==after.index('return-hotel')+1 or (after and after.index('free')>before.index('free')),str(after))
@@ -57,7 +58,7 @@ async def one(b,w,name):
   await pg.wait_for_timeout(300)
   ok(f'{name} reset restores',await vis()==before)
   # pointer drag: photos handle onto first item
-  h=day.locator('[data-db-id=photos]').get_by_test_id('db-handle');tgt=day.locator('[data-db-id=free]')
+  h=(await card_action(pg, day.locator('[data-db-id=photos]'), 'db-handle'));tgt=day.locator('[data-db-id=free]')
   await h.evaluate("e=>e.scrollIntoView({block:'center'})")
   o=await h.bounding_box();d=await tgt.bounding_box()
   if d['y']<120: await tgt.evaluate("e=>e.scrollIntoView({block:'center'})");o=await h.bounding_box();d=await tgt.bounding_box()
@@ -67,7 +68,7 @@ async def one(b,w,name):
   ok(f'{name} pointer drag move',dragged and dragged.index('photos')<dragged.index('free'),str((dragged,shown)))
   await pg.get_by_test_id('db-reset').click();await pg.wait_for_timeout(300)
   # conflict: move photos down past La Mer -> after dark / miss
-  for _ in range(2): await day.locator('[data-db-id=photos]').get_by_test_id('db-down').click()
+  for _ in range(2): await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
   c=await day.locator('.db-conflict').count()
   ok(f'{name} conflict shows',c>0 and 'After dark' in await day.inner_text(),str(c))
   await pg.get_by_test_id('db-reset').click()
@@ -80,7 +81,7 @@ async def one(b,w,name):
   ok(f'{name} 11/27 zero conflicts',await day.locator('.db-conflict').count()==0)
   senia=day.locator('[data-db-id=senia]')
   ok(f'{name} 11/27 Senia locked with unlock control','Locked' in await senia.inner_text() and await senia.locator('[data-db-action=handle],[data-db-action=up],[data-db-action=down],[data-db-action=remove]').count()==0 and await senia.get_by_test_id('db-lock').get_attribute('aria-pressed')=='true' and await senia.get_by_test_id('db-lock').get_attribute('aria-label')=='Unlock time')
-  await day.locator('[data-db-id=uber-kahala]').get_by_test_id('db-up').click()
+  await (await card_action(pg, day.locator('[data-db-id=uber-kahala]'), 'db-up')).click()
   notes=await day.get_by_test_id('db-note').all_text_contents()
   ok(f'{name} 11/27 reorder warns, lock holds',any(n.endswith("you'd miss Senia") for n in notes) and await senia.get_by_test_id('db-time').text_content()=='6:00 PM–8:00 PM',str(notes))
   await pg.get_by_test_id('db-reset').click();await pg.wait_for_timeout(300)
@@ -100,7 +101,7 @@ async def one(b,w,name):
   for _ in range(8):
     ids=await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
     if 'photos' in ids and 'lamer' in ids and ids.index('photos')>ids.index('lamer'): break
-    await day.locator('[data-db-id=photos]').get_by_test_id('db-down').click()
+    await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
   photo=await day.locator('[data-db-id=photos]').get_by_test_id('db-time').evaluate('e=>e.textContent')
   ics=await pg.evaluate("window.__gonow.buildICS().replace(/\\r\\n /g,'')")
   text=await pg.evaluate('window.__gonow.planText()')

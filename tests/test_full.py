@@ -10,6 +10,14 @@ SITE=ROOT/'site' if (ROOT/'site'/'index.html').exists() else ROOT
 results=[]; errors=[]
 def ok(name, cond, extra=''):
   results.append((name, bool(cond), extra)); print(('PASS' if cond else 'FAIL'), name, extra)
+async def card_action(pg, card_locator, testid):
+  more = card_locator.get_by_test_id('db-more')
+  if await more.count() and await more.get_attribute('aria-expanded') != 'true':
+    await more.click()
+  if testid == 'db-add-again': return card_locator.locator('[data-db-action=again]')
+  if testid == 'db-move-day': return card_locator.locator('[data-db-action=move-day]')
+  return card_locator.get_by_test_id(testid)
+
 async def overflow(pg): return await pg.evaluate('document.documentElement.scrollWidth > window.innerWidth')
 async def open_for(loc):
   await loc.evaluate("e=>{const tile=e.closest('[data-testid=tile]');if(tile){const b=tile.querySelector('[data-testid=tile-toggle]');if(b.getAttribute('aria-expanded')!=='true')b.click();}const d=e.closest('.db-detail');if(d&&d.hidden){const x=document.querySelector('[aria-controls=\"'+d.id+'\"]');if(x)x.click();}}")
@@ -240,7 +248,7 @@ async def run(base, label, shots):
     ok(f'{label} personal Q food shown', 'eat' in (await pg.locator('h1').inner_text()).lower())
     if shots: pass
     await pg.locator('[data-testid^=opt-]').first.click(); await pg.get_by_test_id('q-continue').click()
-    await pg.locator('[data-testid^=opt-]').nth(1).click(); await pg.get_by_test_id('q-continue').click()
+    await pg.locator('[data-testid=pace-option][data-value=active]').check(); await pg.get_by_test_id('q-continue').click()
     await pg.get_by_test_id('mustdos').fill('Birthday dinner 11/26 7:30 PM'); await pg.get_by_test_id('stay').fill('The Kahala Hotel & Resort')
     await pg.get_by_test_id('q-continue').click()
     await pg.get_by_test_id('age-rules').wait_for(state='attached', timeout=10000)
@@ -350,7 +358,7 @@ async def run(base, label, shots):
     await extra(b, base, label); await b.close()
 async def batch_a_checks(b,base,label):
   ctx,pg=await new(b,base,360,780)
-  ok(f'{label} fresh rank Getting started', 'Getting started' in await pg.get_by_test_id('rank-badge').inner_text())
+  ok(f'{label} header progress badge absent', await pg.get_by_test_id('rank-badge').count()==0)
   await answer(pg,'Oahu')
   await pg.get_by_test_id('fork-no').click(); await pg.get_by_test_id('age-rules').wait_for(state='attached')
   ok(f'{label} print button and screen stamp hidden', await pg.get_by_test_id('print-plan').is_visible() and not await pg.get_by_test_id('stamped-footer').is_visible())
@@ -389,14 +397,10 @@ async def batch_a_checks(b,base,label):
   await pg.get_by_test_id('share-link').click(); url=await pg.get_by_test_id('share-url').input_value()
   ok(f'{label} share URL compact and excludes packing', len(url)<4000 and '#trip=j.' in url)
   await pg.get_by_test_id('modal-0').click()
-  rank_text=await pg.get_by_test_id('rank-badge').inner_text()
-  ok(f'{label} real actions increase rank', 'Getting started' not in rank_text)
-  await pg.get_by_test_id('rank-badge').click()
-  ok(f'{label} rank details list earned actions', await pg.get_by_test_id('rank-details').is_visible() and 'Downloaded a calendar' in await pg.locator('#sheet').inner_text() and 'Created a share link' in await pg.locator('#sheet').inner_text())
-  await pg.get_by_test_id('modal-0').click(); await pg.reload(); await reopen(pg); await pg.get_by_test_id('age-rules').wait_for(state='attached')
-  ok(f'{label} rank persists on reload', await pg.get_by_test_id('rank-badge').inner_text()==rank_text)
+  await pg.reload(); await reopen(pg); await pg.get_by_test_id('age-rules').wait_for(state='attached')
+  ok(f'{label} progress badge absent after reload', await pg.get_by_test_id('rank-badge').count()==0)
   await pg.get_by_test_id('start-over').click()
-  ok(f'{label} Start over preserves rank', await pg.get_by_test_id('rank-badge').inner_text()==rank_text)
+  ok(f'{label} progress badge absent after Start over', await pg.get_by_test_id('rank-badge').count()==0)
   await ctx.close()
   # Fresh recipient: no saved trip should be written before adoption.
   ctx,pg=await new(b,base)
@@ -601,10 +605,10 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db free disappears',await day.locator('[data-db-id=free]').count()==0)
   ok(label+' db parasail late connector','Uber ~20 min · leave by 6:55 PM' in await day.inner_text() and await locked.locator('.db-note').count()==0)
   before=await raw_ids()
-  await db_pointer(pg,day.locator('[data-db-id="'+instance+'"]').get_by_test_id('db-handle'),day.locator('[data-db-id=return-hotel]'),after=True)
+  await db_pointer(pg,(await card_action(pg, day.locator('[data-db-id="'+instance+'"]'), 'db-handle')),day.locator('[data-db-id=return-hotel]'),after=True)
   wanted=before.copy();wanted.remove(instance);wanted.insert(wanted.index('free'),instance)
   got=await raw_ids();ok(label+' db pointer reorders exact',got==wanted,str((before,got,wanted)))
-  handle=day.locator('[data-db-id="'+instance+'"]').get_by_test_id('db-handle')
+  handle=(await card_action(pg, day.locator('[data-db-id="'+instance+'"]'), 'db-handle'))
   # After moving before free time, the flexible row can disappear. Use raw order
   # from the saved intent when asserting movement of exactly one slot.
   before=await raw_ids()
@@ -639,11 +643,11 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db late connector',await day.locator('.db-travel-late').inner_text()=='Uber ~20 min · leave by 6:55 PM')
   # Start from suggested order so photos is directly before the locked dinner.
   await pg.get_by_test_id('db-reset').click()
-  await day.locator('[data-db-id=photos]').get_by_test_id('db-down').click()
+  await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
   ok(label+' db move past locked',(await raw_ids()).index('photos')>(await raw_ids()).index('lamer') and await day.locator('[data-db-id=photos]').get_by_test_id('db-time').text_content()=='10:00 PM–11:00 PM' and await locked.get_by_test_id('db-time').text_content()=='7:30 PM–9:30 PM')
   ok(label+' db afterdark button','After dark — sunset ~5:48 PM' in await day.locator('[data-db-id=photos]').inner_text())
   await pg.get_by_test_id('db-reset').click()
-  handle=day.locator('[data-db-id=photos]').get_by_test_id('db-handle')
+  handle=(await card_action(pg, day.locator('[data-db-id=photos]'), 'db-handle'))
   await handle.focus();await pg.keyboard.press('Space');await pg.keyboard.press('ArrowDown');await pg.keyboard.press('Space')
   ok(label+' db afterdark keyboard','After dark — sunset ~5:48 PM' in await day.locator('[data-db-id=photos]').inner_text())
   edited=await timeline();await pg.reload(); await reopen(pg); await pg.get_by_test_id('db-root').wait_for()
@@ -659,7 +663,7 @@ async def daybuilder_checks(b,base,label,shots):
   booking=day.locator('.db-locked[data-db-id^=custom-]').filter(has_text='Harbor reservation')
   ok(label+' db custom booking','10:00 PM–11:00 PM' in await booking.text_content() and 'Locked' in await booking.inner_text())
   ok(label+' db booking focus',await booking.evaluate('e=>e.contains(document.activeElement)'))
-  await booking.get_by_test_id('db-delete').click()
+  await (await card_action(pg, booking, 'db-delete')).click()
   ok(label+' db delete focus',await pg.evaluate("document.activeElement.matches('[data-testid=db-booking-toggle], [data-db-id], [data-db-id] button')"))
   ok(label+' db delete booking',await booking.count()==0)
   await pg.get_by_test_id('db-reset').click()
@@ -668,7 +672,7 @@ async def daybuilder_checks(b,base,label,shots):
   await pg.set_viewport_size({'width':390,'height':844})
   await pg.get_by_test_id('db-tray-toggle').click()
   await add_reflow_fixture(pg, 'chest-1')
-  await day.locator('[data-db-id^=instance-]').last.get_by_test_id('db-up').tap()
+  await (await card_action(pg, day.locator('[data-db-id^=instance-]').last, 'db-up')).tap()
   if not await pg.get_by_test_id('db-booking-form').is_visible(): await pg.get_by_test_id('db-booking-toggle').click()
   ok(label+' db mobile booking button',await pg.get_by_test_id('db-booking-add').evaluate('e=>{const r=e.getBoundingClientRect();return r.height>=40&&r.height<=48&&Math.abs(r.width-e.parentElement.clientWidth)<2}'))
   ok(label+' db mobile usable',not await overflow(pg))
@@ -733,12 +737,12 @@ async def merged_checks(b,base,label,shots):
   await free.get_by_test_id('db-lock').click()
   await pg.get_by_test_id('unlock-accept').click()
   photos=day.locator('[data-db-id=photos]')
-  await photos.get_by_test_id('db-up').click(); await photos.get_by_test_id('db-down').click()
+  await (await card_action(pg, photos, 'db-up')).click(); await (await card_action(pg, photos, 'db-down')).click()
   ok(label+' up/down do not toggle',await photos.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false')
   await pg.get_by_test_id('db-reset').click()
   await photos.get_by_test_id('db-expand').click()
   ok(label+' open before drag',await photos.get_by_test_id('db-expand').get_attribute('aria-expanded')=='true')
-  await db_pointer(pg,photos.get_by_test_id('db-handle'),day.locator('[data-db-id=return-hotel]'))
+  await db_pointer(pg,(await card_action(pg, photos, 'db-handle')),day.locator('[data-db-id=return-hotel]'))
   order=await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
   moved=day.locator('[data-db-id=photos]')
   ok(label+' drag does not leave box expanded',order.index('photos')<order.index('return-hotel') and await moved.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false' and not await moved.get_by_test_id('db-detail').is_visible(),str(order))
@@ -748,7 +752,7 @@ async def merged_checks(b,base,label,shots):
   n=await rows.count(); locks=day.get_by_test_id('db-lock')
   ok(label+' lock toggle on every box',n>5 and await locks.count()==n,f'{n} rows {await locks.count()} locks')
   ok(label+' lock toggle 44px padlock',await locks.evaluate_all("es=>es.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44&&e.querySelector('svg')&&['true','false'].includes(e.getAttribute('aria-pressed'))})"))
-  ok(label+' lock sits with move buttons',await day.locator('[data-db-id=free] .db-controls').evaluate("e=>['handle','up','down','remove','lock'].every(a=>e.querySelector('[data-db-action='+a+']'))"))
+  ok(label+' lock and move menu share card',await day.locator('[data-db-id=free]').evaluate("e=>!!e.querySelector('.db-controls [data-db-action=lock]')&&!!e.querySelector('.db-controls [data-testid=db-more]')&&['handle','up','down','remove'].every(a=>e.querySelector('[data-testid=db-more-menu] [data-db-action='+a+']'))"))
   lamer=day.locator('[data-db-id=lamer]').get_by_test_id('db-lock')
   ok(label+' booking starts locked',await lamer.get_attribute('aria-pressed')=='true' and await lamer.get_attribute('aria-label')=='Unlock time')
   ok(label+' open box starts unlocked',await free.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await free.get_by_test_id('db-lock').get_attribute('aria-label')=='Lock time')
@@ -769,7 +773,7 @@ async def merged_checks(b,base,label,shots):
   for _ in range(4):
     o=await order27()
     if o.index('lunch-1127')<o.index('dive-1127'): break
-    await day.locator('[data-db-id=lunch-1127]').get_by_test_id('db-up').click()
+    await (await card_action(pg, day.locator('[data-db-id=lunch-1127]'), 'db-up')).click()
   o=await order27()
   notes=' '.join(await day.get_by_test_id('db-note').all_text_contents())
   ok(label+' reorder works around lock',o.index('lunch-1127')<o.index('dive-1127') and await t('dive-1127')==before,str(o))
@@ -801,7 +805,7 @@ async def merged_checks(b,base,label,shots):
   await senia.get_by_test_id('db-lock').click()
   await pg.get_by_test_id('unlock-accept').click()
   ok(label+' booking can be unlocked',await senia.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await senia.get_by_test_id('db-up').count()==1 and not await senia.evaluate("e=>e.classList.contains('db-locked')"))
-  o0=await order27(); s0=await t('senia'); await senia.get_by_test_id('db-up').click()
+  o0=await order27(); s0=await t('senia'); await (await card_action(pg, senia, 'db-up')).click()
   o=await order27(); ok(label+' unlocked booking moves',o.index('senia')==o0.index('senia')-1,f'{o0} -> {o}')
   await pg.get_by_test_id('db-reset').click()
   ok(label+' reset restores default locks',await day.locator('[data-db-id=senia]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='true' and await day.locator('[data-db-id=dive-1127]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await t('senia')=='6:00 PM–8:00 PM' and await t('dive-1127')==before)
@@ -865,7 +869,7 @@ async def daybuilder_round5_checks(b,base,label):
   ok(label+' db flight early warns','Keep 24 hrs between diving and flying' in await day.inner_text())
   await ctx.close()
   ctx,pg=await db_open(b,base,390,'reduce')
-  await pg.get_by_test_id('db-day-list').locator('[data-db-id=photos]').get_by_test_id('db-down').click()
+  await (await card_action(pg, pg.get_by_test_id('db-day-list').locator('[data-db-id=photos]'), 'db-down')).click()
   photo=pg.get_by_test_id('db-day-list').locator('[data-db-id=photos]')
   ok(label+' db afterdark reduced motion','After dark' in await photo.inner_text() and not await photo.evaluate("e=>e.classList.contains('db-shake')"))
   await ctx.close()
@@ -894,7 +898,7 @@ async def daybuilder_senia_checks(b,base,label):
     ok(tag+' Senia keyboard immovable',await senia_time()=='6:00 PM–8:00 PM' and 'Locked booking' in await pg.get_by_test_id('db-live').inner_text())
     if await senia.get_by_test_id('db-expand').get_attribute('aria-expanded')=='true': await pg.keyboard.press('Space')
     # Reorder: the hotel Uber before shopping pushes the afternoon past 6:00.
-    await day.locator('[data-db-id=uber-kahala]').get_by_test_id('db-up').click()
+    await (await card_action(pg, day.locator('[data-db-id=uber-kahala]'), 'db-up')).click()
     notes=await day.get_by_test_id('db-note').all_text_contents()
     ok(tag+' reorder conflict',any(n.endswith("you'd miss Senia") for n in notes),str(notes))
     ok(tag+' reorder lock stays',await senia_time()=='6:00 PM–8:00 PM' and await senia.get_by_test_id('db-note').count()==0)
@@ -906,7 +910,7 @@ async def daybuilder_senia_checks(b,base,label):
     await add_reflow_fixture(pg, 'chest-1')
     ok(tag+' add after dinner clear',await day.locator('.db-conflict').count()==0 and await senia_time()=='6:00 PM–8:00 PM')
     instance=await day.locator('[data-db-id^=instance-]').last.get_attribute('data-db-id')
-    tgt=day.locator('[data-db-id=uber-kahala]');h=day.locator('[data-db-id="'+instance+'"]').get_by_test_id('db-handle')
+    tgt=day.locator('[data-db-id=uber-kahala]');h=(await card_action(pg, day.locator('[data-db-id="'+instance+'"]'), 'db-handle'))
     if w == 390:
       # Keyboard reordering can reach the Uber without both rows sharing the viewport.
       await h.focus()
@@ -955,7 +959,7 @@ async def regression_checks(b,base,label):
   for _ in range(8):
     ids=await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
     if ids.index('photos')>ids.index('lamer'): break
-    await day.locator('[data-db-id=photos]').get_by_test_id('db-down').click()
+    await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
   async def clock(row_id):
     return await day.locator(f'[data-db-id="{row_id}"]').get_by_test_id('db-time').evaluate('e=>e.textContent')
   photo_time=await clock('photos')
@@ -995,7 +999,7 @@ async def regression_checks(b,base,label):
   ok(label+' 11/28 uber starts at 5:10', uber0.startswith('5:10 AM'), uber0)
   await day.locator('[data-db-id="2026-11-28-7"]').get_by_test_id('db-lock').click()
   sail=await clock('2026-11-28-7')
-  await day.locator('[data-db-id="2026-11-28-6"]').get_by_test_id('db-down').click()
+  await (await card_action(pg, day.locator('[data-db-id="2026-11-28-6"]'), 'db-down')).click()
   async def vis():
     return await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
   order=await vis()

@@ -94,6 +94,15 @@ assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arri
  assert(live.textContent.includes('After dark — sunset ~5:48 PM'));
  assert.equal(rootWrites, 1, 'the live node survives every render');
  assert(mounted.getDay().items.findIndex(i=>i.id==='photos') > mounted.getDay().items.findIndex(i=>i.id==='lamer'));
+ // Check-in extras use an input clock, enter scheduled items and survive persistence.
+ const extra = require('../js/checkin.js').suggest(mounted.getDay().items,{energy:'high'}).suggestions[0].alternative;
+ const time = String(Math.floor(extra.preferred/60)).padStart(2,'0')+':'+String(extra.preferred%60).padStart(2,'0');
+ const run = mounted.addToDay('2026-11-26',{...extra,time});
+ assert.equal(run.ok,true);
+ assert(mounted.schedule().days.find(d=>d.date==='2026-11-26').items.some(i=>i.id===run.id&&i.title==='Sunrise run'));
+ const persisted = db.importDays(mounted.exportState());
+ assert(persisted.days['2026-11-26'].items.some(i=>i.id===run.id&&i.title==='Sunrise run'));
+ assert.deepEqual(mounted.getDay().items.find(i=>i.id===run.id).wellness,{type:'movement'});
  // A title-only add must not match a library item with an omitted sourceId.
  const added = mounted.addToDay('2026-11-26', {title: 'Unique unscheduled sentinel'});
  assert.equal(added.ok, true);

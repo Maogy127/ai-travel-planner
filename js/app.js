@@ -27,8 +27,13 @@
     var defaults= {
         bedtime:'', wake:'', diet:[], dietNotes:'', dayPaces:{}, travelers:[], level:'unsure', activities:[], origin:'', destination:'', unsure:false, start:'', end:'', flexible:false, length:5, month:11, budget:null, includeFlights:true, covers:['flights','hotel','food','activities','transport'], completed:[], who:'', ages:[], adults:2, kids:0, styles:[], food:[], allergies:'', pace:'Moderate', mustdos:'', stay:''
     };
+    function normalizePace(a){
+        if(!a.level)a.level=({'Easy':'gentle','Moderate':'active','Full-on':'athlete'})[a.pace]||'unsure';
+        a.pace=({gentle:'Easy',active:'Moderate',athlete:'Full-on',unsure:'Moderate'})[a.level]||'Moderate';
+        return a;
+    }
     var state= {
-        screen:'start', answers:Object.assign( {}, defaults, read(KEY+'answers',  {})), plan:null, tab:'plan', recOffset:0, excluded:[], edits: {}, packed: {}, packMeta: {}, hidePacked:false
+        screen:'start', answers:Object.assign({}, defaults, normalizePace(read(KEY+'answers',{}))), plan:null, tab:'plan', recOffset:0, excluded:[], edits: {}, packed: {}, packMeta: {}, hidePacked:false
     };
     if(!read(KEY+'answers',{}).covers&&state.answers.includeFlights===false)state.answers.covers=defaults.covers.filter(function(k){return k!=='flights';});
     var steps=['dates', 'budget', 'who', 'ages', 'style'], extra=['food', 'pace', 'musts'];
@@ -48,6 +53,7 @@
         });
     }
     function save() {
+        normalizePace(state.answers);
         if(state.shared)return;
         write(KEY+'answers', state.answers);
         if(state.plan&&state.tripId&&['plan','draft','food','pace','musts'].includes(state.screen)){var trips=readTrips(), trip=trips.find(function(t){return t.id===state.tripId;});if(trip){trip.answers=cloneData(state.answers);writeTrips(trips);}}
@@ -185,6 +191,7 @@
     }
     function go(screen, fromHistory) {
         if(voiceCleanup){voiceCleanup();voiceCleanup=null;}
+        clearFeelVoices();
         if(!undoPending) {
             clearTimeout(toastTimer);
             toastEl.innerHTML='';
@@ -222,10 +229,11 @@
     }
     function start() {
         var a=state.answers;
-        view.innerHTML='<div class="shell"><div class="start-grid"><section class="intro"><div class="eyebrow">MOVE YOUR WAY.</div>'+heading('Come home better than you left.', 'Beautifully planned days that make room for movement, calm and sleep.')+'<div class="form-stack"><div><label class="field-label" for="from">Where are you flying from?</label><input id="from" data-testid="start-from" placeholder="City or airport (e.g., Seattle, SEA)" value="'+esc(a.origin)+'" autocomplete="off"><small>We use this to estimate flights.</small><div class="error" id="origin-error" role="alert"></div></div><div>'+(a.unsure?'<div class="row banner" style="margin:0">Surprise me ✓ '+btn('Change', 'start-change', '')+'</div>':'<label class="field-label" for="to">Where do you want to go?</label><input id="to" data-testid="start-to" placeholder="City, region or country" value="'+esc(a.destination)+'"><div class="error" id="dest-error" role="alert"></div>'+btn("I'm not sure yet", 'start-unsure', 'outline full')+'<small>Tell us a few things and we’ll suggest three places.</small>')+'</div>'+btn('Next <span aria-hidden="true">↗</span>', 'start-next', 'primary full')+'</div><div class="demo"><div class="eyebrow">A LITTLE INSPIRATION</div><strong>Try the demo: Oahu, Nov 25–29</strong><p>Couple aged 18 & 19 · The Kahala Hotel & Resort</p>'+btn('Open the Oahu sample ↗', 'demo-oahu', 'outline full')+'</div><p class="footer-note">Free to use. Your answers stay on this device until you save.</p></section>'+photo('images/hero.jpg', 'A sunlit island coastline, an invitation to slow down', 'hero-photo', '<div class="photo-caption"><span class="eyebrow" style="color:white">YOUR NEXT CHAPTER</span><strong>Somewhere feels like you.</strong><span>We’ll help you find it.</span></div>')+'</div><div class="start-footer"><span>'+icon('style')+' Made for your kind of travel</span><span>Thoughtful plans, down to the little things</span><span>Always yours to change</span></div></div>';
-        view.querySelector('.hero-photo').outerHTML=sampleDay();
-        view.querySelector('.form-stack').insertAdjacentHTML('afterend',wellnessPicker());
+        view.innerHTML='<div class="shell"><div class="start-grid"><section class="intro"><div class="eyebrow">MOVE YOUR WAY.</div>'+heading('Come home better than you left.', 'Beautifully planned days that make room for movement, calm and sleep.')+'<div class="form-stack"><div>'+(a.unsure?'<div class="row banner" style="margin:0">Surprise me ✓ '+btn('Change', 'start-change', '')+'</div>':'<label class="field-label" for="to">Where do you want to go?</label><label class="destination-label"><input id="to" data-testid="start-to" placeholder="City, region or country" value="'+esc(a.destination)+'"></label><div class="error" id="dest-error" role="alert"></div>'+btn("I'm not sure yet", 'start-unsure', 'outline full')+'<small>Tell us a few things and we’ll suggest three places.</small>')+'</div><div><label class="field-label" for="from">Where are you flying from?</label><input id="from" data-testid="start-from" placeholder="City or airport (e.g., Seattle, SEA)" value="'+esc(a.origin)+'" autocomplete="off"><small>We use this to estimate flights.</small><div class="error" id="origin-error" role="alert"></div></div>'+btn('Next <span aria-hidden="true">↗</span>', 'start-next', 'primary full')+'</div><div class="demo"><div class="eyebrow">A LITTLE INSPIRATION</div><strong>Try the demo: Oahu, Nov 25–29</strong><p>Couple aged 18 & 19 · The Kahala Hotel & Resort</p>'+btn('Open the Oahu sample ↗', 'demo-oahu', 'outline full')+'</div><p class="footer-note">Free to use. Your answers stay on this device until you save.</p></section>'+photo('images/hero.jpg', 'A sunlit island coastline, an invitation to slow down', 'hero-photo', '<div class="photo-caption"><span class="eyebrow" style="color:white">YOUR NEXT CHAPTER</span><strong>Somewhere feels like you.</strong><span>We’ll help you find it.</span></div>')+'</div><div class="start-footer"><span>'+icon('style')+' Made for your kind of travel</span><span>Thoughtful plans, down to the little things</span><span>Always yours to change</span></div></div>';
+        view.querySelector('.hero-photo').remove();
+        view.querySelector('.form-stack').insertAdjacentHTML('beforebegin',wellnessPicker());
         bindWellness();
+        if(get('start-to'))setupVoice('start-to','start-');
         on('start-from', function(e) {
             a.origin=e.target.value;
             save();
@@ -343,7 +351,7 @@
         var trip=readTrips().find(function(t){return t.id===id;});
         if(!trip)return;
         state.tripId=id;
-        state.answers=Object.assign({}, defaults, trip.answers||{});
+        state.answers=Object.assign({}, defaults, normalizePace(trip.answers||{}));
         save();
         state.viewing=mode==='finished'?'finished':'live';
         if(mode==='finished'&&!trip.snapshot)return;
@@ -355,14 +363,12 @@
         state.afterPlan=mode==='draft'?'draft':'plan';
         generate(true);
     }
-    var sampleItems=[{start:480,end:510,title:'Morning walk',kind:'activity'},{start:750,end:795,title:'Room to rest',kind:'rest'},{start:1170,end:1200,title:'Dinner',kind:'meal'}];
-    function sampleDay(){return '<aside class="card sample-day"><p class="eyebrow">A LITTLE ROOM TO FEEL GOOD</p><h2>A gentle day by the coast</h2><div data-testid="sample-rings">'+window.GoNowRings.render(window.GoNowRings.scoreDay(sampleItems,state.answers.level))+'</div><ol><li><time>08:00</time> A walk in the sea air</li><li><time>12:30</time> Room to recover</li><li><time>19:30</time> An unhurried dinner</li></ol><small>Sample day · change the pace to see your targets</small></aside>';}
     function wellnessPicker(){
         var a=state.answers;
         return '<fieldset data-testid="pace-picker"><legend>What pace feels right for you?</legend><p class="muted">Change it any time.</p><div class="pace-options">'+[['gentle','Gentle','Easy walks, stretching, yoga and meditation.'],['active','Active','Jogs, hikes and classes a few times a week.'],['athlete','Athlete','Long runs, rides and strength sessions.'],['unsure',"Not sure? We&#39;ll adjust",'We will start in the middle.']].map(function(o){return '<label class="pace-option"><input type="radio" name="wellness-level" data-testid="pace-option" data-value="'+o[0]+'" value="'+o[0]+'" '+(a.level===o[0]?'checked':'')+'><span><strong>'+o[1]+'</strong><small>'+o[2]+'</small></span></label>';}).join('')+'</div></fieldset><fieldset><legend>What would you love to do?</legend><div class="activity-chips">'+['Walking','Pilates','Yoga','Meditation','Running','Hiking','Cycling','Strength','Swimming'].map(function(name){return '<button type="button" data-testid="activity-chip" data-value="'+name.toLowerCase()+'" aria-pressed="'+(a.activities||[]).includes(name.toLowerCase())+'">'+name+'</button>';}).join('')+'</div></fieldset>';
     }
     function bindWellness(){
-        view.querySelectorAll('[data-testid=pace-option]').forEach(function(el){el.onchange=function(){state.answers.level=el.value;save();var sample=get('sample-rings');if(sample)sample.innerHTML=window.GoNowRings.render(window.GoNowRings.scoreDay(sampleItems,el.value));};});
+        view.querySelectorAll('[data-testid=pace-option]').forEach(function(el){el.onchange=function(){state.answers.level=el.value;save();};});
         view.querySelectorAll('[data-testid=activity-chip]').forEach(function(el){el.onclick=function(){var values=state.answers.activities||[];state.answers.activities=values.includes(el.dataset.value)?values.filter(function(v){return v!==el.dataset.value;}):values.concat(el.dataset.value);el.setAttribute('aria-pressed',String(state.answers.activities.includes(el.dataset.value)));save();};});
     }
     function home(){
@@ -372,7 +378,7 @@
             var when=(t.start&&t.end)?dateLabel(t.start)+' – '+dateLabel(t.end):'Dates not set';
             return '<article class="card saved-trip" data-testid="saved-trip"><h2>'+esc(t.destination||t.title||'Trip')+'</h2><p>'+esc(when)+'</p><p class="footer-note">Saved on this device. Not uploaded.</p><div class="row">'+btn('Edit draft','edit-draft','outline','data-trip="'+esc(t.id)+'"')+btn('View finished plan','view-finished','outline','data-trip="'+esc(t.id)+'"'+(t.snapshot?'':' disabled'))+'</div></article>';
         }).join('');
-        view.innerHTML='<div class="shell home-screen" data-testid="home-screen"><div class="wellness-hero"><section class="intro"><p class="eyebrow">WELLNESS IS PART OF THE JOURNEY</p>'+heading('Come home better than you left.','Beautifully planned days that make room for movement, calm and sleep.')+'<label class="field-label" for="home-destination">Where would you like to go?</label><label class="destination-label"><input id="home-destination" data-testid="home-destination" placeholder="City, region or country" value="'+esc(state.answers.destination)+'"></label><div class="row">'+btn('Start planning','start-new-trip','primary')+(trips.length?btn('Continue saved trip','continue-saved','outline'):'')+'</div>'+wellnessPicker()+'<p data-testid="storage-note" class="footer-note">Saved on this device only. There is no account and nothing is uploaded.</p></section>'+sampleDay()+'</div>'+(trips.length?'<section class="saved-trips"><h2>Your trips</h2>'+cards+'</section>':'<p class="muted">First visit — no saved trips yet.</p>')+'<div class="demo"><strong>A little inspiration: Oahu</strong><p>Nov 25–29 · couple, ages 18 and 19.</p>'+btn('Open the Oahu sample ↗','demo-oahu','outline')+'</div></div>';
+        view.innerHTML='<div class="shell home-screen" data-testid="home-screen"><div class="wellness-hero"><section class="intro"><p class="eyebrow">WELLNESS IS PART OF THE JOURNEY</p>'+heading('Come home better than you left.','Beautifully planned days that make room for movement, calm and sleep.')+wellnessPicker()+'<label class="field-label" for="home-destination">Where would you like to go?</label><label class="destination-label"><input id="home-destination" data-testid="home-destination" placeholder="City, region or country" value="'+esc(state.answers.destination)+'"></label><div class="row">'+(trips.length?btn('Continue saved trip','continue-saved','outline'):'')+btn('Start planning','start-new-trip','primary')+'</div>'+'<p data-testid="storage-note" class="footer-note">Saved on this device only. There is no account and nothing is uploaded.</p></section>'+''+'</div>'+(trips.length?'<section class="saved-trips"><h2>Your trips</h2>'+cards+'</section>':'<p class="muted">First visit — no saved trips yet.</p>')+'<div class="demo"><strong>A little inspiration: Oahu</strong><p>Nov 25–29 · couple, ages 18 and 19.</p>'+btn('Open the Oahu sample ↗','demo-oahu','outline')+'</div></div>';
         bindWellness();
         on('home-destination',function(e){state.answers.destination=e.target.value;state.answers.unsure=false;save();},'input');
         setupVoice('home-destination','home-');
@@ -558,6 +564,7 @@
             }
         };
         window.DayBuilder.mount(db, ctx);
+        db.insertAdjacentHTML('afterend',momentsSummary());
         db.addEventListener('dragover', function(e){if(e.target.closest('[data-testid=db-day-list]'))e.preventDefault();});
         db.addEventListener('drop', function(e){
             if(!e.target.closest('[data-testid=db-day-list]'))return;
@@ -646,7 +653,7 @@
     function question() {
         var a=state.answers, s=state.screen, index=steps.indexOf(s), isExtra=extra.indexOf(s)>=0, idx=isExtra?extra.indexOf(s):index, total=isExtra?3:5;
         var copy= {
-            dates:['When are you going?', 'Pick your travel dates. Weather and prices depend on them.'], budget:["What’s your budget?", 'Total for everyone. Choose what your budget covers below.'], who:["Who’s coming?", 'This shapes pace, rooms and activities.'], ages:['How old are the travelers?', 'Ages change the plan: rental cars, tours and some activities have age limits.'], style:['What kind of trip do you want?', 'Pick up to two. A third pick swaps out your first.'], food:['What do you like to eat?', "Pick any. We’ll plan meals near where you’re staying."], pace:['How full should your days feel?', 'Walking, hiking and water time all count.'], musts:['Anything we must include?', "Bookings, birthdays, places, or things to skip. We’ll fit them in."]
+            dates:['When are you going?', 'Pick your travel dates. Weather and prices depend on them.'], budget:["What’s your budget?", 'Total for everyone. Choose what your budget covers below.'], who:["Who’s coming?", 'This shapes pace, rooms and activities.'], ages:['How old are the travelers?', 'Ages change the plan: rental cars, tours and some activities have age limits.'], style:['What kind of trip do you want?', 'Pick up to two. A third pick swaps out your first.'], food:['What do you like to eat?', "Pick any. We’ll plan meals near where you’re staying."], pace:['A pace that feels like you.', 'Make room for movement, rest and sleep.'], musts:['Anything we must include?', "Bookings, birthdays, places, or things to skip. We’ll fit them in."]
         }
         [s];
         var content='';
@@ -686,9 +693,7 @@
                 return option(v, icon('food')+' '+v, '', 'food', true);
             }).join('')+'</div><label>Allergies or things to avoid (optional)<input data-testid="allergies" value="'+esc(a.allergies)+'"></label>';
         } else if(s==='pace') {
-            content='<div class="options">'+[['Easy', 'Short walks, lots of downtime'], ['Moderate', 'A few hours on your feet a day'], ['Full-on', 'Early starts, long days']].map(function(r) {
-                return option(r[0], icon('who')+' '+r[0], r[1], 'pace');
-            }).join('')+'</div>';
+            content=wellnessPicker();
         } else {
             content='<label>Bookings, birthdays and places<textarea data-testid="mustdos" placeholder="e.g., birthday dinner on 11/26 at 7:30 PM">'+esc(a.mustdos)+'</textarea></label><div class="row">'+['Special occasion', 'A booked hotel', 'Shopping', 'Photo spots', 'Water activity', 'A specific tour'].map(function(v, i) {
                 return btn(v, 'must-chip-'+i, 'outline', 'data-chip="'+v+'"');
@@ -757,6 +762,7 @@
             if(f)f.focus();
             announce(a.flexible?'Flexible dates: pick a month and trip length.':'Pick your start and end dates.');
         }, 'change');
+        bindWellness();
         bindWellnessDetails();
         ['month', 'length', 'adults', 'kids', 'allergies', 'mustdos', 'stay'].forEach(function(k) {
             on(k, function(e) {
@@ -978,7 +984,7 @@
         on('fork-no', function() {
             state.answers.personal=false;
             state.answers.food=[];
-            state.answers.pace='Moderate';
+            normalizePace(state.answers);
             state.answers.mustdos='';
             state.answers.stay='';
             generate();
@@ -1135,13 +1141,19 @@
         '2026-11-28-9':'images/activity-waikiki-sunset.jpg',
         '2026-11-29-0':'images/activity-hnl.jpg'
     };
+    function personalNotes(it){
+        if(it.locked||!state.plan||travelers().length<2)return '';
+        var day=state.plan.days.find(function(d){return d.items.some(function(i){return i.id===it.id;});});
+        if(!day)return '';
+        return travelers().map(function(t,i){var c=window.GoNowCheckin.get('gonow.checkin.v1',day.date,personId(i)),alt=(c.alternatives||{})[it.id];return alt?'<small class="traveler-alternative" data-testid="traveler-alternative">'+esc(t.name)+': '+esc(alt.title.toLowerCase())+' instead</small>':'';}).join('');
+    }
     function itemArticle(it, opts) {
         opts=opts||{};
         var edit=state.edits.items&&state.edits.items[it.id]|| {}, title=edit.title||it.title, note=edit.note||'';
         if(edit.swapped)it=Object.assign( {}, it,  {
             sources:[], bring:[], prep:[], tips:[], price:'', bestTime:'', bookable:false
         });
-        return'<article class="item '+esc(it.kind)+'">'+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):(opts.photo?'<p class="activity-fallback">'+icon('info')+' No verified activity photo.</p>':''))+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+dietTag(it)+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bookable&&!/\bspa\b/i.test(title||'')?'<p class="partner-search"><small>Find/Book this · Secondary search options</small><br>'+partnerLink('getyourguide',title,true)+' · '+partnerLink('viator',title,true)+'</p>':'')+(it.bring&&it.bring.length?'<details><summary data-testid="disclosure">What to bring ('+it.bring.length+')</summary><small>Ticking here also ticks it on your packing list.</small>'+it.bring.map(function(id) {
+        return'<article class="item '+esc(it.kind)+'">'+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):(opts.photo?'<p class="activity-fallback">'+icon('info')+' No verified activity photo.</p>':''))+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+dietTag(it)+personalNotes(it)+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bookable&&!/\bspa\b/i.test(title||'')?'<p class="partner-search"><small>Find/Book this · Secondary search options</small><br>'+partnerLink('getyourguide',title,true)+' · '+partnerLink('viator',title,true)+'</p>':'')+(it.bring&&it.bring.length?'<details><summary data-testid="disclosure">What to bring ('+it.bring.length+')</summary><small>Ticking here also ticks it on your packing list.</small>'+it.bring.map(function(id) {
             var p=packingItem(id);
             return p?checkHTML(p, 'bring-item'):'';
         }).join('')+'</details>':'')+(it.prep&&it.prep.length?'<p class="section-label" style="margin-top:15px">Prep reminders</p>'+prep(it.prep):'')+(it.tips?it.tips.map(function(t) {
@@ -1162,7 +1174,7 @@
     }
     function dayModel(d, i) {
         var edits=state.edits, relaxed=edits.relax&&edits.relax[i], rain=edits.rain&&edits.rain[i];
-        var items=d.items.concat((edits.added|| {})[i]||[]).filter(function(it) {
+        var items=d.items.concat((edits.added|| {})[i]||[]).map(function(it){return it.locked?it:Object.assign({},it,(edits.items||{})[it.id]||{});}).filter(function(it) {
             if((edits.removed||[]).indexOf(it.id)>=0)return false;
             if(relaxed) {
                 if(state.plan.id.indexOf('oahu')>=0&&!state.plan.id.startsWith('template-')) {
@@ -1195,19 +1207,85 @@
         on('diet-notes',function(e){state.answers.dietNotes=e.target.value;save();},'input');
         view.querySelectorAll('[data-testid=diet-chip]').forEach(function(el){el.onclick=function(){var d=el.dataset.value, arr=state.answers.diet||[];state.answers.diet=arr.includes(d)?arr.filter(function(v){return v!==d;}):d==='No restrictions'?[d]:arr.filter(function(v){return v!=='No restrictions';}).concat(d);save();view.querySelectorAll('[data-testid=diet-chip]').forEach(function(b){b.setAttribute('aria-pressed',state.answers.diet.includes(b.dataset.value));});};});
     }
-    function dietTag(item){if(item.kind!=='meal'||!(state.answers.diet||[]).some(function(d){return d!=='No restrictions';}))return '';return '<small data-testid="diet-tag">'+esc(window.GoNowDiet.match(item,state.answers.diet).reason)+'</small>';}
+    function dietTag(item){if(item.kind!=='meal'||!(state.answers.diet||[]).some(function(d){return d!=='No restrictions';}))return '';var match=window.GoNowDiet.match(item,state.answers.diet);if(match.status!=='supported')return '';return '<small data-testid="diet-tag">'+esc(match.reason)+'</small>';}
+    var checkinSelected={},feelVoiceCleanups=[];
+    function clearFeelVoices(){(feelVoiceCleanups||[]).forEach(function(stop){stop();});feelVoiceCleanups=[];}
+    function personId(i){return 'traveler-'+i;}
+    function personalItems(items,c){return items.map(function(it){return Object.assign({},it,it.locked?{}:(c.alternatives||{})[it.id]||{});});}
+    function checkinClock(minutes){return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');}
+    function moodFace(i){return '<svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.7"><circle cx="12" cy="12" r="10"/><circle cx="8" cy="9" r=".8" fill="currentColor"/><circle cx="16" cy="9" r=".8" fill="currentColor"/><path d="'+['M7 17 Q12 11 17 17','M7 15 H17','M7 14 Q12 20 17 14'][i]+'"/></svg>';}
+    function suggestionCopy(s,items,c,group,name){
+        if(s.type==='add')return 'Feeling great — add an optional 30-min sunrise run before your first plan?';
+        var original=items.find(function(it){return it.id===s.id;})||{},alt=s.alternative.title.toLowerCase(),reason=c.energy==='low'?'Low energy today':c.soreness==='some'||c.soreness==='a lot'?'Feeling sore':'Poor sleep today';
+        if(group.length>1)return esc(name+(c.soreness==='some'||c.soreness==='a lot'?' is sore':' could use a gentler day')+' — offer a gentle '+alt+' instead of '+original.title+' for '+name+'; others keep their plan.');
+        return esc(reason+' — swap '+original.title+(original.start!=null?' ('+window.DayBuilder.clock(original.start)+')':'')+' for a gentle '+alt+' at the same time?');
+    }
+    function dayFeelHTML(day,items){
+        var C=window.GoNowCheckin,group=travelers(),index=checkinSelected[day.date]||0,id=personId(index),name=group[index].name,c=C.get('gonow.checkin.v1',day.date,id),moment=C.get('gonow.moments.v1',day.date,id);
+        var choices={energy:['low','ok','high'],mood:['low','okay','good'],soreness:['none','some','a lot'],sleep:['poor','ok','great']};
+        var html='<section class="day-feel" data-testid="day-feel" data-date="'+day.date+'" data-person="'+id+'">';
+        if(group.length>1)html+='<div class="feel-selector" aria-label="Traveler">'+group.map(function(t,i){var done=C.get('gonow.checkin.v1',day.date,personId(i));return '<button type="button" data-testid="checkin-traveler" data-index="'+i+'" aria-pressed="'+(i===index)+'">'+esc(t.name)+(done.done?' · checked in':done.skipped?' · skipped':'')+'</button>';}).join('')+'</div>';
+        html+=c.done||c.skipped?'<p data-testid="checkin-complete">'+(group.length>1?esc(name)+' · ':'')+(c.skipped?'Morning check-in skipped':'Morning check-in saved')+' · <button type="button" data-testid="checkin-edit">Edit</button></p>':'<details data-testid="morning-checkin"><summary>Morning feel · optional</summary><div class="feel-fields">'+Object.keys(choices).map(function(k){return '<fieldset><legend>'+k[0].toUpperCase()+k.slice(1)+'</legend>'+choices[k].map(function(v,i){var label=k==='mood'?['Low mood','Okay mood','Good mood'][i]:v;return '<button type="button" data-testid="checkin-'+k+'" data-field="'+k+'" data-value="'+v+'" aria-label="'+label+'" aria-pressed="'+(c[k]===v)+'">'+(k==='mood'?moodFace(i):v)+'</button>';}).join('')+'</fieldset>';}).join('')+'</div><div class="feel-input"><label>Anything to add?<textarea data-testid="checkin-text">'+esc(c.text)+'</textarea></label>'+feelVoiceHTML('checkin')+'</div><button type="button" data-testid="checkin-save">Save check-in</button><button type="button" data-testid="checkin-skip">Skip today</button></details>';
+        var suggestions=C.suggest(items,c).suggestions.filter(function(s){return !(c.dismissed||[]).includes(s.id)&&!(c.alternatives||{})[s.id];});
+        if(c.done&&C.gentle(c)){var eased=C.score(items,window.GoNowRings.selectLevel(group[index].level,(state.answers.dayPaces||{})[day.date]||'trip'),[],state.answers,c);html+='<p class="muted">'+(group.length>1?esc(name)+"'s movement":'Movement')+' goal eased to '+Math.round(eased.goals.move)+' min today.</p>';}
+        if(c.done)html+='<div data-testid="checkin-suggestions">'+suggestions.map(function(s){return '<article data-testid="checkin-suggestion"><p>'+suggestionCopy(s,items,c,group,name)+'</p><button type="button" data-testid="checkin-apply" data-id="'+esc(s.id)+'">'+(s.type==='add'?'Add':group.length>1?'Swap for '+esc(name):'Swap')+'</button><button type="button" data-testid="checkin-dismiss" data-id="'+esc(s.id)+'">'+(s.type==='add'?'No thanks':'Keep plan')+'</button></article>';}).join('')+'</div>';
+        if((c.extras||[]).length)html+='<p>'+esc(name)+': Sunrise run · 30 min added</p>';
+        html+='<details data-testid="sweet-moment" '+(!moment.text?'':'')+'><summary>'+(moment.text?'<span class="moment-dot" aria-hidden="true"></span>Best moment: '+esc(moment.text)+' · Edit':'Best moment today?')+'</summary><label>A sweet moment<textarea data-testid="moment-text">'+esc(moment.text)+'</textarea></label>'+feelVoiceHTML('moment')+'<button type="button" data-testid="moment-save">Save</button></details></section>';
+        return html;
+    }
+    function feelVoiceHTML(prefix){return '<div class="voice-controls"><button type="button" data-testid="'+prefix+'-mic" aria-pressed="false">Hold to speak</button><label>Language<select data-testid="'+prefix+'-lang"><option value="en-US">English</option><option value="zh-CN">中文</option></select></label><span role="status" aria-live="polite" data-testid="'+prefix+'-status"></span><span class="voice-interim muted" data-testid="'+prefix+'-interim"></span></div>';}
+    function bindFeel(scope,items){
+        clearFeelVoices();
+        scope.querySelectorAll('[data-testid=day-feel]').forEach(function(box){
+            var C=window.GoNowCheckin,date=box.dataset.date,id=box.dataset.person,c=C.get('gonow.checkin.v1',date,id);
+            function store(){C.put('gonow.checkin.v1',date,id,c);}
+            function refresh(){render();}
+            box.querySelectorAll('[data-testid=checkin-traveler]').forEach(function(b){b.onclick=function(){checkinSelected[date]=Number(b.dataset.index);refresh();};});
+            var edit=box.querySelector('[data-testid=checkin-edit]');if(edit)edit.onclick=function(){c.done=false;c.skipped=false;store();refresh();var details=view.querySelector('[data-testid=morning-checkin]');if(details)details.open=true;};
+            function pressed(){box.querySelectorAll('[data-field]').forEach(function(b){b.setAttribute('aria-pressed',String(c[b.dataset.field]===b.dataset.value));});}
+            box.querySelectorAll('[data-field]').forEach(function(b){b.onclick=function(){c[b.dataset.field]=b.dataset.value;pressed();store();};});
+            var text=box.querySelector('[data-testid=checkin-text]');if(text)text.oninput=function(){c.text=text.value;Object.assign(c,C.parse(text.value));pressed();store();};
+            ['save','skip'].forEach(function(action){var b=box.querySelector('[data-testid=checkin-'+action+']');if(b)b.onclick=function(){c.skipped=action==='skip';c.done=action==='save';store();refresh();};});
+            box.querySelector('[data-testid=moment-save]').onclick=function(){C.put('gonow.moments.v1',date,id,{text:box.querySelector('[data-testid=moment-text]').value.trim()});refresh();};
+            box.querySelectorAll('[data-testid=checkin-apply],[data-testid=checkin-dismiss]').forEach(function(b){b.onclick=function(){var schedule=window.DayBuilder.schedule(),day=schedule&&schedule.days.find(function(d){return d.date===date;}),dayItems=day?day.items:(state.plan.days.find(function(d){return d.date===date;})||{}).items||[],s=C.suggest(dayItems,c).suggestions.find(function(s){return s.id===b.dataset.id;});if(!s)return;
+                if(b.dataset.testid==='checkin-apply'){
+                    if(travelers().length>1){if(s.type==='swap'){c.alternatives=c.alternatives||{};c.alternatives[s.id]=s.alternative;}else{c.extras=(c.extras||[]).concat(s.alternative);}}
+                    else if(s.type==='swap'){if(mergedPlan())window.DayBuilder.swapItem(s.id,s.alternative);else {var it=state.plan.days.find(function(d){return d.date===date;}).items.find(function(i){return i.id===s.id;});if(it&&!it.locked){state.edits.items=state.edits.items||{};state.edits.items[it.id]=Object.assign({},state.edits.items[it.id],s.alternative);persistEdits();}}}
+                    else if(mergedPlan())window.DayBuilder.addToDay(date,Object.assign({},s.alternative,{time:checkinClock(s.alternative.preferred)}));else {var di=state.plan.days.findIndex(function(d){return d.date===date;});state.edits.added=state.edits.added||{};state.edits.added[di]=(state.edits.added[di]||[]).concat(Object.assign({},s.alternative,{id:'checkin-extra-'+date,kind:'activity',time:checkinClock(s.alternative.preferred),bring:[],sources:[]}));persistEdits();}
+                }
+                c.dismissed=(c.dismissed||[]).concat(s.id);store();refresh();
+            };});
+            ['checkin','moment'].forEach(function(prefix){bindFeelVoice(box,prefix);});
+        });
+    }
+    function bindFeelVoice(box,prefix){
+        var b=box.querySelector('[data-testid='+prefix+'-mic]');if(!b)return;
+        var status=box.querySelector('[data-testid='+prefix+'-status]'),field=box.querySelector('[data-testid='+prefix+'-text]'),lang=box.querySelector('[data-testid='+prefix+'-lang]'),R=window.SpeechRecognition||window.webkitSpeechRecognition,r,listening=false,pointer=false,pressedAt=0,wasListening=false;
+        function reset(){listening=false;b.setAttribute('aria-pressed','false');b.classList.remove('is-listening');b.textContent='Hold to speak';}
+        function stop(){if(listening){r.stop();reset();status.textContent='Voice input stopped.';}}
+        function start(){if(listening)return;if(!R){status.textContent='Voice input needs Chrome, Edge or Safari.';return;}r=new R();r.lang=lang.value;r.interimResults=true;r.continuous=false;
+            r.onresult=function(e){if(!field.isConnected)return;var interim=box.querySelector('[data-testid='+prefix+'-interim]');interim.textContent='';for(var j=e.resultIndex;j<e.results.length;j++)if(!e.results[j].isFinal)interim.textContent+=e.results[j][0].transcript;for(var i=e.resultIndex;i<e.results.length;i++)if(e.results[i].isFinal){field.value+=(field.value?' ':'')+e.results[i][0].transcript;field.dispatchEvent(new Event('input',{bubbles:true}));}status.textContent=listening?'Listening…':'Voice input added.';};
+            r.onerror=function(e){status.textContent=({'not-allowed':'Microphone permission was blocked.','no-speech':'No speech heard. Try again.',network:'Voice input network error. Try again.'})[e.error]||'Voice input could not start. Try again.';reset();};r.onend=function(){reset();if(status.textContent==='Listening…')status.textContent='Voice input ended.';};
+            listening=true;b.setAttribute('aria-pressed','true');b.classList.add('is-listening');b.textContent='Listening…';status.textContent='Listening…';try{r.start();}catch(e){reset();status.textContent='Voice input could not start. Try again.';}
+        }
+        feelVoiceCleanups.push(function(){if(r){r.onresult=r.onerror=r.onend=null;r.abort();}reset();});
+        b.onpointerdown=function(e){if(e.button!==0)return;pointer=true;pressedAt=Date.now();wasListening=listening;start();};b.onpointerup=function(){stop();};b.onpointerleave=function(){stop();pointer=false;};b.onpointercancel=function(){stop();pointer=false;};b.onclick=function(e){if(pointer){pointer=false;if(Date.now()-pressedAt>250||wasListening)return;}if(listening)stop();else start();};
+    }
+    function momentsSummary(){var C=window.GoNowCheckin,lines=[];state.plan.days.forEach(function(d){travelers().forEach(function(t,i){var m=C.get('gonow.moments.v1',d.date,personId(i));if(m.text)lines.push('<p>'+esc(d.date)+' · '+esc(t.name)+': '+esc(m.text)+'</p>');});});return '<section class="moments-summary" data-testid="moments-summary"><h2>Your sweet moments</h2>'+(lines.join('')||'<p>A little space for memories, whenever you like.</p>')+'</section>';}
+
     var paceLabels={gentle:'Gentle',active:'Active',athlete:'Athlete',unsure:'Not sure',trip:'Same as trip'};
     function travelers(){var a=state.answers,n=a.who==='solo'?1:a.who==='couple'?2:Number(a.adults)+Number(a.kids);a.travelers=(a.travelers||[]).slice(0,n);while(a.travelers.length<n)a.travelers.push({name:'Traveler '+(a.travelers.length+1),level:a.level});return a.travelers;}
     function paceDayHTML(day,items,next){
         var a=state.answers,override=(a.dayPaces||{})[day.date]||'trip',level=window.GoNowRings.selectLevel(a.level,override);
         var html='<fieldset data-testid="day-pace" data-date="'+day.date+'"><legend>Day pace</legend>'+['gentle','active','athlete','trip'].map(function(v){return '<label><input type="radio" name="pace-'+day.date+'" data-testid="day-pace-option" data-value="'+v+'" value="'+v+'" '+(v===override?'checked':'')+'>'+paceLabels[v]+'</label>';}).join('')+'</fieldset>';
-        html+=window.GoNowRings.render(window.GoNowRings.scoreDay(items,level,next,a));
+        html+=window.GoNowRings.render(window.GoNowCheckin.score(personalItems(items,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(0))),level,next,a,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(0))));
         html+='<p data-testid="day-pace-hint">'+({gentle:'Try walking, yoga or meditation.',athlete:'Try running, hiking or strength.',active:'Mix movement with recovery.',unsure:'Explore at a comfortable pace.'}[level]||'Explore at a comfortable pace.')+'</p>';
         if(a.bedtime){var parts=a.bedtime.split(':'),t=(Number(parts[0])*60+Number(parts[1])-45+1440)%1440;html+='<p data-testid="wind-down">Wind-down · '+window.DayBuilder.clock(t)+'</p>';}
-        var group=travelers();if(group.length>1)html+='<div class="travelers">'+group.map(function(t,i){return '<div data-testid="traveler-row"><label><span class="sr-only">Name</span><input data-testid="traveler-name" data-index="'+i+'" value="'+esc(t.name)+'"></label><label><span class="sr-only">Pace</span><select data-testid="traveler-pace" data-index="'+i+'">'+['gentle','active','athlete','unsure'].map(function(v){return '<option value="'+v+'" '+(v===t.level?'selected':'')+'>'+paceLabels[v]+'</option>';}).join('')+'</select></label><div data-testid="traveler-rings" aria-label="'+esc(t.name)+'">'+esc(t.name)+window.GoNowRings.render(window.GoNowRings.scoreDay(items,t.level,next,a),{caption:false})+'</div></div>';}).join('')+'</div>';
-        return html;
+        var group=travelers();if(group.length>1)html+='<div class="travelers">'+group.map(function(t,i){return '<div data-testid="traveler-row"><label><span class="sr-only">Name</span><input data-testid="traveler-name" data-index="'+i+'" value="'+esc(t.name)+'"></label><label><span class="sr-only">Pace</span><select data-testid="traveler-pace" data-index="'+i+'">'+['gentle','active','athlete','unsure'].map(function(v){return '<option value="'+v+'" '+(v===t.level?'selected':'')+'>'+paceLabels[v]+'</option>';}).join('')+'</select></label><div data-testid="traveler-rings" aria-label="'+esc(t.name)+'">'+window.GoNowRings.render(window.GoNowCheckin.score(personalItems(items,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i))).concat(window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i)).extras||[]),window.GoNowRings.selectLevel(t.level,override),next,a,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i))),{caption:false,name:t.name,compact:true})+'</div></div>';}).join('')+'</div>';
+        return html+dayFeelHTML(day,items);
     }
     function bindPace(scope){
+        bindFeel(scope);
         scope.querySelectorAll('[data-testid=day-pace-option]').forEach(function(el){el.onchange=function(){state.answers.dayPaces=Object.assign({},state.answers.dayPaces);state.answers.dayPaces[el.closest('[data-date]').dataset.date]=el.value;save();render();};});
         scope.querySelectorAll('[data-testid=traveler-name],[data-testid=traveler-pace]').forEach(function(el){el.onchange=function(){var t=travelers()[Number(el.dataset.index)];t[el.tagName==='SELECT'?'level':'name']=el.value;save();render();};});
     }
@@ -1272,21 +1350,24 @@
                 }
                 return null;
             },
+            photoFor:function(src){return ITEM_PHOTOS[src];},
             titleFor:function(src,date,item){
                 var it=find(src,date);if(!it)return '';
                 var edit=(state.edits.items||{})[src]||{}, original=day(date).d.items.find(function(o){return o.id===src;});
+                if(item&&item.checkinSwap)return item.title;
                 if(item&&item.flight)return '';
                 if(edit.title)return edit.title;
                 return original&&it.title!==original.title?it.title.replace(/\p{Extended_Pictographic}/gu,'').trim():'';
             },
             detail:function(src,date,item){
+                if(item&&item.checkinSwap)return '<p>'+esc(item.title)+' · A gentler option at the same time.</p>';
                 var chest=item&&(/^(chest-|instance-)/.test(item.id)||item.sourceId!==item.id);
                 var it=find(src,date)||p.days.flatMap(function(d){return d.items;}).find(function(o){return o.id===src;});if(!it)return '<p>'+icon('info')+' '+esc(item.title)+' in '+esc(item.place)+'. No verified activity photo.</p>';
                 var html='<div class="db-item" data-item-id="'+esc(it.id)+'"'+(chest?'':' id="item-'+esc(it.id)+'"')+'>'+itemArticle(it,{photo:true,travel:!chest,noActions:chest})+'</div>';
                 (item&&item.extraSources||[]).forEach(function(id){var ride=find(id,date);if(ride)html+='<div class="db-item db-item-ride" data-item-id="'+esc(ride.id)+'" id="item-'+esc(ride.id)+'"><p class="section-label">Getting there and back</p>'+itemArticle(ride,{travel:true})+'</div>';});
                 return html;
             },
-            afterRender:function(scope){bindItems(scope);bindPace(scope);scope.querySelectorAll('[data-db-source]').forEach(function(row){var src=row.dataset.dbSource,it=p.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;});if(it){var host=row.querySelector('.db-activity');if(host)host.insertAdjacentHTML('beforeend',dietTag(it));}});}
+            afterRender:function(scope){bindItems(scope);bindPace(scope);scope.querySelectorAll('[data-db-source]').forEach(function(row){var src=row.dataset.dbSource,it=p.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;});var host=row.querySelector('.db-activity');if(host){if(it)host.insertAdjacentHTML('beforeend',dietTag(it));travelers().forEach(function(t,i){var c=window.GoNowCheckin.get('gonow.checkin.v1',window.DayBuilder.selectedDate(),personId(i)),alt=(c.alternatives||{})[row.dataset.dbId];if(alt&&!row.classList.contains('db-locked'))host.insertAdjacentHTML('beforeend','<small class="traveler-alternative" data-testid="traveler-alternative">'+esc(t.name)+': '+esc(alt.title.toLowerCase())+' instead</small>');});}});}
         };
     }
     function planRender(moveFocus) {
@@ -1319,6 +1400,7 @@
                 day:'numeric'
             })+'</a>';
         }).join('')+'</nav>'+p.days.map(dayHTML).join('')):state.tab==='packing'?packingHTML():subheading('A little local knowledge', 'Useful notes, with a way back to the source.')+tipsHTML(p.tips)+'<p class="footer-note">Tips shown here link to their sources. Live social/review data comes later; real-data tips will show platform, link and retrieval date.</p>')+'</div><footer class="row" style="padding:25px 0">'+btn('Open packing list', 'open-packing', 'primary')+'<span data-testid="print">'+btn('Print / Save as PDF', 'print-plan', 'outline')+'</span>'+btn('Copy as text', 'copy', 'outline')+'<span data-testid="share">'+btn('Share link', 'share-link', 'outline')+'</span>'+btn('Download calendar', 'download-ics', 'outline')+'</footer><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
+        if(state.tab==='plan')document.getElementById('tab-content').insertAdjacentHTML('beforeend',momentsSummary());
         planTiles();
         bindPace(view);
         expeditionUI();
@@ -1682,24 +1764,7 @@
         }).catch(fallback);
         else fallback();
     }
-    // Each distinct action earns one point per destination and date range.
-    var RANKS=[['Getting started',0],['Settled in',5],['Finding your rhythm',10],['Traveling well',16]];
-    var rank=read(KEY+'rank',{points:0,actions:{}});
-    function rankIndex(){var i=0;RANKS.forEach(function(r,j){if(rank.points>=r[1])i=j;});return i;}
-    function earn(action){
-        var a=state.answers, trip=Engine.matchDestination(a.destination).id+'-'+a.destination.trim().toLowerCase()+'-'+(a.flexible?'flex-'+a.month+'-'+a.length:a.start+'-'+a.end);
-        var key=trip+'|'+action;
-        if(rank.actions[key])return;
-        var before=rankIndex();rank.actions[key]=action;rank.points=Object.keys(rank.actions).length;
-        write(KEY+'rank',rank);updateRank();
-        if(rankIndex()>before){toast('Your planning progress: '+RANKS[rankIndex()][0]);announce('Your planning progress: '+RANKS[rankIndex()][0]);}
-    }
-    function updateRank(){
-        var badge=get('rank-badge');
-        if(!badge){badge=document.createElement('button');badge.dataset.testid='rank-badge';document.querySelector('.topbar').insertBefore(badge,document.getElementById('restart'));}
-        var i=rankIndex(),prog=(RANKS[i+1]?' · '+(RANKS[i+1][1]-rank.points)+' more actions to '+RANKS[i+1][0]:' · '+rank.points+' actions');badge.innerHTML='<span class="rank-title">'+esc(RANKS[i][0])+'</span><span class="rank-progress">'+esc(prog)+'</span>';badge.setAttribute('aria-label','Your planning progress: '+RANKS[i][0]+prog+'. Show how points were earned');
-        badge.onclick=function(){showModal('Your planning progress', '<span data-testid="rank-details">'+rank.points+' earned actions</span><ul>'+Object.values(rank.actions).map(function(a){return '<li>'+esc(a.replace(/Viewed the treasure map/g,'Viewed the map'))+'</li>';}).join('')+'</ul>',[{text:'Close'}]);};
-    }
+    function earn(action) {}
     function visibleItems(day,i){
         // Use the same renderer as the list so relax mode and edited times stay in sync.
         var holder=document.createElement('div');holder.innerHTML=dayHTML(day,i);
@@ -1786,7 +1851,7 @@
             ['items','added','relax','rain'].forEach(function(k){if(edits[k]&&(typeof edits[k]!=='object'||Array.isArray(edits[k])))throw new Error('edits');});
             Object.values(edits.items||{}).forEach(function(it){if(!it||typeof it!=='object')throw new Error('item');});
             Object.values(edits.added||{}).forEach(function(items){if(!Array.isArray(items)||!items.every(function(it){return it&&typeof it.id==='string'&&typeof it.title==='string'&&typeof it.time==='string';}))throw new Error('added');});
-            var a=Object.assign({},defaults,data.answers);
+            var a=Object.assign({},defaults,normalizePace(data.answers));
             if(!Array.isArray(a.ages)||!Array.isArray(a.styles)||!Array.isArray(a.food)||!(a.length>=2&&a.length<=30)||(!a.flexible&&(!/^\d{4}-\d{2}-\d{2}$/.test(a.start)||!/^\d{4}-\d{2}-\d{2}$/.test(a.end)||!(new Date(a.end)>=new Date(a.start))||(new Date(a.end)-new Date(a.start)>29*864e5))))throw new Error('answers');
             if(data.db!==undefined&&(!data.db||typeof data.db!=='object'||Array.isArray(data.db)))throw new Error('builder');
             state.shared=true;state.sharedEdits=data.edits;state.sharedBuilder=data.db||null;state.answers=a;generate(true);
@@ -1895,7 +1960,6 @@
         state:state, go:go, buildICS:buildICS, planText:planText
     };
     window.addEventListener('hashchange',function(){if(location.hash.indexOf('#trip=')===0)restoreShared();});
-    updateRank();
     var last=read(KEY+'lastTrip', null);
     if(location.hash.indexOf('#trip=')===0)restoreShared();
     else { migrateLegacyTrip(); go('home'); }

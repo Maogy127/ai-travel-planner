@@ -12,9 +12,9 @@ async def checks(browser):
     try:
         assets = await pg.locator('script[src],link[rel=stylesheet]').evaluate_all(
             "els => els.map(e => e.getAttribute('src') || e.getAttribute('href')).filter(p => /^(js|css|vendor|fonts)\\//.test(p))")
-        assert len(assets) == 16
+        assert len(assets) == 17
         for path in assets:
-            assert path.endswith('?v=122593a-wellness'), path
+            assert path.endswith('?v=5600d63-v2'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()

@@ -56,9 +56,7 @@ async def checks(browser):
             planned = await pg.locator('.day-head > .wellness-rings .ring-values').inner_text()
             assert planned != baseline
             tags = pg.locator('.db-activity > [data-testid=diet-tag]')
-            assert await tags.count() > 0
-            for text in await tags.all_text_contents():
-                assert text == 'Diet info not confirmed — check the menu'
+            assert await tags.count() == 0  # demo data has no confirmed diet claims
             await pg.reload()
             await pg.get_by_test_id('continue-saved').click()
             await pg.get_by_test_id('day-pace').wait_for(timeout=45000)

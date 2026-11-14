@@ -50,8 +50,11 @@ async def checks(browser):
             await pg.evaluate("voiceResult('morning walks', true)")
             await expect(field).to_have_value('San Diego, morning walks')
             assert await pg.evaluate('__gonow.state.answers.destination') == 'San Diego, morning walks'
-            await expect(pg.get_by_test_id('wellness-rings')).to_be_visible()
-            await expect(pg.locator('figcaption')).to_have_text('Plan estimates, not medical advice')
+            await expect(pg.locator('.sample-day')).to_have_count(0)
+            await expect(pg.get_by_test_id('sample-rings')).to_have_count(0)
+            await expect(pg.get_by_test_id('wellness-rings')).to_have_count(0)
+            await expect(pg.get_by_test_id('rank-badge')).to_have_count(0)
+            await expect(pg.get_by_text('A gentle day by the coast', exact=True)).to_have_count(0)
             await pg.evaluate('document.fonts.ready')
             assert await pg.evaluate('''() => ['Fraunces Variable','Inter Variable'].every(name => [...document.fonts].some(f => f.family.replace(/["']/g,'') === name && f.status === 'loaded'))''')
             assert any('/fonts/' in u and '.woff2' in u for u in requests), requests
@@ -66,6 +69,8 @@ async def checks(browser):
             await pg.get_by_test_id('demo-oahu').click()
             await expect(pg.get_by_test_id('db-root')).to_be_visible()
             await calm(pg, f'plan {width}')
+            await expect(pg.locator('.day-head > .wellness-rings figcaption')).to_have_text('Plan estimates, not medical advice')
+            await expect(pg.get_by_test_id('rank-badge')).to_have_count(0)
             await expect(pg.locator('.day-head > [data-testid=wellness-rings]')).to_be_visible()
             await pg.get_by_test_id('view-map').click()
             await expect(pg.get_by_test_id('trip-map')).to_be_visible()

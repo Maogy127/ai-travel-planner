@@ -60,3 +60,15 @@ assert.equal(flight.start, null);
 assert.equal(flight.end, null);
 console.log('Day Builder logic checks passed. Default 11/26:');
 baseline.items.forEach(i => console.log(B.range(i.start, i.end) + '  ' + i.title));
+
+// I1: booking lead times are not activity durations; genuine durations still parse.
+for (const text of ['within 24 h', '24 h in advance', 'book 48 h ahead', 'Full refund with 48 h notice.']) {
+    assert.equal(B.parseDuration(text), null, text);
+}
+for (const [text, minutes] of [['About 1.5 h', 90], ['~45 min', 45], ['2 h tour', 120], ['allow about 1.5 h from check-in', 90]]) {
+    assert.equal(B.parseDuration(text), minutes, text);
+}
+const shuttle = B.reflow(B.buildSuggested('2026-11-28')).items.find(i => i.id === '2026-11-28-11');
+assert.equal(shuttle.duration, 60, 'shuttle uses existing 60-minute default');
+assert(shuttle.duration > 0 && shuttle.duration <= 60);
+assert.deepEqual([shuttle.start, shuttle.end], [1245, 1305]);

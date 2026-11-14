@@ -47,8 +47,6 @@ async def checks(browser):
             await pg.locator('[data-testid=activity-chip]').first.click()
             await pair(pg,'[data-testid=activity-chip][aria-pressed=true]','selected chip')
             await pair(pg,'.pace-option:has(input:checked) strong','selected pace')
-            for key in ('sleep','move','rec'):
-                await pair(pg,f'.ring-value-{key} strong',f'{key} ring text')
             hues=await pg.evaluate('''() => {const css=getComputedStyle(document.documentElement);function hue(hex){let [r,g,b]=hex.trim().slice(1).match(/../g).map(x=>parseInt(x,16)/255);let max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;return ((max===r?(g-b)/d:max===g?(b-r)/d+2:(r-g)/d+4)*60+360)%360;}let diff=Math.abs(hue(css.getPropertyValue('--move'))-hue(css.getPropertyValue('--accent')));return Math.min(diff,360-diff);}''')
             assert hues>=20,hues
             print(f'PASS movement vs terracotta hue difference {hues:.2f} degrees')

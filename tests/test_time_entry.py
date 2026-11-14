@@ -1,3 +1,4 @@
+from test_full import card_action
 """Day-local unscheduled and time entry regressions, in isolated contexts.
 All 18:00 values below are test-only.
 """
@@ -115,16 +116,16 @@ async def checks(browser, base, width):
         await pg.keyboard.press('Escape')
         await expect(photos.get_by_test_id('activity-time-form')).to_have_count(0)
         # Duplicate without time gets a new id; the source is untouched.
-        await row.get_by_role('button', name='Add it again', exact=True).click()
+        await (await card_action(pg, row, 'db-add-again')).click()
         dialog = pg.get_by_test_id('add-again-dialog')
-        await expect(dialog.get_by_role('heading', name='Add it again', exact=True)).to_be_visible()
+        await expect(dialog.get_by_role('heading', name='Add it again')).to_be_visible()
         await pg.get_by_test_id('add-again-dialog').get_by_role('button', name='Add a copy', exact=True).click()
         copy_id = await tray.locator('[data-db-id]').first.get_attribute('data-db-id')
         assert copy_id != identity
         await expect(row.get_by_test_id('db-time')).to_have_text('3:00 PM–4:00 PM')
-        await row.get_by_role('button', name='Add it again', exact=True).click()
+        await (await card_action(pg, row, 'db-add-again')).click()
         dialog = pg.get_by_test_id('add-again-dialog')
-        await expect(dialog.get_by_role('heading', name='Add it again', exact=True)).to_be_visible()
+        await expect(dialog.get_by_role('heading', name='Add it again')).to_be_visible()
         await expect(dialog).to_have_attribute('aria-labelledby', 'db-transfer-title')
         await dialog.locator('[name=start]').fill('18:00')
         await dialog.get_by_role('button', name='Add a copy', exact=True).click()
@@ -145,15 +146,15 @@ async def checks(browser, base, width):
                 await toggle.click()
             await tray.locator('[data-db-id="'+copy_id+'"]').get_by_test_id('schedule-item').click()
         else:
-            await db_pointer(pg, tray.locator('[data-db-id="'+copy_id+'"]').get_by_test_id('db-handle'), day.locator('[data-db-id=lamer]'), after=True)
+            await db_pointer(pg, (await card_action(pg, tray.locator('[data-db-id="'+copy_id+'"]'), 'db-handle')), day.locator('[data-db-id=lamer]'), after=True)
         await expect(pg.get_by_test_id('schedule-dialog')).to_be_visible()
         await pg.get_by_test_id('schedule-dialog').locator('[name=start]').fill('14:00')
         await pg.get_by_test_id('schedule-dialog').get_by_role('button', name='Schedule', exact=True).click()
         await expect(tray.locator('[data-db-id]')).to_have_count(0)
         # Moving preserves the id, including a subsequent move with time.
-        await row.get_by_role('button', name='Move to another day').click()
+        await (await card_action(pg, row, 'db-move-day')).click()
         dialog = pg.get_by_test_id('move-day-dialog')
-        await expect(dialog.get_by_role('heading', name='Move to another day', exact=True)).to_be_visible()
+        await expect(dialog.get_by_role('heading', name='Move to another day')).to_be_visible()
         await expect(dialog).to_have_attribute('aria-labelledby', 'db-transfer-title')
         await dialog.locator('[name=date]').select_option('2026-11-27')
         await dialog.get_by_role('button', name='Move', exact=True).click()
@@ -180,16 +181,16 @@ async def checks(browser, base, width):
         await pg.get_by_test_id('schedule-dialog').locator('[name=start]').fill('12:00')
         await pg.get_by_test_id('schedule-dialog').get_by_role('button', name='Schedule', exact=True).click()
         row = day.locator('[data-db-id="'+identity+'"]')
-        await row.get_by_role('button', name='Move to another day').click()
+        await (await card_action(pg, row, 'db-move-day')).click()
         dialog = pg.get_by_test_id('move-day-dialog')
-        await expect(dialog.get_by_role('heading', name='Move to another day', exact=True)).to_be_visible()
+        await expect(dialog.get_by_role('heading', name='Move to another day')).to_be_visible()
         await expect(dialog).to_have_attribute('aria-labelledby', 'db-transfer-title')
         await dialog.locator('[name=date]').select_option('2026-11-26')
         await dialog.locator('[name=start]').fill('18:00')
         await dialog.get_by_role('button', name='Move', exact=True).click()
         await expect(row.get_by_test_id('db-time')).to_contain_text('6:00 PM')
         # Reservations require explicit unlock; declining does nothing.
-        await lamer.get_by_role('button', name='Move to another day').click()
+        await (await card_action(pg, lamer, 'db-move-day')).click()
         await pg.get_by_test_id('unlock-decline').click()
         await expect(lamer.get_by_test_id('db-time')).to_have_text('7:30 PM–9:30 PM')
         await expect(pg.get_by_test_id('move-day-dialog')).to_have_count(0)
@@ -240,9 +241,9 @@ async def checks(browser, base, width):
         assert 'Magic Island' not in before
         await pg.get_by_test_id('logo').click()
         await pg.get_by_test_id('edit-draft').first.click()
-        await day.locator('[data-db-id=photos]').get_by_role('button', name='Move to another day').click()
+        await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-move-day')).click()
         dialog = pg.get_by_test_id('move-day-dialog')
-        await expect(dialog.get_by_role('heading', name='Move to another day', exact=True)).to_be_visible()
+        await expect(dialog.get_by_role('heading', name='Move to another day')).to_be_visible()
         await expect(dialog).to_have_attribute('aria-labelledby', 'db-transfer-title')
         await dialog.locator('[name=date]').select_option('2026-11-26')
         await dialog.get_by_role('button', name='Move', exact=True).click()

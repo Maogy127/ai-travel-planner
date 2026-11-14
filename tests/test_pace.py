@@ -45,12 +45,29 @@ async def checks(browser):
             await pg.get_by_test_id('traveler-pace').nth(1).select_option('gentle')
             rings = pg.get_by_test_id('traveler-rings').nth(1)
             text = await rings.inner_text()
-            assert 'Sam' in text and '7 h 30 m' in text and '30 min' in text and '20 min' in text
+            assert await rings.get_attribute('aria-label') == 'Sam'
+            label = await rings.locator('svg').get_attribute('aria-label')
+            assert 'goal 7 h 30 m' in label and 'goal 30 min' in label and 'goal 20 min' in label
+            details = rings.get_by_test_id('ring-breakdown-toggle')
+            await expect(details).to_have_text('Details')
+            await expect(rings.get_by_test_id('ring-breakdown')).to_be_hidden()
+            await details.focus()
+            await pg.keyboard.press('Enter')
+            await expect(details).to_have_attribute('aria-expanded', 'true')
+            await expect(rings.get_by_test_id('ring-breakdown')).to_be_visible()
+            await details.click()
+            await expect(details).to_have_attribute('aria-expanded', 'false')
             assert not any(w in text.lower() for w in ('winner', 'best', 'rank'))
             await reopen(pg)
             await expect(pg.get_by_test_id('traveler-name').nth(1)).to_have_value('Sam')
             await expect(pg.get_by_test_id('traveler-pace').nth(1)).to_have_value('gentle')
-            print('PASS day and group pace', width)
+            await pg.evaluate("window.__gonow.go('pace')")
+            await expect(pg.get_by_test_id('pace-option')).to_have_count(4)
+            await pg.locator('[data-testid=pace-option][data-value=gentle]').check()
+            assert await pg.evaluate('window.__gonow.state.answers.level') == 'gentle'
+            assert await pg.evaluate('window.__gonow.state.answers.pace') == 'Easy'
+            await expect(pg.get_by_test_id('sleep-bedtime')).to_be_visible()
+            print('PASS day, group and single onboarding pace', width)
         finally:
             await ctx.close()
 

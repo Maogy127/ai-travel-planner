@@ -1,3 +1,4 @@
+from test_full import card_action
 """Deterministic Day Builder screenshots; run with python3 tests/shots_daybuilder.py."""
 import asyncio
 import socket
@@ -58,14 +59,14 @@ async def main():
                 card = pg.get_by_test_id('plan-day').nth(1)
                 await card.evaluate("e=>{const b=e.querySelector('[data-testid=tile-toggle]');if(b&&b.getAttribute('aria-expanded')!=='true')b.click()}")
                 await shot('daycard-1126', card)
-                await day.locator('[data-db-id=photos]').get_by_test_id('db-down').click()
+                await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
                 await shot('afterdark', day.locator('[data-db-id=photos]'), True)
                 await pg.get_by_test_id('db-reset').click()
                 await pg.get_by_test_id('db-tray-toggle').click()
                 await shot('tray', pg.get_by_test_id('db-tray'), include_header=True)
                 await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-1]').get_by_test_id('db-add').click()
                 await shot('parasail', day.locator('[data-db-id=photos]'), True)
-                await day.locator('[data-db-id=chest-1]').get_by_test_id('db-remove').click()
+                await (await card_action(pg, day.locator('[data-db-id=chest-1]'), 'db-remove')).click()
                 await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-0]').get_by_test_id('db-add').click()
                 await shot('conflict', day.locator('.db-conflict').first, True)
                 await pg.get_by_test_id('db-booking-toggle').click()
@@ -73,7 +74,7 @@ async def main():
                 await pg.get_by_test_id('db-booking-start').fill('22:00')
                 await pg.get_by_test_id('db-booking-end').fill('23:00')
                 await shot('addbooking', pg.get_by_test_id('db-booking-form'), True)
-                await day.locator('[data-db-id=photos]').get_by_test_id('db-handle').focus()
+                await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-handle')).focus()
                 await pg.keyboard.press('Space')
                 await shot('focus', day.locator('.db-picked'), True)
                 await ctx.close()

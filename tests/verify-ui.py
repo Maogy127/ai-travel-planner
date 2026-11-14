@@ -64,7 +64,7 @@ async def main():
         await page.evaluate("""() => {
             Object.assign(window.__gonow.state.answers, {
                 start:'2027-01-01',end:'2027-01-05',food:['Vegan'],
-                pace:'Easy',mustdos:'Museum visit',stay:'My Hotel'
+                level:'gentle',mustdos:'Museum visit',stay:'My Hotel'
             });
             window.__gonow.go('musts');
         }""")

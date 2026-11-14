@@ -1334,3 +1334,85 @@ button:hover:not(:disabled){background:var(--soft);color:var(--ink)}
  [data-testid="traveler-rings"] .ring-values{gap:2px 6px}
  [data-testid="traveler-rings"] .ring-value{gap:2px}
 }
+
+/* v2 compact planning controls and activity rows */
+.pace-options{grid-template-columns:repeat(4,minmax(0,1fr));gap:6px}.pace-option:last-child{grid-column:auto}.pace-option{padding:8px;min-height:44px}.pace-option small{font-size:11px}.pace-option span{min-width:0}.activity-chips{gap:5px}.activity-chips button{padding:6px 10px;min-height:44px}.intro h1+p{font-size:17px}.home-screen fieldset{margin:12px 0}.home-screen fieldset p{margin:4px 0}
+[data-testid=ring-breakdown-toggle]{min-height:44px;min-width:44px;grid-column:1/-1}[data-testid=ring-breakdown]{grid-column:1/-1;font-size:13px}[hidden]{display:none!important}
+[data-testid=db-more-menu]{position:absolute;left:0;top:100%;z-index:30;box-sizing:border-box;width:260px;max-width:min(260px,calc(100vw - 32px));padding:6px;background:var(--surface);border:1px solid var(--boundary);border-radius:12px;box-shadow:0 6px 20px #0002}[data-testid=db-more-menu] [role=menuitem]{display:flex;align-items:center;gap:8px;width:100%;min-height:44px;padding:8px;text-align:left;font-size:14px!important}[data-testid=db-more-menu] svg{flex-shrink:0}[data-testid=db-more-menu] .db-item-actions{display:block;margin:0}[data-testid=db-more-menu] [data-db-action=handle]{touch-action:none;cursor:grab}.db-root .db-controls{flex-wrap:nowrap;align-items:center}.db-root .db-controls>button,.db-root .db-controls>.db-lock{min-width:44px;min-height:44px;box-sizing:border-box;flex-shrink:0}.db-root [data-testid=db-more]{min-width:44px;min-height:44px;font-size:14px}.db-thumb{width:72px;height:90px;object-fit:cover;align-self:center;border-radius:8px}.db-daycard .db-activity{padding:6px 10px}.db-daycard .db-controls{margin-top:2px;align-items:center}.db-daycard .db-expand{padding:0 24px 0 0;min-height:36px}.db-daycard .db-activity strong{font-size:16px}.db-daycard .db-time{flex-basis:120px}.db-daycard .db-time::after{display:none}
+@media(max-width:767px){.pace-options{grid-template-columns:repeat(2,minmax(0,1fr))}.pace-option{min-height:60px;padding:7px}.pace-option small{display:none}.db-thumb{width:48px;height:72px}.db-daycard .db-time{flex-basis:84px;padding:6px;font-size:11px}.db-daycard .db-activity{padding:6px}.db-daycard .db-activity strong{font-size:15px}}
+
+.db-daycard .db-expand{min-height:44px}.db-dragging [data-testid=db-more-menu]{visibility:hidden;pointer-events:none}
+.intro fieldset{margin:10px 0}.intro fieldset .muted{margin:3px 0}.intro .pace-option small{display:none}.intro .pace-option{align-items:center;min-height:48px}.intro .pace-option strong{font-size:13px}.intro .form-stack{margin-top:12px;padding:16px;gap:12px}
+@media(min-width:768px){.intro h1{font-size:48px;line-height:1.08}.intro>.eyebrow::before{margin-bottom:12px}}
+/* Optional day reflections use the existing AA ink/surface tokens. */
+button{overflow-wrap:normal;word-break:normal}
+.db-daycard .db-time{flex-direction:column;align-items:flex-start;justify-content:center}
+.db-daycard .db-time span{display:block;white-space:nowrap}
+[data-testid=ring-breakdown-toggle]{width:auto;justify-self:start;white-space:nowrap;flex:none;padding:8px 12px}
+.ring-encouragement{grid-column:1/-1;font-size:12px;margin:2px 0;color:var(--ink)}
+[data-testid=traveler-rings] .wellness-rings{flex-wrap:wrap}
+[data-testid=traveler-rings] .ring-encouragement{flex-basis:100%;font-size:11px}
+.day-feel{grid-column:1/-1;min-width:0;padding:8px 0;color:var(--ink)}
+.day-feel details{margin:6px 0;padding:8px 12px;background:var(--surface);border:1px solid var(--boundary);border-radius:12px}
+.day-feel summary{min-height:44px;display:flex;align-items:center;cursor:pointer;line-height:1.4}
+.day-feel fieldset{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;padding:0;border:0}
+.day-feel legend{text-transform:capitalize;font-weight:600;font-size:14px}
+.day-feel button,.day-feel select,.day-feel textarea{min-height:44px;min-width:44px}
+.day-feel button{padding:8px 12px;margin:2px;font-size:14px;color:var(--ink);background:var(--surface);border:1px solid var(--boundary);border-radius:10px}
+.day-feel button[aria-pressed=true]{background:var(--soft);border:2px solid var(--ink)}
+.day-feel .is-listening{outline:3px solid var(--ink);outline-offset:2px;font-weight:700}
+.day-feel textarea{display:block;width:100%;box-sizing:border-box;margin:6px 0;font:inherit;color:var(--ink);background:var(--surface)}
+.day-feel article{padding:8px 12px;margin:6px 0;background:var(--soft);border-radius:12px}
+.day-feel article p{margin:0 0 4px}.feel-selector{display:flex;flex-wrap:wrap;gap:4px}
+.moments-summary{padding:16px;background:var(--surface);border:1px solid var(--boundary);border-radius:14px;margin:16px 0}
+.traveler-alternative{display:block;font-size:12px;color:var(--ink);margin:4px 0}
+
+/* v2: focused home and compact, accessible daily controls. */
+.home-screen{max-width:780px;margin-inline:auto;padding-top:32px}
+.wellness-hero,.start-grid{grid-template-columns:minmax(0,1fr);max-width:720px;margin-inline:auto;gap:24px;margin-bottom:32px}
+.home-screen .intro h1{margin-top:8px;margin-bottom:16px}
+.home-screen .pace-option{min-height:64px;padding:10px 12px}
+.home-screen fieldset{margin-bottom:16px}
+.feel-fields{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.day-feel .feel-fields fieldset{display:flex;align-content:start;gap:2px;min-width:0}
+.day-feel legend{text-transform:uppercase;letter-spacing:.08em;font-size:11px}
+.day-feel .feel-fields button{padding:6px;margin:0;display:inline-flex;align-items:center;justify-content:center}
+.day-feel [data-testid=checkin-mood] svg{width:22px;height:22px;flex:none}
+.feel-input{display:flex;gap:16px;align-items:center}
+.feel-input>label{flex:1;min-width:0}
+.feel-input .voice-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.feel-input .voice-controls label{display:flex;align-items:center;gap:8px}
+.day-feel textarea::placeholder,.day-feel [role=status]{color:var(--ink-2)}
+.moment-dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block;margin-right:8px;flex:none}
+.travelers{display:grid;grid-template-columns:minmax(0,1fr);width:100%;gap:8px}
+[data-testid=traveler-row]{grid-template-columns:minmax(90px,140px) minmax(100px,136px) minmax(0,1fr);gap:12px}
+[data-testid=traveler-rings]{min-width:0;grid-column:auto}
+[data-testid=traveler-row] input,[data-testid=traveler-row] select{width:100%;min-height:44px;box-sizing:border-box}
+[data-testid=traveler-row] .compact-rings{display:grid;grid-template-columns:36px minmax(0,1fr) auto;align-items:center;gap:8px;margin:0;padding:0}
+[data-testid=traveler-row] .compact-rings svg{width:36px;height:36px}
+.compact-values{white-space:nowrap;font-size:12px}
+.compact-rings [data-testid=ring-breakdown-toggle]{min-height:44px;padding:6px 8px}
+.compact-rings [data-testid=ring-breakdown]{grid-column:1/-1;white-space:normal}
+@media(max-width:767px){
+ .home-screen{padding-top:24px}
+ .feel-fields{grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
+ .feel-input{display:block}
+ [data-testid=traveler-row]{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:4px 8px;padding:8px}
+ [data-testid=traveler-rings]{grid-column:1/-1}
+ .db-root [data-testid=traveler-row] [data-testid=traveler-pace]{min-width:0}
+}
+
+/* v2 regression fixes: inline traveler details and full-size check-in targets. */
+@media(max-width:360px){
+ /* The padlock retains its accessible name and pressed state; omit the duplicate badge. */
+ .db-root .db-controls>.db-lock{display:none}
+ .db-daycard .db-activity{min-width:0}
+ .db-daycard .db-controls{gap:2px}
+}
+[data-testid=traveler-row] .compact-rings [data-testid=ring-breakdown-toggle]{grid-column:3;grid-row:1;justify-self:end;min-width:44px;min-height:44px;box-sizing:border-box}
+[data-testid=traveler-row] .compact-rings>svg{grid-column:1;grid-row:1}
+[data-testid=traveler-row] .compact-values{grid-column:2;grid-row:1}
+.db-root .day-feel button{min-width:44px;min-height:44px;box-sizing:border-box;flex-shrink:0}
+@media(min-width:768px){
+ [data-testid=traveler-row]{grid-template-columns:140px 136px minmax(0,1fr)}
+}
