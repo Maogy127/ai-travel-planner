@@ -145,7 +145,7 @@ function buildSuggested(date) {
     });
     return {date, items, unscheduled: []};
 }
-// Ideas no longer on a day card stay available in the treasure chest.
+// Ideas no longer on a day card stay available in Activity ideas.
 const chestOnly = [{id: 'magic-island', time: '5:15 PM', kind: 'sight', title: 'Magic Island sunset',
     desc: 'Ala Moana Beach Park. Be in place by about 5:30 PM; sunset about 5:48 PM.'}];
 function trayItems() {
@@ -643,7 +643,7 @@ function mount(root, ctx = {}) {
             ${ctx.dayExtras ? ctx.dayExtras(date) : ''}
             ${ctx.shared && d.unscheduled.length ? `<section data-testid="unscheduled-section"><h3>Unscheduled</h3><ul>${d.unscheduled.map(i => `<li>${esc(i.title)}</li>`).join('')}</ul></section>` : ''}
             <div class="db-tools">
-            <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Treasure chest <span class="db-count">${availableTray.length}</span></button>
+            <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Activity ideas <span class="db-count">${availableTray.length}</span></button>
             <button type="button" data-testid="db-booking-toggle" data-db-action="booking" aria-expanded="${bookingOpen}" aria-controls="db-booking">+ Add booking</button>
             </div>
             <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}>${availableTray.map(i => pair(i, true)).join('')}</div>

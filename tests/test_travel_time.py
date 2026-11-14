@@ -11,10 +11,10 @@ async def checks(browser):
     ctx, pg = await new(browser, 'http://127.0.0.1:8817/index.html', 1280, 900)
     try:
         assets = await pg.locator('script[src],link[rel=stylesheet]').evaluate_all(
-            "els => els.map(e => e.getAttribute('src') || e.getAttribute('href')).filter(p => /^(js|css|vendor)\\//.test(p))")
-        assert len(assets) == 13
+            "els => els.map(e => e.getAttribute('src') || e.getAttribute('href')).filter(p => /^(js|css|vendor|fonts)\\//.test(p))")
+        assert len(assets) == 16
         for path in assets:
-            assert path.endswith('?v=11c2dfb-mapvoice'), path
+            assert path.endswith('?v=122593a-wellness'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()

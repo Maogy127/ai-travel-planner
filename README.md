@@ -1,6 +1,6 @@
 # GoNow
 
-Open `index.html` directly, or serve this directory with any static HTTP server. Home lists trips saved on this device. Start a trip, shape it in Draft, then Generate my plan to freeze a finished copy. Draft edits do not change that copy until you generate again. Activity search uses the on-device library only. It is not a live worldwide place search. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Google Fonts supplies Playfair Display and DM Sans when online; system fallbacks keep the site usable offline. Use `?fast=1` to skip the simulated planning delay.
+Open `index.html` directly, or serve this directory with any static HTTP server. Home lists trips saved on this device. Start a trip, shape it in Draft, then Generate my plan to freeze a finished copy. Draft edits do not change that copy until you generate again. Activity search uses the on-device library only. It is not a live worldwide place search. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Fraunces Variable and Inter Variable are self-hosted in `fonts/` with `font-display: swap`, Georgia/system fallbacks and SIL OFL licenses in each family directory. No font service is contacted. Use `?fast=1` to skip the simulated planning delay.
 
 Files: `index.html`, `css/styles.css`, `js/catalog.js`, `js/oahu.js`, `js/daybuilder.js`, `js/engine.js`, `js/ai.js`, `js/credits.js`, `js/localinfo.js`, `js/affiliates.js`, `js/app.js`, `credits.json` and `images/*.jpg`.
 
@@ -20,24 +20,26 @@ Main screen names: `start`, `dates`, `budget`, `who`, `ages`, `style`, `recommen
 
 GoNow stores answers, itinerary edits, packing ticks and packing-list items in `localStorage` under `gonow:*` keys. Keys from the site's earlier name are migrated automatically on first load, so saved ticks and edits survive. **Reset my edits** clears itinerary changes only; packing ticks, quantities and added packing items are kept.
 
-## Pirate Explorer interface
+## Wellness design
 
-Onboarding is a parchment journal with a compass guide, page turns, selected-answer stamps, a stamp passport and pinned answers. Budget coverage defaults to all five categories and saves in `answers.covers`. The plan opens with a brief treasure-map reveal, then uses an accessible single-open accordion for days, budget, trip essentials, food, transport, packing guidance and booking reminders. Native buttons support Enter and Space; day navigation opens the corresponding tile.
+Warm sand and terracotta tokens live at the top of `css/styles.css`. `--accent` is decorative; `--accent-text` supplies accessible text and primary buttons. Sleep uses purple, movement amber, recovery teal. The home and onboarding entry share a native radio pace picker (Not sure by default) and nine activity toggles; preferences and destination save with existing answers. Home destination voice shares the requests recognition, language and unsupported behavior.
+
+Calm progress dots replace the journal stamps. Existing test IDs and the trip lists, question flow, editable schedule, locks, travel connectors, activity tray and exports remain. Display-only concentric rings appear on the sample day and itinerary headers. `js/rings.js` documents the pure `GoNowRings.scoreDay(items, level, nextItems)` estimates: sleep window after the last stop, weighted activity minutes, and explicit recovery blocks. Missing times use documented defaults. These are plan estimates, not medical advice; they do not measure health or change the itinerary.
 
 Oahu facts and photos are unchanged. Its budget uses the supplied activity and transport ranges; unresearched flights, hotel and meals are explicitly identified. All bucket figures are approximate and coverage labels reflect the selected budget scope. Reduced-motion preferences disable animations and the simulated generation delay. `?fast=1` keeps animations under 600 ms without delaying access to the plan.
 
-Run `python3 tests/test_full.py` from the project root. Regression screenshots use the project’s `screenshots/pirate-local-*.png` folder. Tests fulfill the optional Google Fonts stylesheet with empty CSS for deterministic offline/fallback testing and collect every failed request, page error and console error.
+Run `python3 tests/test_full.py` from the project root. Regression screenshots use the project’s `screenshots/pirate-local-*.png` folder. Tests load local fonts and collect failed requests, page errors and console errors.
 
 
-## Share, export and explorer tools
+## Share and export
 
-The Share & export toolbar prints every day and detail with source URLs and a GoNow stamp, downloads an RFC 5545 calendar, or copies a trip link. `window.__gonow.buildICS()` returns the calendar string and `window.__gonow.planText()` returns the copied text. On the Oahu demo, calendar events and the copied text use the day builder's current order and reflowed start and end, including after a reorder and after Relax changes 11/28. Each printed Oahu day starts on a new page with its details open and its move controls hidden. Template events use floating local times or all-day summaries, and end at the next stop or one hour later when no end time is supplied. Calendar times remain suggestions to verify against bookings.
+The Share & export toolbar prints every day and detail with source URLs and a GoNow credit, downloads an RFC 5545 calendar, or copies a trip link. `window.__gonow.buildICS()` returns the calendar string and `window.__gonow.planText()` returns the copied text. On the Oahu demo, calendar events and the copied text use the day builder's current order and reflowed start and end, including after a reorder and after Relax changes 11/28. Each printed Oahu day starts on a new page with its details open and its move controls hidden. Template events use floating local times or all-day summaries, and end at the next stop or one hour later when no end time is supplied. Calendar times remain suggestions to verify against bookings.
 
 Links contain UTF-8 JSON encoded as base64url (`#trip=j.…`): answers, plan ID and itinerary edits, without packing ticks. Shared copies regenerate locally and keep the recipient’s saved trip intact until **Make it mine**. Links are readable by anyone who has them, including any notes and answers you include. Invalid links show a friendly start screen.
 
-List is the default itinerary view. The Treasure map uses vendored Leaflet 1.9.4 (`vendor/leaflet-1.9.4`, license included) with on-demand OpenStreetMap tiles and visible Leaflet/OSM attribution. The map reads current DayBuilder schedules, groups consecutive activities at the same place, and keeps a text stop list and List day-jump buttons. Prep and travel are omitted as pins, except airport arrivals and departures resolving to HNL. Lines connect stops directly; they are not road routes. `js/geo.js` retains supplied Nominatim-verified coordinates (November 14, 2026), source descriptions and approximate-area flags. Approximate locations are labeled; unknown places are never geocoded or guessed. Missing Leaflet or offline tiles leave the stop list available. Printing keeps the selected map stop list and hides the interactive map. The view preference uses `gonow:view`.
+List is the default itinerary view. The Map uses vendored Leaflet 1.9.4 (`vendor/leaflet-1.9.4`, license included) with on-demand OpenStreetMap tiles and visible Leaflet/OSM attribution. The map reads current DayBuilder schedules, groups consecutive activities at the same place, and keeps a text stop list and List day-jump buttons. Prep and travel are omitted as pins, except airport arrivals and departures resolving to HNL. Lines connect stops directly; they are not road routes. `js/geo.js` retains supplied Nominatim-verified coordinates (November 14, 2026), source descriptions and approximate-area flags. Approximate locations are labeled; unknown places are never geocoded or guessed. Missing Leaflet or offline tiles leave the stop list available. Printing keeps the selected map stop list and hides the interactive map. The view preference uses `gonow:view`.
 
-Explorer rank uses `gonow:rank`. Each distinct action earns one point per trip: completing each question, finishing a plan, completing all three personalization questions, packing at least half, printing, downloading a calendar, creating a share link and viewing the map. Repeating an action for the same trip earns no additional points. `RANKS` in `js/app.js` defines thresholds: Deckhand 0, Navigator 5, First Mate 10, Captain 16. The badge opens earned-action details. Start over preserves rank; storage failures leave the tools usable.
+Planning progress uses `gonow:rank`. Each distinct action earns one point per trip: completing each question, finishing a plan, completing all three personalization questions, packing at least half, printing, downloading a calendar, creating a share link and viewing the map. Repeating an action for the same trip earns no additional points. `RANKS` in `js/app.js` defines thresholds: Getting started 0, Settled in 5, Finding your rhythm 10, Traveling well 16. The badge opens earned-action details. Start over preserves rank; storage failures leave the tools usable.
 
 ## Weather, money & local info
 
@@ -59,7 +61,7 @@ The **Book this** tile offers Booking.com and Expedia hotel searches and Skyscan
 Both file and HTTP regression runs cover the partner domains, destination searches (or flight IATA/homepage fallback), absent attribution parameters, disclosure, link relationships, official Kualoa source and print hiding. They also check that a Costa Rica CRC plan displays **Live rate unavailable** without requesting Frankfurter.
 
 The Oahu sample includes **Build your day**, a separate editable itinerary with a
-Treasure chest, fixed bookings and derived travel/preparation blocks. Move handles
+Activity ideas, fixed bookings and derived travel/preparation blocks. Move handles
 support pointer drag and Space/Enter, arrow keys, Escape; move buttons also work
 on touch screens. Builder edits save under
 `gonow:daybuilder:oahu-demo-2026-11`. Reset to suggested restores the selected day.
@@ -77,3 +79,30 @@ Run `python3 tests/test_travel_time.py` for travel UI and versioned-asset checks
 Voice input on trip requests uses browser SpeechRecognition (Chrome, Edge or Safari, where supported). It needs microphone permission and may use the browser provider’s network speech service; GoNow adds no speech backend or network requests. English and 中文 language choice saves locally; final transcripts append to the editable requests and interim text stays in the live status. Unsupported browsers keep typing available.
 
 New browser checks: `python3 tests/test_map.py` (port 8821) and `python3 tests/test_voice.py` (port 8822), each covering 1280px and 390px. Map tests mock OSM tiles, including failure cases; voice tests install a mock SpeechRecognition, including unsupported and permission cases. The shared browser helper also fulfills OSM tiles locally. Run these in a Chromium-capable environment.
+
+
+Wellness checks: `node tests/test_rings.js` verifies pure deterministic estimates and level targets; `node tests/contrast_tokens.cjs` prints and asserts WCAG token ratios. `python3 tests/test_wellness_home.py` (8831) covers home, persistence, voice, local fonts, calm copy and responsive widths; `python3 tests/test_contrast.py` (8832) measures browser text contrast across home, listening, itinerary and map. Browser tests require Chromium and were not run in the restricted sandbox. `TEST-CHANGES.md` records every intentionally updated existing assertion.
+
+Wellness details: the home pace is the trip default; each day can keep it or select
+Gentle, Active or Athlete. Targets live only in `js/rings.js` (`LEVEL_GOALS`).
+Group trips show equally weighted traveler rings and editable names/paces; activities
+remain shared. Day overrides, travelers, optional sleep times and food preferences
+are stored in the trip's answers in the existing `gonow:` localStorage family.
+Optional bedtime/wake times constrain the planned sleep window using 45 minutes of
+wind-down after the final stop and 30 minutes of preparation before the next day's
+first stop. A bedtime also shows a marker 45 minutes earlier. Blank times retain
+the existing estimates and show no marker.
+
+Diet labels use only dedicated `tags` values or explicit “vegan options”,
+“vegetarian menu” (and equivalent selected-diet meals/dishes) wording in an item's
+own `title`/`desc`. A generated title repeating the user's cuisine choice is not
+confirmation. The current Oahu/catalog/engine meals contain no such dietary
+claims: they show “Diet info not confirmed — check the menu”. No ingredients,
+allergen safety or restaurant suitability are inferred. `GoNowDiet.match` is pure;
+explicitly supported meal suggestions sort first in the activity library, retaining
+order otherwise. Free-text food notes are saved for reference, not interpreted as
+verified menu facts.
+
+Supervisor browser regressions: `tests/test_pace.py` (8833) and
+`tests/test_wellness_questions.py` (8834), each at 1280 and 390 pixels.
+Node checks: `node tests/test_rings.js`, `node tests/test_diet.js`.

@@ -92,7 +92,7 @@ async def checks(browser):
             await expect(attribution).to_contain_text('OpenStreetMap contributors')
             await expect(attribution).to_contain_text('Leaflet')
             assert any(urlparse(u).hostname == 'tile.openstreetmap.org' for u in requests)
-            assert all(urlparse(u).hostname in ('127.0.0.1', 'tile.openstreetmap.org', 'fonts.googleapis.com') for u in requests), requests
+            assert all(urlparse(u).hostname in ('127.0.0.1', 'tile.openstreetmap.org') for u in requests), requests
             print('PASS map pins, route, popups, days, attribution and width', width)
         finally:
             await ctx.close()

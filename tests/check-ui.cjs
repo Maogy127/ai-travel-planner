@@ -39,12 +39,12 @@ const ctx = {
 ctx.window=ctx;ctx.scrollTo=()=>{};ctx.addEventListener=()=>{};ctx.history={state:null,pushState(s){this.state=s},replaceState(s){this.state=s}};
 vm.createContext(ctx);
 const jsRoot = fs.existsSync(`${__dirname}/../site/js/app.js`) ? `${__dirname}/../site/js/` : `${__dirname}/../js/`;
-for (const f of ['catalog','oahu','engine','ai','credits','localinfo','affiliates','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8'),ctx);
+for (const f of ['catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8'),ctx);
 const api=ctx.__gonow;
 const click=id=>node(`[data-testid="${id}"]`).click();
 (async()=>{
-  assert(node('view').innerHTML.includes('Photo:'));
-  assert(node('view').innerHTML.includes(ctx.PHOTO_CREDITS[0].alt));
+  assert(node('view').innerHTML.includes('Come home better than you left.'));
+  assert(node('view').innerHTML.includes('Plan estimates, not medical advice'));
   node('photo-credits').onclick();
   assert.equal((node('view').innerHTML.match(/class="card credit-card"/g)||[]).length, ctx.PHOTO_CREDITS.length);
   assert.ok(ctx.PHOTO_CREDITS.length >= 22);
