@@ -35,7 +35,7 @@ The Share & export toolbar prints every day and detail with source URLs and a Go
 
 Links contain UTF-8 JSON encoded as base64url (`#trip=j.…`): answers, plan ID and itinerary edits, without packing ticks. Shared copies regenerate locally and keep the recipient’s saved trip intact until **Make it mine**. Links are readable by anyone who has them, including any notes and answers you include. Invalid links show a friendly start screen.
 
-List is the default itinerary view. The illustrative SVG treasure route has keyboard-operable day buttons and a text day list; it is not geography or to scale. The view preference uses `gonow:view`.
+List is the default itinerary view. The Treasure map uses vendored Leaflet 1.9.4 (`vendor/leaflet-1.9.4`, license included) with on-demand OpenStreetMap tiles and visible Leaflet/OSM attribution. The map reads current DayBuilder schedules, groups consecutive activities at the same place, and keeps a text stop list and List day-jump buttons. Prep and travel are omitted as pins, except airport arrivals and departures resolving to HNL. Lines connect stops directly; they are not road routes. `js/geo.js` retains supplied Nominatim-verified coordinates (November 14, 2026), source descriptions and approximate-area flags. Approximate locations are labeled; unknown places are never geocoded or guessed. Missing Leaflet or offline tiles leave the stop list available. Printing keeps the selected map stop list and hides the interactive map. The view preference uses `gonow:view`.
 
 Explorer rank uses `gonow:rank`. Each distinct action earns one point per trip: completing each question, finishing a plan, completing all three personalization questions, packing at least half, printing, downloading a calendar, creating a share link and viewing the map. Repeating an action for the same trip earns no additional points. `RANKS` in `js/app.js` defines thresholds: Deckhand 0, Navigator 5, First Mate 10, Captain 16. The badge opens earned-action details. Start over preserves rank; storage failures leave the tools usable.
 
@@ -73,3 +73,7 @@ departures reflow following unlocked items; locked bookings stay fixed and any
 conflicts show heads-up notes. Prep stays automatic and flights use their own input.
 Run `python3 tests/test_travel_time.py` for travel UI and versioned-asset checks
 (on its own HTTP port 8817).
+
+Voice input on trip requests uses browser SpeechRecognition (Chrome, Edge or Safari, where supported). It needs microphone permission and may use the browser provider’s network speech service; GoNow adds no speech backend or network requests. English and 中文 language choice saves locally; final transcripts append to the editable requests and interim text stays in the live status. Unsupported browsers keep typing available.
+
+New browser checks: `python3 tests/test_map.py` (port 8821) and `python3 tests/test_voice.py` (port 8822), each covering 1280px and 390px. Map tests mock OSM tiles, including failure cases; voice tests install a mock SpeechRecognition, including unsupported and permission cases. The shared browser helper also fulfills OSM tiles locally. Run these in a Chromium-capable environment.

@@ -949,7 +949,8 @@ html.reduce-motion .treasure{transition:none}html.reduce-motion .treasure .route
 .stamped-footer{display:none;font-size:12px;text-align:center;margin:24px 0}.stamped-footer.shared-stamp{display:block}
 [data-testid="share-url"]{width:100%;min-width:0;font-size:12px}dialog{max-width:calc(100vw - 32px)}
 .treasure-map{background:linear-gradient(120deg,#e9dbb9,#fff9e9);border:1px solid #bcaa82;padding:20px;border-radius:5px;color:#705e3b}
-.treasure-map svg{display:block;width:100%;max-width:600px;margin:auto;height:auto}.treasure-map ol{padding-left:24px}.treasure-map li{margin:8px 0}.treasure-map button{text-align:left;max-width:100%;font-size:13px}.view-switch{margin:16px 0}.view-switch [aria-pressed=true]{background:#e4ebdf;border-color:#547368}
+.treasure-map ol{padding-left:24px}.treasure-map [data-testid=map-stop-list]{list-style:none;padding-left:8px}.treasure-map li{margin:8px 0}.treasure-map button{text-align:left;max-width:100%;font-size:13px}.view-switch{margin:16px 0}.view-switch [aria-pressed=true]{background:#e4ebdf;border-color:#547368}
+[data-testid=map-day-select][aria-pressed=true]{background:#e4ebdf;border-color:#547368;color:#203c40;font-weight:600}
 [hidden]{display:none!important}
 @media(max-width:600px){.topbar{flex-wrap:wrap;gap:8px}[data-testid="rank-badge"]{max-width:160px;font-size:11px}.treasure-map{padding:12px}}
 @media print{
@@ -1242,3 +1243,9 @@ button.db-time{min-height:44px;cursor:pointer;color:inherit;border-top:0;border-
 @media print{.db-item-actions{display:none!important}}
 
 [data-testid=tray-close]{min-width:44px;min-height:44px}
+
+[data-testid="trip-map"]{height:360px;width:100%;min-width:0;z-index:0}
+.map-pin{background:#963a29;color:#fff;border:2px solid #fff;border-radius:50%;text-align:center;line-height:26px;font:bold 15px/26px sans-serif;box-shadow:0 1px 4px #333}
+.voice-controls{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin:8px 0 16px}.voice-controls label{display:flex;align-items:center;gap:6px}.voice-controls select{width:auto}.voice-controls [role=status]{flex-basis:100%}.voice-controls [data-testid=voice-btn]{background:#e4ebdf;color:#294e50;border-color:#547368}.voice-controls [data-testid=voice-btn].is-listening,.voice-controls [data-testid=voice-btn][aria-pressed=true]{background:#963a29;color:#fff;border-color:#963a29}
+@media(max-width:600px){[data-testid="trip-map"]{height:300px}}
+@media print{.treasure-map{display:block!important}.treasure-map[hidden]{display:none!important}[data-testid="trip-map"],[data-testid="map-tile-error"]{display:none!important}}

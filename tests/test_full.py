@@ -1,3 +1,4 @@
+import base64
 import asyncio, sys, subprocess, time, json, re
 from pathlib import Path
 from datetime import date, timedelta
@@ -61,6 +62,7 @@ async def local_api_fixture(ctx):
     await ctx.route('https://'+host+'/**',mock_local_api)
 async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False):
   ctx=await b.new_context(viewport={'width':w,'height':h}, reduced_motion=reduced_motion, has_touch=has_touch, is_mobile=has_touch and w<=600)
+  await ctx.route("https://tile.openstreetmap.org/**", lambda route: route.fulfill(content_type="image/png", body=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGN4eXvnfwAIqwN9YzQAMgAAAABJRU5ErkJggg==")))
   await local_api_fixture(ctx)
   pg=await ctx.new_page()
   pg.on('pageerror', lambda e: errors.append(f'{base[:5]} pageerror {e}'))

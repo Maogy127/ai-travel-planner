@@ -183,6 +183,7 @@
         });
     }
     function go(screen, fromHistory) {
+        if(voiceCleanup){voiceCleanup();voiceCleanup=null;}
         if(!undoPending) {
             clearTimeout(toastTimer);
             toastEl.innerHTML='';
@@ -598,6 +599,31 @@
         var el=get('q-continue');
         if(el)el.disabled=!validQuestion();
     }
+    var voiceCleanup;
+    function setupVoice(){
+        if(voiceCleanup)voiceCleanup();
+        var field=get('mustdos'), Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
+        field.closest('label').insertAdjacentHTML('afterend','<div class="voice-controls"><button type="button" data-testid="voice-btn" aria-pressed="false" aria-label="Start voice input">Voice input</button><label>Language <select data-testid="voice-lang"><option value="en-US">English</option><option value="zh-CN">中文</option></select></label><span data-testid="voice-status" role="status" aria-live="polite"></span></div>');
+        var button=get('voice-btn'), lang=get('voice-lang'), status=get('voice-status'), recognition, listening=false;
+        var choice;try{choice=localStorage.getItem(KEY+'voice-lang');}catch(e){}
+        lang.value=['en-US','zh-CN'].includes(choice)?choice:(navigator.language||'').toLowerCase().startsWith('zh')?'zh-CN':'en-US';
+        lang.onchange=function(){try{localStorage.setItem(KEY+'voice-lang',lang.value);}catch(e){}};
+        function reset(){listening=false;button.setAttribute('aria-pressed','false');button.setAttribute('aria-label','Start voice input');button.classList.remove('is-listening');button.textContent='Voice input';}
+        voiceCleanup=function(){if(recognition){recognition.onresult=recognition.onerror=recognition.onend=null;recognition.abort();}reset();};
+        if(!Recognition){button.disabled=true;status.outerHTML='<span data-testid="voice-unsupported">Voice input needs Chrome, Edge or Safari.</span>';return;}
+        button.onclick=function(){
+            if(listening){recognition.stop();reset();status.textContent='Voice input stopped.';return;}
+            recognition=new Recognition();recognition.lang=lang.value;recognition.interimResults=true;recognition.continuous=false;
+            recognition.onresult=function(event){if(!field.isConnected)return;var interim=[];
+                for(var i=event.resultIndex;i<event.results.length;i++){var result=event.results[i],text=result[0].transcript.trim();if(result.isFinal&&text){field.value+=(field.value.trim()?(recognition.lang==='zh-CN'?'，':', '):'')+text;field.dispatchEvent(new Event('input',{bubbles:true}));}else interim.push(text);}
+                status.textContent=interim.join(' ')||'Voice input added.';
+            };
+            recognition.onerror=function(event){status.textContent=({'not-allowed':'Microphone permission was blocked.','no-speech':'No speech heard. Try again.',network:'Voice input network error. Try again.'})[event.error]||'Voice input could not start. Try again.';reset();};
+            recognition.onend=function(){reset();if(status.textContent==='Listening…')status.textContent='Voice input ended.';};
+            listening=true;button.setAttribute('aria-pressed','true');button.setAttribute('aria-label','Stop voice input');button.classList.add('is-listening');button.textContent='Listening… tap to stop';status.textContent='Listening…';
+            try{recognition.start();}catch(e){reset();status.textContent='Voice input could not start. Try again.';}
+        };
+    }
     function question() {
         var a=state.answers, s=state.screen, index=steps.indexOf(s), isExtra=extra.indexOf(s)>=0, idx=isExtra?extra.indexOf(s):index, total=isExtra?3:5;
         var copy= {
@@ -654,6 +680,7 @@
         }
         [s])+'</legend>'+content+'</fieldset><div class="qfooter">'+btn('← Back', 'q-back', '')+btn('Skip', 'q-skip', '')+btn(s==='musts'?'Build my plan':s==='style'&&a.unsure?'See my options':'Continue →', 'q-continue', 'primary', validQuestion()?'':'disabled')+'</div></section>';
         journal(s);
+        if(s==='musts')setupVoice();
         view.querySelectorAll('.option input').forEach(function(el) {
             el.onchange=function() {
                 el.closest('.option').classList.toggle('stamped',el.checked);
@@ -1711,7 +1738,9 @@
             state.shared=true;state.sharedEdits=data.edits;state.sharedBuilder=data.db||null;state.answers=a;generate(true);
         }catch(e){state.shared=true;state.answers=Object.assign({},defaults);go('start');view.insertAdjacentHTML('afterbegin','<p class="banner" role="status">This trip link couldn’t be opened. Start a new adventure below.</p>');}
     }
+    var leafletMap, stopLayers;
     function expeditionUI(){
+        if(leafletMap&&!leafletMap.getContainer().isConnected){leafletMap.remove();leafletMap=stopLayers=null;}
         var shell=view.querySelector('.shell');
         if(state.shared){shell.insertAdjacentHTML('afterbegin','<aside class="banner" data-testid="shared-banner">Shared trip — view only copy; changes stay on this device '+btn('Make it mine','adopt-shared','outline')+'</aside>');on('adopt-shared',function(){if(window.DayBuilder&&window.DayBuilder.persist)window.DayBuilder.persist();state.shared=false;state.sharedBuilder=null;save();persistEdits();write(KEY+'lastTrip',{answers:state.answers});history.replaceState({screen:'plan'},'','#plan');planRender(false);});}
         shell.insertAdjacentHTML('beforeend','<p class="stamped-footer '+(state.shared?'shared-stamp':'')+'" data-testid="stamped-footer">Stamped by GoNow · maogy127.github.io/ai-travel-planner</p>');
@@ -1720,8 +1749,49 @@
         var pref;try{pref=localStorage.getItem(KEY+'view');}catch(e){}
         var map= pref==='map';
         var content=document.getElementById('tab-content');
-        content.insertAdjacentHTML('afterbegin','<div class="view-switch row" role="group" aria-label="Itinerary view">'+btn('List','view-list','outline','aria-pressed="'+!map+'"')+btn('Treasure map','view-map','outline','aria-pressed="'+map+'"')+'</div><section class="treasure-map" data-testid="treasure-map" '+(!map?'hidden':'')+'><h2>Your treasure route</h2><p>Illustrative route, not to scale</p><svg viewBox="0 0 600 '+(state.plan.days.length*95+40)+'" role="img" aria-label="Dotted illustrative route through each day">'+state.plan.days.map(function(d,i){var x=i%2?430:170,y=55+i*95;return (i?'<path d="M'+(i%2?170:430)+' '+(y-95)+' Q300 '+(y-45)+' '+x+' '+y+'" fill="none" stroke="currentColor" stroke-dasharray="3 8"/>':'')+d.items.map(function(it,j){return '<circle cx="'+(x-45+j%9*11)+'" cy="'+(y+30+Math.floor(j/9)*7)+'" r="2" fill="currentColor"/>';}).join('')+'<circle cx="'+x+'" cy="'+y+'" r="22" fill="#f8eed7" stroke="currentColor"/><text x="'+x+'" y="'+(y+6)+'" text-anchor="middle">'+(i+1)+'</text>'+(i===state.plan.days.length-1?'<path d="M'+(x+32)+' '+(y-12)+'l24 24m0-24l-24 24" stroke="#963a29" stroke-width="3"/>':'');}).join('')+'</svg><ol>'+state.plan.days.map(function(d,i){return '<li>'+btn('Day '+(i+1)+' · '+d.date+' · '+esc(d.theme),'map-day','outline','data-map-day="'+i+'"')+'</li>';}).join('')+'</ol></section>');
-        function setMap(value,persist){map=value;get('treasure-map').hidden=!value;content.querySelector('.tile-grid').hidden=value;if(content.querySelector('.daynav'))content.querySelector('.daynav').hidden=value;var builder=content.querySelector('.db-root');if(builder)builder.hidden=value;get('view-list').setAttribute('aria-pressed',String(!value));get('view-map').setAttribute('aria-pressed',String(value));if(persist){try{localStorage.setItem(KEY+'view',value?'map':'list');}catch(e){}if(value)earn('Viewed the treasure map');}}
+        content.insertAdjacentHTML('afterbegin','<div class="view-switch row" role="group" aria-label="Itinerary view">'+btn('List','view-list','outline','aria-pressed="'+!map+'"')+btn('Treasure map','view-map','outline','aria-pressed="'+map+'"')+'</div><section class="treasure-map" data-testid="treasure-map" '+(!map?'hidden':'')+'><h2>Your treasure route</h2><div class="row" aria-label="Map day">'+state.plan.days.map(function(d,i){return btn('Day '+(i+1)+' · '+d.date,'map-day-select','outline','data-map-select="'+i+'" aria-pressed="'+(i===0)+'"');}).join('')+'</div><p data-testid="map-fallback" hidden></p><div data-testid="trip-map" aria-label="Selected day itinerary map"></div><p data-testid="map-tile-error" role="status" hidden>Map tiles couldn&#39;t load (offline?). Pins and the stop list still work.</p><ol data-testid="map-stop-list"></ol><h3>Jump to a day in List</h3><ol>'+state.plan.days.map(function(d,i){return '<li>'+btn('Day '+(i+1)+' · '+d.date+' · '+esc(d.theme),'map-day','outline','data-map-day="'+i+'"')+'</li>';}).join('')+'</ol></section>');
+        var mapDay=0, mapBox=get('trip-map');
+        function drawMap(){
+            if(!map || !mapBox.isConnected)return;
+            if(leafletMap&&leafletMap.getContainer()!==mapBox){leafletMap.remove();leafletMap=stopLayers=null;}
+            var day=state.plan.days[mapDay], geo=window.GONOW_GEO||{places:{},demoItems:{},builderPlaces:{}};
+            var demo=state.plan.id==='oahu-demo-2026-11';
+            var schedule=demo&&window.DayBuilder&&window.DayBuilder.schedule();
+            var built=schedule&&schedule.days.find(function(d){return d.date===day.date;});
+            var items=built?built.items:dayModel(day,mapDay).items;
+            var resolve=function(it){return demo&&(geo.demoItems[it.sourceId||it.id]||geo.builderPlaces[it.place]);};
+            // Airport travel is a real start/end stop; omit other travel and prep.
+            var stops=items.filter(function(it){return it.kind!=='prep'&&(it.kind!=='travel'||resolve(it)==='hnl');});
+            var groups=[], lastKey;
+            stops.forEach(function(it){
+                var key=resolve(it), place=geo.places[key];
+                var row={title:it.title,time:built?(it.start!=null&&it.end!=null?window.DayBuilder.range(it.start,it.end):it.textTime||''):it.time||''};
+                if(place&&key===lastKey)groups[groups.length-1].rows.push(row);
+                else groups.push({key:key,place:place,rows:[row]});
+                lastKey=place?key:null;
+            });
+            var number=0;
+            get('map-stop-list').innerHTML=groups.map(function(g){g.number=g.place?++number:null;return '<li>'+ (g.number?'Stop '+g.number+' · ':'')+g.rows.map(function(r){return esc(r.time)+' '+esc(r.title);}).join('<br>')+(g.place?(g.place.approx?' <small>Approximate location</small>':''):' <small>not on map</small>')+'</li>';}).join('');
+            var fallback=get('map-fallback'), box=get('trip-map');
+            fallback.hidden=!!window.L&&number>0;
+            fallback.textContent=!window.L?"Map couldn't load — here are today's stops in order.":'No coordinates available for these stops. Here they are in order.';
+            box.hidden=!window.L||!number;
+            if(!window.L||!number){if(leafletMap)leafletMap.closePopup();if(stopLayers)stopLayers.clearLayers();return;}
+            if(!leafletMap){
+                leafletMap=L.map(box);stopLayers=L.featureGroup().addTo(leafletMap);
+                var failures=0;
+                L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19,attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'}).on('tileerror',function(){if(++failures>=3)get('map-tile-error').hidden=false;}).addTo(leafletMap);
+            }
+            leafletMap.closePopup();
+            stopLayers.clearLayers();var points=[];
+            groups.forEach(function(g){if(!g.place)return;var pt=[g.place.lat,g.place.lng];points.push(pt);
+                L.marker(pt,{title:'Stop '+g.number+': '+g.rows.map(function(r){return r.title;}).join(', '),icon:L.divIcon({className:'map-pin',html:String(g.number),iconSize:[30,30],iconAnchor:[15,15]})}).bindPopup(g.rows.map(function(r){return '<strong>'+esc(r.title)+'</strong><br>'+esc(r.time);}).join('<hr>')).addTo(stopLayers);
+            });
+            if(points.length>1)L.polyline(points,{color:'#963a29',className:'map-route-line'}).addTo(stopLayers);
+            leafletMap.invalidateSize();leafletMap.fitBounds(L.latLngBounds(points),{padding:[30,30],maxZoom:15});
+        }
+        view.querySelectorAll('[data-map-select]').forEach(function(b){b.onclick=function(){mapDay=+b.dataset.mapSelect;view.querySelectorAll('[data-map-select]').forEach(function(el){el.setAttribute('aria-pressed',String(el===b));});drawMap();};});
+        function setMap(value,persist){map=value;if(value)requestAnimationFrame(drawMap);get('treasure-map').hidden=!value;content.querySelector('.tile-grid').hidden=value;if(content.querySelector('.daynav'))content.querySelector('.daynav').hidden=value;var builder=content.querySelector('.db-root');if(builder)builder.hidden=value;get('view-list').setAttribute('aria-pressed',String(!value));get('view-map').setAttribute('aria-pressed',String(value));if(persist){try{localStorage.setItem(KEY+'view',value?'map':'list');}catch(e){}if(value)earn('Viewed the treasure map');}}
         setMap(map,false);on('view-map',function(){setMap(true,true);});on('view-list',function(){setMap(false,true);});
         view.querySelectorAll('[data-map-day]').forEach(function(b){b.onclick=function(){setMap(false,true);if(mergedPlan()&&window.DayBuilder.selectedDate){var date=state.plan.days[b.dataset.mapDay].date;window.DayBuilder.selectDay(date,false);var chip=document.querySelector('[data-testid="db-day-'+date+'"]'),card=document.querySelector('.db-daycard');(card||chip).scrollIntoView({block:'start',behavior:'auto'});chip.focus({preventScroll:true});return;}var t=document.querySelector('#day-'+b.dataset.mapDay+' .tile-toggle');if(t.getAttribute('aria-expanded')!=='true')t.click();t.scrollIntoView({block:'start',behavior:'auto'});t.focus({preventScroll:true});};});
     }
