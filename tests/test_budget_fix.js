@@ -55,3 +55,25 @@ assert.equal(ctx.groupPaceLabel([{name:'You',level:'active'},{name:'Partner',lev
 const paths=ctx.GONOW_STYLES.map(([key])=>ctx.icon(key).match(/<path d="([^"]+)"/)[1]);
 assert.equal(new Set(paths).size,6);assert(!paths.includes(ctx.icon('style').match(/<path d="([^"]+)"/)[1]));
 console.log('PASS note pluralization, group pace labels and six distinct style icons');
+
+for(const size of [1,2,3])assert.equal(ctx.groupPaceLabel(Array(size).fill({level:'unsure'})),'Pace not set yet');
+
+// Check the real prep selector independently of DOM layout and packing ticks.
+for(const name of ['normalizePrep','prepTasks','prepRemaining']){
+ const start=app.indexOf('    function '+name+'('),end=app.indexOf('\n    function ',start+1);
+ vm.runInContext(app.slice(start,end),ctx);
+}
+ctx.state={plan:ctx.OAHU_SAMPLE};
+ctx.packingGroups=()=>ctx.OAHU_SAMPLE.packing;
+ctx.prepRecord=()=>({checked:{}});
+const prep=ctx.prepTasks(),notes=prep.filter(t=>t.group==='before'),packs=prep.filter(t=>t.group==='pack');
+assert(notes.length<=15);assert(notes.some(t=>t.date));
+assert.equal(new Set(notes.map(t=>ctx.normalizePrep(t.text))).size,notes.length);
+assert.equal(notes.filter(t=>/No flying for 24 h/.test(t.text)).length,1);
+assert(notes.some(t=>/Thanksgiving/.test(t.text)));
+assert.equal(ctx.prepRemaining(),notes.length);
+ctx.prepRecord=()=>({checked:Object.fromEntries(notes.map(t=>[t.id,true]))});
+assert.equal(ctx.prepRemaining(),0,'Unpacked items must not block All set');
+assert(!app.includes('<small>From: '));
+assert(packs.some(t=>t.text==='Reservation QR codes'));
+console.log(`PASS demo prep: ${notes.length} left, ${notes.length} notes, ${packs.length} packing items`);

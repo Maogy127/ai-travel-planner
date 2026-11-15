@@ -69,7 +69,7 @@ assert(!node('view').innerHTML.includes('rank-badge'));
       }
       if(step==='musts'){
         assert(!html.includes('A booked hotel'));assert(html.includes('Where are you staying?<input'));
-        assert(html.indexOf('data-testid="stay-unsure"')<html.indexOf('Where are you staying?'));
+        assert(html.indexOf('data-testid="stay-unsure"')>html.indexOf('data-testid="stay"'));
         api.state.answers.stay='Booked place';click('stay-unsure');
         assert.equal(api.state.answers.stay,'');assert(api.state.answers.stayUnsure);
         assert(node('view').innerHTML.includes('disabled aria-disabled="true"'));
@@ -87,7 +87,10 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert.equal(api.state.screen,'prep');
   assert.equal((node('view').innerHTML.match(/data-testid="prep-section"/g)||[]).length,3);
   assert(!node('toast').innerHTML.includes('Your plan is ready.'));
-  assert(/Before you go · \d+ notes?/.test(node('view').innerHTML));
+  assert(node('view').innerHTML.includes('Before you go · 14 notes'));
+  assert(node('view').innerHTML.includes('Packing 0/51'));
+  assert(!node('view').innerHTML.includes('<small>From: '));
+  assert(node('view').innerHTML.includes('class="prep-day-notes"'));
   click('prep-continue');
   assert(!node('toast').innerHTML.includes('Your plan is ready.'));
   assert.equal(api.state.screen,'plan');

@@ -426,7 +426,6 @@
     function dashboard(trips){
         var override=new URLSearchParams(location.search).get('today');
         function prepCount(t){
-            if(t.prepLeft!=null)return t.prepLeft;
             var plan=t.plan||(t.planId==='oahu-demo-2026-11'?window.OAHU_SAMPLE:null);
             if(!plan)return 0;
             var previous={plan:state.plan,answers:state.answers,tripId:state.tripId,packed:state.packed,edits:state.edits};
@@ -780,7 +779,7 @@
         } else {
             content='<label>Bookings, birthdays and places<textarea data-testid="mustdos" placeholder="e.g., birthday dinner on 11/26 at 7:30 PM">'+esc(a.mustdos)+'</textarea></label><div class="row">'+['Special occasion', 'Shopping', 'Photo spots', 'Water activity', 'A specific tour'].map(function(v, i) {
                 return btn(v, 'must-chip-'+i, 'outline', 'data-chip="'+v+'"');
-            }).join('')+'<button type="button" class="outline stay-pill" data-testid="stay-unsure" aria-pressed="'+!!a.stayUnsure+'">Not sure yet</button></div><label>Where are you staying?<input data-testid="stay" value="'+esc(a.stay)+'" '+(a.stayUnsure?'disabled aria-disabled="true"':'aria-disabled="false"')+'></label>';
+            }).join('')+'</div><label>Where are you staying?<input data-testid="stay" value="'+esc(a.stay)+'" '+(a.stayUnsure?'disabled aria-disabled="true"':'aria-disabled="false"')+'></label><button type="button" class="outline stay-pill" data-testid="stay-unsure" aria-pressed="'+!!a.stayUnsure+'">Not sure yet</button>';
         }
         if(s==='pace')content+=sleepQuestion();
         if(a.mode==='local'){if(s==='style')copy[0]='What kind of day do you want?';if(s==='food')copy[1]="Pick any. We’ll suggest places that fit.";}
@@ -966,7 +965,7 @@
         return '<section class="card budget" data-testid="budget-buckets"><h2>Budget</h2><p>Rough estimates, not quotes. '+(curated?'For two.':'Based on the existing destination cost estimates.')+'</p>'+Object.entries({flights:'Flights',hotel:'Hotel',food:'Food',activities:'Activities',transport:'Getting around (Uber/transit)'}).map(function(r){return '<div class="bucket '+((state.answers.covers||defaults.covers).includes(r[0])?'included':'excluded')+'" data-testid="bucket-'+r[0]+'"><span class="bucket-icon">'+icon(r[0])+'</span><strong>'+r[1]+'</strong><span class="bucket-amount '+(/\d/.test(amounts[r[0]])?'':'bucket-unknown')+'">'+(/\d/.test(amounts[r[0]])?'approx. ':'')+esc(amounts[r[0]])+'</span><small data-testid="bucket-status">'+((state.answers.covers||defaults.covers).includes(r[0])?'Included in your budget':'Not included')+'</small></div>';}).join('')+(curated?'<p class="bucket-note">Flights, hotel and food weren’t researched for this demo — check prices when booking.</p>':'')+'</section>';
     }
     function prepRecord(){var all=read('gonow.prep.v1',{});var record=all[prepTripKey()]||{seen:false,checked:{}};record.checked=record.checked||{};Object.keys(state.packed||{}).forEach(function(id){if(record.checked['pack-'+id]===undefined)record.checked['pack-'+id]=!!state.packed[id];});return record;}
-    function savePrep(record){var list=readTrips(),t=list.find(function(t){return t.id===state.tripId;});if(t){t.prepLeft=prepTasks().filter(function(task){return !record.checked[task.id];}).length;writeTrips(list);}var all=read('gonow.prep.v1',{});all[prepTripKey()]=record;write('gonow.prep.v1',all);}
+    function savePrep(record){var list=readTrips(),t=list.find(function(t){return t.id===state.tripId;});if(t){t.prepLeft=prepTasks().filter(function(task){return task.group!=='pack'&&!record.checked[task.id];}).length;writeTrips(list);}var all=read('gonow.prep.v1',{});all[prepTripKey()]=record;write('gonow.prep.v1',all);}
     function normalizePrep(text){return String(text||'').toLowerCase().replace(/[^a-z0-9]+/g,' ').trim();}
     function flagHome(note){
         var text=normalizePrep(note.text),days=state.plan.days;
@@ -976,17 +975,31 @@
     }
     function dayPrep(d){var index=state.plan.days.indexOf(d),notes=(d.prep||[]).slice();(state.plan.flags||[]).forEach(function(n){if(flagHome(n)===index&&!notes.some(function(x){return normalizePrep(x.text)===normalizePrep(n.text);})&&!d.items.some(function(it){return (it.prep||[]).some(function(x){return normalizePrep(x.text)===normalizePrep(n.text);});}))notes.push(n);});if(d.car&&d.car.note)notes.push({text:d.car.note,type:'info'});return notes;}
     function prepTasks(){
-        var unique=new Set(),notices=(state.plan.flags||[]).concat(state.plan.days.flatMap(function(d){return dayPrep(d).concat(d.items.flatMap(function(it){return it.prep||[];}));}));
-        var tasks=notices.map(function(n){return {id:'notice-'+encodeURIComponent(n.text),text:n.text,sources:n.sources,group:'before'};}).concat((state.plan.ageRules||[]).map(function(t){return {id:'age-'+encodeURIComponent(t),text:t,group:'before'};}),packingGroups().flatMap(function(g){return g.items.map(function(it){return {id:'pack-'+it.id,text:it.name,group:'pack'};});}));
-        return tasks.filter(function(t){var key=t.group+':'+normalizePrep(t.text);if(unique.has(key))return false;unique.add(key);return true;});
+        var unique=new Set(),tasks=[];
+        function add(n,date){var key=normalizePrep(n.text);if(!key||unique.has(key))return;unique.add(key);tasks.push({id:'notice-'+encodeURIComponent(n.text),text:n.text,sources:n.sources,group:'before',date:date||''});}
+        // Trip-wide notices win over copies on days and activity cards.
+        (state.plan.flags||[]).forEach(function(n){add(n);});
+        state.plan.days.forEach(function(d){
+            (d.prep||[]).filter(function(n){return n.type==='book'||n.type==='safety';}).forEach(function(n){add(n,d.date);});
+            d.items.forEach(function(it){
+                (it.prep||[]).filter(function(n){return /no high.elevation|do not parasail|skip .*when wet/i.test(n.text)||/^(book now\.|confirm conditions)/i.test(n.text);}).forEach(function(n){add(Object.assign({},n,{text:it.title.split(' — ')[0]+': '+n.text}),d.date);});
+            });
+        });
+        // Include bookings with no existing key action; the checkbox records completion.
+        state.plan.days.forEach(function(d){d.items.filter(function(it){return it.bookable;}).forEach(function(it){
+            var words=normalizePrep(it.title).split(' ').filter(function(w){return w.length>=4;});
+            if(!tasks.some(function(t){return words.some(function(w){return normalizePrep(t.text).includes(w);});}))add({text:'Book '+it.title.split(' — ')[0]+'.',sources:it.sources},d.date);
+        });});
+        (state.plan.ageRules||[]).filter(function(text){return /minimum ages|minimum heights|minimum weights/i.test(text);}).forEach(function(text){add({text:text});});
+        return tasks.concat(packingGroups().flatMap(function(g){return g.items.map(function(it){return {id:'pack-'+it.id,text:it.name,group:'pack'};});}));
     }
-    function prepRemaining(){var r=prepRecord();return prepTasks().filter(function(t){return !r.checked[t.id];}).length;}
+    function prepRemaining(){var r=prepRecord();return prepTasks().filter(function(t){return t.group!=='pack'&&!r.checked[t.id];}).length;}
     function prepScreen(){
         state.screen='prep';if(toastEl.classList.contains('plan-ready')){clearTimeout(toastTimer);toastEl.innerHTML='';toastEl.classList.remove('plan-ready');}var r=prepRecord();r.seen=true;savePrep(r);
         var trip=currentTrip(),weather=trip&&trip.snapshot&&trip.snapshot.weather;var weatherNote=state.viewing==='finished'&&weather?'<p data-testid="snapshot-weather">'+esc(weather.label)+' '+esc(weather.text)+'</p>':'';
         var packing=packingHTML().replace(/<h2/g,'<h3').replace(/<\/h2>/g,'</h3>').replace(/data-testid="pack-item" data-pack-id="([^"]+)"/g,'data-testid="prep-item" data-prep-id="pack-$1" data-pack-id="$1"').replace(/<div class="checkrow"><input type="checkbox" data-testid="prep-item"/g,'<div class="checkrow" data-testid="pack-item"><input type="checkbox" data-testid="prep-item"');
-        function tasks(group){return prepTasks().filter(function(t){return t.group===group;}).map(function(t){return '<label class="checkrow"><input type="checkbox" data-testid="prep-item" data-prep-id="'+esc(t.id)+'" '+(r.checked[t.id]?'checked':'')+'><span>'+esc(t.text)+'</span></label>'+(t.sources?sources(t.sources):'');}).join('');}
-        view.innerHTML='<div class="shell" data-testid="trip-prep">'+btn('Trip prep · '+(prepRemaining()?prepRemaining()+' left':'All set'),'trip-prep-button','prep-header','aria-current="page"')+'<h1 tabindex="-1">Trip prep</h1><section data-testid="prep-section"><h2>'+icon('budget')+' Budget</h2><p>'+esc(state.plan.costSummary||(state.plan.estimate?'Approx. '+money(state.plan.estimate.total):'Approximate costs — verify before booking'))+'</p><details><summary>Budget breakdown</summary>'+budgetHTML().replace('<h2>Budget</h2>','<h3>Estimates</h3>')+(state.plan.costs||[]).map(function(c){return '<p>'+esc(c.item)+' · '+esc(c.price)+sources(c.sources)+'</p>';}).join('')+'</details></section><details data-testid="prep-section" id="trip-essentials"><summary data-testid="trip-essentials">'+icon('info')+' Before you go · '+noteCount(prepTasks().filter(function(t){return t.group==='before';}).length)+'</summary>'+tasks('before')+state.plan.days.map(function(d){return prepDayNotes(d.items,d.date);}).join('')+'<p class="muted">'+esc(state.plan.banner)+'</p>'+weatherNote+'<details><summary>Typical conditions</summary><p>'+esc(state.plan.weather?.text||'Typical conditions vary; check the forecast before travel.')+'</p>'+sources(state.plan.weather?.sources)+'</details><div data-testid="book-links">'+bookLinksHTML().replace('<h2>Book this</h2>','<h3>Booking searches</h3>')+'</div><div data-testid="local-info" id="local-info"></div><details><summary>Local tips</summary>'+ (state.plan.tips||[]).map(function(t){return '<p>'+esc(t.text)+(t.url?' <a data-testid="tip-source" href="'+esc(t.url)+'" target="_blank" rel="noopener noreferrer">Read source ↗</a>':'')+'</p>';}).join('')+'</details></details><section data-testid="prep-section"><h2>'+icon('bring')+' What to bring</h2><div data-testid="packing-list">'+packing+'</div>'+'</section>'+btn('Continue to my plan','prep-continue','primary')+'</div>';
+        function tasks(date){return prepTasks().filter(function(t){return t.group==='before'&&t.date===date;}).map(function(t){return '<label class="checkrow"><input type="checkbox" data-testid="prep-item" data-prep-id="'+esc(t.id)+'" '+(r.checked[t.id]?'checked':'')+'><span>'+esc(t.text)+'</span></label>'+(t.sources?sources(t.sources):'');}).join('');}
+        view.innerHTML='<div class="shell" data-testid="trip-prep">'+btn('Trip prep · '+(prepRemaining()?prepRemaining()+' left':'All set'),'trip-prep-button','prep-header','aria-current="page"')+'<h1 tabindex="-1">Trip prep</h1><section data-testid="prep-section"><h2>'+icon('budget')+' Budget</h2><p>'+esc(state.plan.costSummary||(state.plan.estimate?'Approx. '+money(state.plan.estimate.total):'Approximate costs — verify before booking'))+'</p><details><summary>Budget breakdown</summary>'+budgetHTML().replace('<h2>Budget</h2>','<h3>Estimates</h3>')+(state.plan.costs||[]).map(function(c){return '<p>'+esc(c.item)+' · '+esc(c.price)+sources(c.sources)+'</p>';}).join('')+'</details></section><details data-testid="prep-section" id="trip-essentials"><summary data-testid="trip-essentials">'+icon('info')+' Before you go · '+noteCount(prepTasks().filter(function(t){return t.group==='before';}).length)+'</summary>'+tasks('')+state.plan.days.map(function(d){var notes=prepTasks().filter(function(t){return t.group==='before'&&t.date===d.date;});return prepDayNotes(d.items,d.date,notes.length,tasks(d.date));}).join('')+'<p class="muted">'+esc(state.plan.banner)+'</p>'+weatherNote+'<details><summary>Typical conditions</summary><p>'+esc(state.plan.weather?.text||'Typical conditions vary; check the forecast before travel.')+'</p>'+sources(state.plan.weather?.sources)+'</details><div data-testid="book-links">'+bookLinksHTML().replace('<h2>Book this</h2>','<h3>Booking searches</h3>')+'</div><div data-testid="local-info" id="local-info"></div><details><summary>Local tips</summary>'+ (state.plan.tips||[]).map(function(t){return '<p>'+esc(t.text)+(t.url?' <a data-testid="tip-source" href="'+esc(t.url)+'" target="_blank" rel="noopener noreferrer">Read source ↗</a>':'')+'</p>';}).join('')+'</details></details><section data-testid="prep-section"><h2>'+icon('bring')+' What to bring</h2><p id="prep-packing-count">Packing '+packingGroups().flatMap(function(g){return g.items;}).filter(function(it){return state.packed[it.id];}).length+'/'+packingGroups().flatMap(function(g){return g.items;}).length+'</p><div data-testid="packing-list">'+packing+'</div>'+'</section>'+btn('Continue to my plan','prep-continue','primary')+'</div>';
         LocalInfo.mount(get('local-info'),state.plan.id==='oahu-demo-2026-11'?'oahu':Engine.matchDestination(state.answers.destination).id,state.plan.start,state.plan.end)();
         view.querySelectorAll('[data-prep-id]').forEach(function(el){el.onchange=function(){var r=prepRecord();r.checked[el.dataset.prepId]=el.checked;if(el.dataset.prepId.startsWith('pack-')){state.packed[el.dataset.prepId.slice(5)]=el.checked;write(KEY+'packing:'+state.plan.id,state.packed);}savePrep(r);get('trip-prep-button').textContent='Trip prep · '+(prepRemaining()?prepRemaining()+' left':'All set');if(el.dataset.packId)tick(el.dataset.packId,el.checked);};});
         bindPacking();
@@ -1172,6 +1185,8 @@
             progress.setAttribute('aria-valuenow', n);
             progress.querySelector('span').style.width=(n/all.length*100)+'%';
         }
+        var packingCount=document.getElementById('prep-packing-count');
+        if(packingCount)packingCount.textContent='Packing '+n+'/'+all.length;
         var status=document.getElementById('packing-status');
         if(status)status.textContent='Packed, '+n+' of '+all.length+(n===all.length?' — All packed. Have a great trip.':'');
         if(state.hidePacked&&state.screen==='prep')prepScreen();
@@ -1232,10 +1247,10 @@
         }).join(''):'')+(opts.noActions?'':'<div class="row"><details class="item-more"><summary aria-label="More actions for '+esc(title)+'">⋯</summary>'+(it.bookable?btn('Book this', 'item-book', 'outline', 'data-book="'+esc(it.id)+'"'):'')+btn('Edit', 'item-edit', '', 'data-edit="'+esc(it.id)+'"')+btn('Swap', 'item-swap', '', 'data-swap="'+esc(it.id)+'"')+btn('Remove', 'item-remove', '', 'data-remove="'+esc(it.id)+'"')+'</details>'+btn((edit.locked||it.locked)?icon('lock'):icon('unlock'),'item-lock','icon-button','aria-label="'+((edit.locked||it.locked)?'Unlock ':'Lock ')+esc(title)+'" data-lock="'+esc(it.id)+'"')+'</div><div id="edit-'+esc(it.id)+'"></div>')+(opts.travel&&it.travelToNext?'<p class="travel-chip db-next" data-testid="travel-chip">'+travelIcon(it.travelToNext)+' <strong>Getting to the next stop:</strong> '+esc(it.travelToNext)+'</p>':'')+'</article>';
     }
     function noteCount(count){return count+' '+(count===1?'note':'notes');}
-    function prepDayNotes(items,date) {
+    function prepDayNotes(items,date,keyCount,keyHTML) {
         var bookings=items.filter(function(it){return it.bookable;});
-        var todos=items.filter(function(it){return (state.edits.todos||[]).includes(it.id);}),balance=window.GoNowDiet.balance(items);var count=bookings.length+todos.length+(balance?1:0);if(!count)return '';
-        return '<details class="prep-day-notes"><summary>'+esc(dateLabel(date,{month:'short',day:'numeric'}))+' · '+noteCount(count)+'</summary><div>'+dayBookings(items)+(balance?'<p data-testid="dinner-balance">'+esc(balance)+'</p>':'')+(todos.length?'<div data-testid="booking-todos">'+todos.map(function(it){return '<p>'+esc(it.title)+' — confirm and book direct.</p>';}).join('')+'</div>':'')+'</div></details>';
+        var todos=items.filter(function(it){return (state.edits.todos||[]).includes(it.id);}),balance=window.GoNowDiet.balance(items);var count=(keyCount||0)+bookings.length+todos.length+(balance?1:0);if(!count)return '';
+        return '<details class="prep-day-notes"><summary>'+esc(dateLabel(date,{month:'short',day:'numeric'}))+' · '+noteCount(count)+'</summary><div>'+(keyHTML||'')+dayBookings(items)+(balance?'<p data-testid="dinner-balance">'+esc(balance)+'</p>':'')+(todos.length?'<div data-testid="booking-todos">'+todos.map(function(it){return '<p>'+esc(it.title)+' — confirm and book direct.</p>';}).join('')+'</div>':'')+'</div></details>';
     }
     function dayBookings(items) {
         var bookable=items.filter(function(it){return it.bookable&&!((state.edits.items||{})[it.id]||{}).swapped;});
@@ -1272,7 +1287,7 @@
         return {items:items.map(function(it){return window.GoNowDiet.safeMeal(it,state.answers);}), relaxed:relaxed, rain:rain};
     }
     function sleepQuestion(){return '<section class="optional-section"><span class="section-label">Optional</span><h2>Your usual sleep at home</h2><p>We’ll ease you into local time. We assume 10:30 PM–6:30 AM at home unless you change these times. Clear both fields to use itinerary estimates.</p><label>Bedtime<input type="time" data-testid="sleep-bedtime" value="'+esc(state.answers.bedtime===undefined?'22:30':state.answers.bedtime)+'"></label><label>Wake time<input type="time" data-testid="sleep-wake" value="'+esc(state.answers.wake)+'"></label></section>';}
-    function groupPaceLabel(group){if(group.every(function(t){return t.level===group[0].level;}))return (group.length===2?'Both':'Everyone')+': '+paceLabels[group[0].level]+' pace';return group.map(function(t,i){return esc(t.name||(i?'Partner':'You'))+': '+paceLabels[t.level];}).join(' · ');}
+    function groupPaceLabel(group){if(group.every(function(t){return t.level==='unsure';}))return 'Pace not set yet';if(group.every(function(t){return t.level===group[0].level;}))return (group.length===2?'Both':'Everyone')+': '+paceLabels[group[0].level]+' pace';return group.map(function(t,i){return esc(t.name||(i?'Partner':'You'))+': '+paceLabels[t.level];}).join(' · ');}
     function paceSummary(){return '<div data-testid="pace-summary">Pace &amp; activities: '+esc(({gentle:'Gentle',active:'Active',athlete:'Athlete',unsure:'Not sure'})[state.answers.level])+' · '+esc((state.answers.activities||[]).map(function(v){return v[0].toUpperCase()+v.slice(1);}).join(', '))+'</div>'+btn('Edit','pace-summary-edit','outline','aria-expanded="'+!!state.paceEditing+'" aria-controls="pace-inline"')+'<div id="pace-inline" '+(state.paceEditing?'':'hidden')+'>'+(state.paceEditing?wellnessPicker().replace(/ data-topic="(?:pace|activities)"/g,''):'')+'</div>';}
     function foodQuestion(){
         var a=state.answers;
@@ -1710,7 +1725,7 @@
             return'<details class="packing-category" '+(i===0?'open':'')+'><summary>'+esc(g.group)+'</summary>'+g.items.filter(function(it) {
                 return!state.hidePacked||!state.packed[it.id];
             }).map(function(it) {
-                return'<div class="checkrow"><input type="checkbox" data-testid="pack-item" data-pack-id="'+esc(it.id)+'" aria-label="Pack '+esc(it.name)+'" '+(state.packed[it.id]?'checked':'')+'><span>'+esc(it.name)+((it.from||[]).length?'<small>From: '+esc((Array.isArray(it.from)?it.from:[it.from]).join(' · '))+'</small>':'')+'</span><label class="pack-quantity-control"><span class="muted" aria-hidden="true">×</span><input type="number" min="1" max="99" value="'+it.qty+'" data-quantity="'+esc(it.id)+'" data-testid="pack-quantity" aria-label="Quantity for '+esc(it.name)+'"></label></div>';
+                return'<div class="checkrow"><input type="checkbox" data-testid="pack-item" data-pack-id="'+esc(it.id)+'" aria-label="Pack '+esc(it.name)+'" '+(state.packed[it.id]?'checked':'')+'><span>'+esc(it.name)+'</span><label class="pack-quantity-control"><span class="muted" aria-hidden="true">×</span><input type="number" min="1" max="99" value="'+it.qty+'" data-quantity="'+esc(it.id)+'" data-testid="pack-quantity" aria-label="Quantity for '+esc(it.name)+'"></label></div>';
             }).join('')+btn('+ Add your own item', 'packing-add', '', 'data-pack-group="'+i+'"')+'</details>';
         }).join('')+'<p class="footer-note">Saved on this device. Counts are suggestions. Change any number.</p>';
     }
