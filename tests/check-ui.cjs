@@ -88,7 +88,27 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert.equal((node('view').innerHTML.match(/data-testid="prep-section"/g)||[]).length,3);
   assert(!node('toast').innerHTML.includes('Your plan is ready.'));
   assert(node('view').innerHTML.includes('Before you go · 14 notes'));
-  assert(node('view').innerHTML.includes('Packing 0/51'));
+  const assertPacking = n => {
+    const html=node('view').innerHTML;
+    assert(html.includes('Packed '+n+' of 51'));
+    assert.equal((html.match(/id="packing-status"/g)||[]).length,1);
+    assert(!/prep-packing-count|Packing \d+\/\d+/.test(html));
+  };
+  assertPacking(0);
+  // Bind a real prep checkbox handler through the VM's DOM boundary.
+  const packId=node('view').innerHTML.match(/data-prep-id="pack-([^" ]+)"/)[1];
+  const packCheckbox={dataset:{prepId:'pack-'+packId,packId},checked:true};
+  node('view').querySelectorAll=selector=>selector==='[data-prep-id]'?[packCheckbox]:[];
+  api.go('prep');
+  packCheckbox.onchange();
+  assert.equal(node('packing-status').textContent,'Packed 1 of 51');
+  assert.equal(node('[data-testid="trip-prep-button"]').textContent,'Trip prep · 14 left');
+  api.go('prep');assertPacking(1);
+  click('reset-packing');
+  node('sheet [data-testid="modal-0"]').click();
+  assertPacking(0);
+  assert.equal(Object.values(api.state.packed).filter(Boolean).length,0);
+  node('view').querySelectorAll=()=>[];
   assert(!node('view').innerHTML.includes('<small>From: '));
   assert(node('view').innerHTML.includes('class="prep-day-notes"'));
   click('prep-continue');
