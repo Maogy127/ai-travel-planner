@@ -34,13 +34,24 @@ async def checks(browser):
                 for index, page in enumerate(pages):
                     assert await pg.evaluate('__gonow.state.screen') == page
                     await collect()
+                    kicker = ' '.join((await pg.get_by_test_id('guide').inner_text()).lower().split())
+                    heading = pg.locator('.question h1')
+                    subtitle = heading.locator('xpath=following-sibling::p[1]')
+                    copies = [await heading.inner_text(), await subtitle.inner_text()]
+                    if page == 'budget':
+                        copies.append(await pg.locator('.covers legend').inner_text())
+                    for text in copies:
+                        text = ' '.join(text.lower().split())
+                        assert kicker not in text and text not in kicker, (mode, page, kicker, text)
+                        intent = lambda t: re.match(r'(select up to two|select what your budget)', re.sub(r'^(choose|pick) ', 'select ', t))
+                        assert not (intent(kicker) and intent(text) and intent(kicker)[0] == intent(text)[0]), (mode, page)
                     await expect(pg.locator('.question > p').first).to_have_text(f'Step {index+1} of {len(pages)}')
                     await expect(pg.get_by_role('progressbar')).to_have_attribute('aria-valuemax', str(len(pages)))
                     await expect(pg.get_by_role('progressbar')).to_have_attribute('aria-label', f'Step {index+1} of {len(pages)}')
                     assert await pg.locator('.page-number, .passport, .pinned').count() == 0
                     assert await pg.get_by_test_id('pace-option').count() == 0
                     if page == 'pace':
-                        await expect(pg.get_by_test_id('pace-summary')).to_contain_text('Active · Hiking')
+                        await expect(pg.get_by_test_id('pace-summary')).to_contain_text('Pace & activities: Active · Hiking')
                         edit = pg.get_by_test_id('pace-summary-edit')
                         await expect(edit).to_have_attribute('aria-expanded', 'false')
                         await edit.click()

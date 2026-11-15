@@ -12,13 +12,14 @@ async def checks(browser):
             await pg.get_by_test_id('demo-oahu').click()
             prep = pg.get_by_test_id('trip-prep')
             await expect(prep).to_be_visible()
+            assert 'Your plan is ready.' not in await pg.locator('#toast').inner_text()
             print('PASS trip prep check 14', width)
             await expect(prep.locator('h1')).to_be_focused()
             print('PASS trip prep check 15', width)
             sections = prep.get_by_test_id('prep-section')
             await expect(sections).to_have_count(3)
             print('PASS trip prep check 17', width)
-            assert [t.strip() for t in await sections.locator(':scope > h2, :scope > summary').all_text_contents()] == ['Budget', 'Before you go · '+str(await prep.locator('#trip-essentials > .checkrow').count()), 'What to bring']
+            assert [t.strip() for t in await sections.locator(':scope > h2, :scope > summary').all_text_contents()] == ['Budget', 'Before you go · '+str(await prep.locator('#trip-essentials > .checkrow').count())+(' note' if await prep.locator('#trip-essentials > .checkrow').count() == 1 else ' notes'), 'What to bring']
             print('PASS trip prep check 18', width)
             for title in await sections.locator(':scope > h2, :scope > summary').all():
                 assert await title.evaluate('''e=>{const icon=e.querySelector('svg').getBoundingClientRect();const r=document.createRange();r.selectNodeContents(e.lastChild);const text=r.getBoundingClientRect();return Math.abs(text.left-icon.right)<24 && getComputedStyle(e).textAlign==='left';}''')
@@ -40,8 +41,9 @@ async def checks(browser):
             print('PASS trip prep check 30', width)
             await expect(pg.locator('.utility-tile, .budget, [data-testid=tile]')).to_have_count(0)
             print('PASS trip prep check 31', width)
-            # Collect normalized day note items before comparing with trip-wide notices.
-            notes = await pg.evaluate('''()=>{const texts=[];for(const d of __gonow.state.plan.days){DayBuilder.selectDay(d.date,false);document.querySelectorAll('[data-testid=before-you-go] li,[data-testid=before-you-go] .warning').forEach(e=>{const c=e.cloneNode(true);c.querySelectorAll('.sources').forEach(n=>n.remove());texts.push(c.textContent);});}return texts;}''')
+            # Day disclosures were intentionally consolidated into Trip prep.
+            await expect(pg.get_by_test_id('before-you-go')).to_have_count(0)
+            assert 'Your plan is ready.' not in await pg.locator('#toast').inner_text()
             await pg.get_by_test_id('trip-prep-button').click()
             normalize = lambda t: ' '.join(''.join(c.lower() if c.isalnum() else ' ' for c in t).split())
             notices = await prep.locator('#trip-essentials .checkrow span').all_text_contents()

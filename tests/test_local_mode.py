@@ -38,6 +38,9 @@ async def checks(browser):
                 await pg.get_by_test_id('q-skip').click()
             await expect(pg.get_by_test_id('local-plan')).to_be_visible()
             assert await pg.get_by_test_id('local-source').count() > 0
+            assert 'source:' not in (await pg.get_by_test_id('local-plan').inner_text()).lower()
+            times = await pg.get_by_test_id('local-plan').locator('time').all_text_contents()
+            assert times and all(re.fullmatch(r'(?:[1-9]|1[0-2]):[0-5]\d (?:AM|PM)', t) for t in times)
             assert await pg.get_by_test_id('local-plan').locator('h2').count() == 2
             assert not re.search(r'flight|hotel|Book this|\$', await pg.get_by_test_id('local-plan').inner_text(), re.I)
             print('PASS local keyboard, persistence, fields and Oahu source/no travel items', width)

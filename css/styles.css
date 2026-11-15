@@ -1555,3 +1555,14 @@ button{overflow-wrap:normal;word-break:normal}
  .db-root.db-dock:has([data-testid="needs-time"]) .db-dock-tray{position:static;transform:none;max-height:none;display:none}
  .db-root.db-dock:has([data-testid="needs-time"]) .db-dock-tray.is-open{display:block}
 }
+/* Preview polish: reserve the fixed action bar and safe area in both viewports. */
+:root{--question-footer-clearance:calc(160px + env(safe-area-inset-bottom, 0px))}
+html{scroll-padding-bottom:var(--question-footer-clearance)}
+.question{padding-bottom:var(--question-footer-clearance)}
+.question :is(h1,h2,h3,legend,fieldset,.option,.checkrow,.options,.food-group,.style-options){scroll-margin-bottom:var(--question-footer-clearance);scroll-margin-top:110px}
+.question .qfooter{flex-wrap:wrap;gap:8px}
+.stay-pill{border-radius:999px;min-height:44px;padding:8px 16px}
+.stay-pill[aria-pressed="true"]{background:var(--ink);color:var(--surface)}
+[data-testid="trip-prep"] .checkrow>.pack-quantity-control{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;white-space:nowrap;width:auto}
+[data-testid="trip-prep"] .pack-quantity-control>.muted{flex:0 0 auto}
+[data-testid="trip-prep"] .pack-quantity-control input{margin:0;flex:0 0 64px}

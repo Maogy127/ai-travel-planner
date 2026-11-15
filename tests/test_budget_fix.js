@@ -38,3 +38,20 @@ for(const name of ['styles','catalog','oahu','engine','diet','ai','rings'])vm.ru
  assert.equal(ctx.GoNowRings.summary({sleep:7+5/60,move:60,rec:20}),'Sleep 7h05 · Move 60 min · Recover 20 min');
  console.log('PASS shared dashboard/day ring formatting pads minutes');
 })().catch(e=>{console.error(e);process.exitCode=1;});
+
+// Exercise the same pure formatting helpers used by Trip prep and plan headers.
+const app=fs.readFileSync(path.join(__dirname,'../js/app.js'),'utf8');
+for(const name of ['noteCount','groupPaceLabel','icon']){
+ const body=app.match(new RegExp('    function '+name+'\\([^]*?\\n    }'));
+ // Single-line helpers need only their declaration line; icon spans several lines.
+ const source=name==='icon'?body[0]:app.split('\n').find(line=>line.includes('function '+name+'('));
+ vm.runInContext(source,ctx);
+}
+ctx.paceLabels={gentle:'Gentle',active:'Active',athlete:'Athlete',unsure:'Not sure'};ctx.esc=x=>x;
+assert.equal(ctx.noteCount(1),'1 note');assert.equal(ctx.noteCount(0),'0 notes');assert.equal(ctx.noteCount(3),'3 notes');
+assert.equal(ctx.groupPaceLabel([{level:'active'},{level:'active'}]),'Both: Active pace');
+assert.equal(ctx.groupPaceLabel(Array(3).fill({level:'gentle'})),'Everyone: Gentle pace');
+assert.equal(ctx.groupPaceLabel([{name:'You',level:'active'},{name:'Partner',level:'gentle'}]),'You: Active · Partner: Gentle');
+const paths=ctx.GONOW_STYLES.map(([key])=>ctx.icon(key).match(/<path d="([^"]+)"/)[1]);
+assert.equal(new Set(paths).size,6);assert(!paths.includes(ctx.icon('style').match(/<path d="([^"]+)"/)[1]));
+console.log('PASS note pluralization, group pace labels and six distinct style icons');

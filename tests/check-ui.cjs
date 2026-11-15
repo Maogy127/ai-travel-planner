@@ -39,7 +39,7 @@ const ctx = {
 ctx.window=ctx;ctx.scrollTo=()=>{};ctx.addEventListener=()=>{};ctx.history={state:null,pushState(s){this.state=s},replaceState(s){this.state=s}};
 vm.createContext(ctx);
 const jsRoot = fs.existsSync(`${__dirname}/../site/js/app.js`) ? `${__dirname}/../site/js/` : `${__dirname}/../js/`;
-for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','checkin','jetlag','dashboard','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8'),ctx);
+for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','local','checkin','jetlag','dashboard','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8'),ctx);
 const api=ctx.__gonow;
 const click=id=>node(`[data-testid="${id}"]`).click();
 (async()=>{
@@ -52,11 +52,44 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert.ok(ctx.PHOTO_CREDITS.length >= 22);
   assert.ok(ctx.PHOTO_CREDITS.some(c => c.source === 'Wikimedia Commons' && c.photoUrl.includes('commons.wikimedia.org')));
   assert(node('view').innerHTML.includes('Pexels License'));
+  const normalize=text=>text.replace(/<[^>]*>/g,' ').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim().toLowerCase();
+  for(const mode of ['trip','local']){
+    api.state.answers.mode=mode;
+    for(const step of (mode==='trip'?['dates','budget','who','ages','style','food','pace','musts']:['style','food','pace'])){
+      node('view .question').innerHTML='';
+      api.go(step);
+      const html=node('view').innerHTML;
+      const kicker=normalize(node('view .question').innerHTML.match(/<span>(.*?)<\/span>/)[1]);
+      const title=normalize(html.match(/<h1[^>]*>(.*?)<\/h1>/)[1]);
+      const subtitle=normalize(html.match(/<h1[^>]*>.*?<\/h1>\s*<p[^>]*>(.*?)<\/p>/)[1]);
+      for(const copy of [title,subtitle, ...(step==='budget'?['What does this budget cover?']:[])].map(normalize)){
+        assert(!copy.includes(kicker)&&!kicker.includes(copy),`${mode}/${step}: repeated copy`);
+        const intent=t=>t.replace(/^(choose|pick) /,'select ').match(/^(select up to two|select what your budget)/)?.[0];
+        assert(!intent(kicker)||intent(kicker)!==intent(copy),`${mode}/${step}: repeated instruction`);
+      }
+      if(step==='musts'){
+        assert(!html.includes('A booked hotel'));assert(html.includes('Where are you staying?<input'));
+        assert(html.indexOf('data-testid="stay-unsure"')<html.indexOf('Where are you staying?'));
+        api.state.answers.stay='Booked place';click('stay-unsure');
+        assert.equal(api.state.answers.stay,'');assert(api.state.answers.stayUnsure);
+        assert(node('view').innerHTML.includes('disabled aria-disabled="true"'));
+      }
+      if(step==='pace')assert(html.includes('Pace &amp; activities: '));
+    }
+  }
+  api.state.answers.mode='local';api.state.answers.localCity='Oahu';api.go('local-plan');
+  assert(!/source:/i.test(node('view').innerHTML));
+  assert(node('view').innerHTML.includes('<time>8:00 AM</time>'));
+  for(const time of node('view').innerHTML.matchAll(/<time>(.*?)<\/time>/g))assert(/^(?:[1-9]|1[0-2]):[0-5]\d (?:AM|PM)$/.test(time[1]));
+  api.state.answers.mode='trip';
   api.go('start');click('demo-oahu');
   await new Promise(r=>setTimeout(r,20));
   assert.equal(api.state.screen,'prep');
   assert.equal((node('view').innerHTML.match(/data-testid="prep-section"/g)||[]).length,3);
+  assert(!node('toast').innerHTML.includes('Your plan is ready.'));
+  assert(/Before you go · \d+ notes?/.test(node('view').innerHTML));
   click('prep-continue');
+  assert(!node('toast').innerHTML.includes('Your plan is ready.'));
   assert.equal(api.state.screen,'plan');
   assert(node('view').innerHTML.includes('id="tab-content"'));
   assert(!/tab-packing|tab-tips|open-packing|tile-grid/.test(node('view').innerHTML));

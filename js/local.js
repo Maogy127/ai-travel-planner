@@ -22,8 +22,8 @@
                 var title=known?pool[i<2?i:2+(i-2+day*2)%Math.max(1,pool.length-2)]:generic[half?Math.min(i,2):Math.round(i*(generic.length-1)/(count-1))];
                 if(known&&/food stalls|market.*food/i.test(title))hour=12;
                 var meal=mealTitles.has(title)||/breakfast|dinner/.test(title),safe=diet.safeMeal({kind:meal?'meal':'activity',title:title},a);title=safe.title.replace(/near your stay/g,'nearby');
-                return {kind:meal?'meal':'activity',time:String(hour).padStart(2,'0')+':00',title:title,note:meal?'Choose a place you enjoy; confirm opening hours and dietary needs.':known?(gentle?'Take it slowly, with time to pause.':'Move at your own pace; check access and conditions before heading out.'):(/breakfast|dinner/.test(title)?'Choose a café you like, close to home.':/park|walk|run/.test(title)?'Enjoy a park near you and adjust the distance to your energy.':'Leave room to rest, stretch and enjoy an unhurried day.'),source:known?'catalog':'generic',intensity:gentle?'gentle':vigorous?'vigorous':'moderate'};
-            }).sort(function(a,b){return a.time.localeCompare(b.time);})};
+                return {kind:meal?'meal':'activity',time:(hour%12||12)+':00 '+(hour<12?'AM':'PM'),title:title,note:meal?'Choose a place you enjoy; confirm opening hours and dietary needs.':known?(gentle?'Take it slowly, with time to pause.':'Move at your own pace; check access and conditions before heading out.'):(/breakfast|dinner/.test(title)?'Choose a café you like, close to home.':/park|walk|run/.test(title)?'Enjoy a park near you and adjust the distance to your energy.':'Leave room to rest, stretch and enjoy an unhurried day.'),source:known?'catalog':'generic',intensity:gentle?'gentle':vigorous?'vigorous':'moderate'};
+            }).sort(function(a,b){function minutes(t){var hour=Number(t.split(':')[0])%12;return (hour+(/PM$/.test(t)?12:0))*60;}return minutes(a.time)-minutes(b.time);})};
         });
         return {mode:'local',city:city,comingSoon:!known,days:days};
     }

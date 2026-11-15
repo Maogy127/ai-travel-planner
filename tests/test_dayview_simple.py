@@ -29,7 +29,7 @@ async def checks(browser):
             await pg.keyboard.press('Enter')
             await expect(rings.get_by_test_id('ring-breakdown')).to_be_visible()
             print('PASS test_dayview_simple.py check line 30')
-            for selector in ('[data-testid=day-pace]', '[data-testid=traveler-row]', '[data-testid=db-booking-form]', '[data-testid=db-tray]', '.day-badges', '[data-testid=before-you-go]>div'):
+            for selector in ('[data-testid=day-pace]', '[data-testid=traveler-row]', '[data-testid=db-booking-form]', '[data-testid=db-tray]', '.day-badges'):
                 for item in await day.locator(selector).all():
                     await expect(item).to_be_hidden()
                     print('PASS test_dayview_simple.py check line 34')
@@ -71,8 +71,7 @@ async def checks(browser):
             await day.get_by_test_id('db-tray-toggle').click()
             await expect(day.get_by_test_id('db-tray')).to_be_visible()
             print('PASS test_dayview_simple.py check line 72')
-            await day.get_by_test_id('before-you-go').locator('summary').click()
-            await expect(day.get_by_test_id('before-you-go').locator('div').first).to_be_visible()
+            await expect(day.get_by_test_id('before-you-go')).to_have_count(0)
             print('PASS test_dayview_simple.py check line 75')
             assert not await pg.evaluate('document.documentElement.scrollWidth > innerWidth')
             print('PASS test_dayview_simple.py check line 77')

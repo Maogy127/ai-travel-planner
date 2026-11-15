@@ -457,3 +457,22 @@ App fixes: all Oahu answers use the curated sample unless `templateOahu` is set,
 
 - `tests/check-ui.cjs`: the personalized January template-render scenario explicitly sets `templateOahu`; its dates, meals, requested stop, stay and UI assertions remain intact.
 - `tests/check-ui.cjs`: explicitly opted-in Oahu templates already suppress the curated banner photo in `planBanner`; assert that existing behavior instead of the obsolete automatic-template photo expectation.
+
+### Preview polish
+
+- `tests/check-ui.cjs`: walk every trip/local question and compare normalized kicker text with heading, subtitle and budget legend; reject containment and repeated Choose/Pick instruction phrases. Check the labeled pace summary, hotel option row and clear/disable behavior, local rendered provenance/times (including 8:00 AM), and absence of the plan-ready toast on prep and after Continue. Load the real local generator after its diet dependency in the VM fixture.
+- `tests/test_budget_fix.js`: exercise the actual note-count and group-pace formatters for singular/plural, two/three travelers and mixed paces; require six distinct style icon paths, none using the sparkle fallback.
+- `tests/test_local_mode.js`: require 12-hour times for catalog and generic plans, chronological ordering across noon, and 12:00 PM formatting. No existing expectations removed.
+- `tests/test_question_flow.py`: add supervisor-run visible kicker/heading/subtitle/legend comparisons on every step in both modes and require the visible Pace & activities label.
+- `tests/test_local_mode.py`: add supervisor-run assertions excluding visible `source:` text and requiring 12-hour result times.
+- `tests/test_trip_prep.py`: intentionally update the obsolete bare-count essentials summary to `1 note` / `N notes`. Replace the obsolete day-disclosure collection with an explicit assertion that day disclosures are absent; retain plan-data-to-prep notice coverage and deduplication. Add toast absence checks on prep and after Continue. These expectations changed because preparation now belongs in Trip prep, with explicit quantity grammar.
+
+App fixes: remove day-card Before-you-go disclosures and retain their preparation notices in the existing deduplicated essentials list; move booking, booking-todo and meal-balance reminders to dated Trip prep disclosures. Correct note grammar. Give question kickers independent copy, simplify budget instructions, remove the hotel chip, and place a styled Not sure yet toggle in the options row with the exact hotel label. Render six distinct line icons. Remove local source labels and format/sort local times consistently. Collapse matching traveler paces into Both/Everyone, label the pace summary, suppress the plan-ready toast once prep is seen and clear any lingering ready toast on prep entry. Keep packing quantities inline and reserve fixed-footer/safe-area clearance with heading/legend/option scroll margins.
+
+Validation: all 21 Node suites pass. Chromium, screenshots and real 390×844 / 1280×800 viewport checks remain supervisor-run. The known `snapshot weather is seasonal` failure is untouched. No network, commit or push.
+
+Final offline checks: 21/21 Node suites; `node --check` on 39 JavaScript files; Python AST syntax on 35 files without cache writes; `git diff --check` clean. Existing untracked `tests/__pycache__/` left untouched.
+
+- r15 leftover disclosure assertions: `tests/test_full.py` now reads the visible Trip prep content for the unchanged no-fly / “No flying for 24 h” requirement before continuing to the plan. `tests/test_food.py` opens Trip prep and requires visible dinner-balance in the Nov 26 dated `.prep-day-notes`, retains the banned-language check, then continues to the plan for the remaining day checks. Food-page assertions are unchanged. `tests/test_dayview_simple.py` replaces the removed day-disclosure click with an explicit count-zero assertion and removes its obsolete hidden-body selector; all other simplified day-view checks remain intact. Search outside `baseline-before-merge` found no other stale day-card disclosure expectations.
+
+Validation for the r15 test updates: 21/21 Node suites pass; `node --check` passes on 39 JavaScript files; Python AST syntax passes on 35 files without cache writes; `git diff --check` passes. App behavior and the known `snapshot weather is seasonal` failure are unchanged. Chromium remains supervisor-run. No Chromium, network, commit, or push.

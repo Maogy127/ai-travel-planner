@@ -1,6 +1,6 @@
 """Supervisor Chromium food regression, port 8840."""
 from test_full import open_home_flow
-from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
+from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu, open_trip_prep
 import asyncio
 import re
 from playwright.async_api import expect
@@ -59,9 +59,11 @@ async def checks(browser):
                 if day == 1:
                     await expect(pg.locator('[data-db-id=lamer]')).to_contain_text('La Mer')
                     await expect(pg.locator('[data-db-id=lamer]')).to_contain_text('Check the menu for Shellfish')
-                    await pg.get_by_test_id('before-you-go').evaluate('e=>e.open=true')
-                    await expect(pg.get_by_test_id('dinner-balance').first).to_be_visible()
+                    await open_trip_prep(pg)
+                    notes = pg.get_by_test_id('trip-prep').locator('.prep-day-notes').filter(has_text='Nov 26')
+                    await expect(notes.get_by_test_id('dinner-balance')).to_be_visible()
                     assert not BANNED.search(' '.join(await pg.get_by_test_id('dinner-balance').all_text_contents()))
+                    await continue_prep(pg)
                 assert await pg.locator('.db-activity > [data-testid=diet-tag]').filter(has_text='Check the menu').count() > 0 if day < 4 else True
                 for row in await pg.locator('[data-db-source]').all():
                     if 'db-locked' not in (await row.get_attribute('class') or ''):
