@@ -15,6 +15,8 @@ async def reopen(pg):
     await wait_plan(pg)
 
 async def expand_group(pg):
+    if await pg.get_by_test_id('track-toggle').get_attribute('aria-pressed') != 'true':
+        await pg.get_by_test_id('track-toggle').click()
     toggle = pg.get_by_test_id('group-toggle')
     if await toggle.get_attribute('aria-expanded') != 'true':
         await toggle.click()

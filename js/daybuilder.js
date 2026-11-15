@@ -59,7 +59,7 @@ function range(start, end) {
 }
 function place(title) {
     if (/Kewalo|dive|parasail/i.test(title)) return 'Kewalo Basin';
-    if (/Kualoa|Aunty Pat|Jurassic/i.test(title)) return 'Kualoa Ranch';
+    if (/Kualoa|Aunty Pat|Jurassic|Grab-and-go breakfast/i.test(title)) return 'Kualoa Ranch';
     if (/Diamond Head.*entry|Reserve to Diamond/i.test(title)) return 'Diamond Head';
     if (/Senia|Chinatown/i.test(title)) return 'Chinatown';
     if (/Kahala|palms/i.test(title)) return HOTEL;
@@ -119,11 +119,40 @@ function duration(item) {
 }
 function convert(item = {}) {
     return {
-        id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: place(item.title || 'Activity'), preferred: parse(item.time),
+        closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: place(item.title || 'Activity'), preferred: parse(item.time),
         duration: duration(item), walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
     };
+}
+function operatingRules(item) {
+    if (['travel','flight'].includes(item.kind)) return item;
+    const title=String(item.title||'').toLowerCase();
+    const rule=Object.assign({},...(window.OAHU_PLACE_RULES||[]).filter(r=>(r.titleStart ? title.startsWith(r.name.toLowerCase()) : title.includes(r.name.toLowerCase()))));
+    return {...rule,...item,closed:item.closed||rule?.closed,hours:item.hours||rule?.hours};
+}
+function closedOn(item,date) {
+    const rules=operatingRules(item);
+    return (rules.closed||[]).find(r=>r.date===date || (r.weekdays||[]).includes(new Date(date+'T12:00:00Z').getUTCDay())) || null;
+}
+function shortDate(date) { return new Date(date+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC'}); }
+function blockedOn(item,date,ctx={}) {
+    if(closedOn(item,date))return 'Closed '+shortDate(date);
+    const start=item.preferred ?? item.start ?? 540, end=start+(item.duration||60);
+    const rules=operatingRules(item);
+    if(rules.hours && (!rules.hours.date||rules.hours.date===date) && (start<rules.hours.open || end>rules.hours.close))return 'Outside opening hours';
+    if(!['travel','flight'].includes(item.kind) && ((item.tags||[]).includes('dive') || /\b(?:dive|diving|scuba)\b/i.test(item.title||''))) {
+        const departure=ctx.departureDate||sourcePlan().end||sourcePlan().days.at(-1)?.date;
+        if(departure){
+            // An unknown flight uses midnight: safe for any departure time.
+            const flight=Date.parse(departure+'T00:00:00Z')/60000+(parse(ctx.flightTime||'')||0);
+            if(flight-(Date.parse(date+'T00:00:00Z')/60000+end)<1440)return 'No diving within 24h of your flight';
+        }
+    }
+    return null;
+}
+function nearestAllowed(item,date,ctx={}) {
+    return (ctx.dates||sourcePlan().days.map(d=>d.date)).slice().sort((a,b)=>Math.abs(Date.parse(a)-Date.parse(date))-Math.abs(Date.parse(b)-Date.parse(date)) || b.localeCompare(a)).find(d=>!blockedOn(item,d,ctx)) || null;
 }
 function buildSuggested(date) {
     const day = sourcePlan().days.find(day => day.date === date);
@@ -132,7 +161,7 @@ function buildSuggested(date) {
     let items = sourceItems.map((item,index)=>convert({...item,id:item.id||date+'-'+index}));
     if (planSource && planSource.id !== 'oahu-demo-2026-11') {
         items.forEach((item,index)=>{item.locked=!!sourceItems[index].locked;if(item.preferred===null)item.textTime=sourceItems[index].time;});
-        return {date, items, unscheduled:[]};
+        return {date, items, unscheduled:clone(day.unscheduled||[])};
     }
     items.forEach((item, index) => {
         if (item.kind === 'travel' && items[index + 1]) {
@@ -152,7 +181,7 @@ function buildSuggested(date) {
         // The locked reservation documents its full 7:30–9:30 PM window.
         items[12].duration = 120;
         Object.assign(items[0], {place: HOTEL, to: 'Diamond Head'});
-        items[1].locked = true;
+        Object.assign(items[1], {preferred: 360, duration: 90, locked: true});
         Object.assign(items[2], {place: 'Diamond Head', to: WAIKIKI});
         Object.assign(items[3], {place: WAIKIKI, to: 'Kualoa Ranch', locked: true});
         Object.assign(items[6], {place: 'Kualoa Ranch', to: WAIKIKI, locked: true});
@@ -200,7 +229,7 @@ function buildSuggested(date) {
         item.detail = '';
         item.preferred = null;
     });
-    return {date, items, unscheduled: []};
+    return {date, items, unscheduled: clone(day.unscheduled||[])};
 }
 // Ideas no longer on a day card stay available in Activity ideas.
 const chestOnly = [{id: 'magic-island', time: '5:15 PM', kind: 'sight', title: 'Magic Island sunset',
@@ -252,8 +281,9 @@ function replanStay(items, oldStay, newStay) {
 function reflow(day, ctx = {}) {
     const output = [];
 
-    const ages = (ctx.ages?.length ? ctx.ages : [18, 19]).map(Number);
-    const raw = clone(day.items);
+    const ages = (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number);
+    const rejected=[];
+    const raw = clone(day.items).filter(item=>{const reason=blockedOn(item,day.date,ctx);if(reason)rejected.push({...item,blockedReason:reason});return !reason;});
     raw.forEach(item => { delete item.notes; delete item.noteSources; delete item.notePriority; delete item.noteSource; });
     if(stayOverride)raw.forEach(item=>{['place','to'].forEach(k=>{if(item[k]===HOTEL)item[k]=stayOverride;});if(item.prepBlock&&item.prepBlock.place===HOTEL)item.prepBlock.place=stayOverride;});
     let previous = null;
@@ -315,6 +345,8 @@ function reflow(day, ctx = {}) {
             if (item.duration < 15) continue;
         }
         item.end = item.start + item.duration;
+        const block=blockedOn({...item,preferred:item.start},day.date,ctx);
+        if(block){rejected.push({...item,blockedReason:block});continue;}
         if (previous) {
             const buffer = item.dressy ? 15 : 0;
             const depart = item.locked && !item.textTime ? item.start - buffer - travel.minutes : previous.end;
@@ -324,11 +356,6 @@ function reflow(day, ctx = {}) {
             }
             // An explicit ride already includes travel: no redundant short walk.
             if (!travel.minutes || (previous.kind === 'travel' && previous.to === item.place)) item.travel = null;
-        }
-        const flightTime = ctx.flightTime;
-        const untilFlight = flightTime ? (Date.parse('2026-11-29T00:00:00Z') - Date.parse(day.date + 'T00:00:00Z')) / 60000 + parse(flightTime) - item.end : null;
-        if ((item.tags || []).includes('dive') && (flightTime ? untilFlight >= 0 && untilFlight < 1440 : day.date >= '2026-11-28')) {
-            warn(item, 'Keep 24 hrs between diving and flying', window.OAHU_SOURCES.dan, 2);
         }
         if ((item.tags || []).some(tag => tag === 'alcohol' || tag === 'bar') && ages.some(age => age < 21)) {
             warn(item, '21+ only in the US — skip or go alcohol-free', undefined, 3);
@@ -357,7 +384,7 @@ function reflow(day, ctx = {}) {
             previous = prep;
         }
     }
-    return {items: output, conflicts: output.flatMap(item => (item.notes || []).map((note, index) => ({
+    return {items: output, unscheduled:rejected, conflicts: output.flatMap(item => (item.notes || []).map((note, index) => ({
         id: item.id, note, source: item.noteSources[index]
     })))};
 }
@@ -419,7 +446,7 @@ function exportDays(days, flightTime) {
         const base = buildSuggested(date).items;
         const pool = base.concat(tray);
         const items = day.items.map(item => {
-            if (item.custom) return {c: 1, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
+            if (item.custom) return {c: 1, cl:item.closed, hr:item.hours, tg:item.tags, ru:item.rules, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
             const original = pool.find(candidate => candidate.id === item.id);
             if (original && !item.routeReview && !item.originalTitle && !item.manualTime && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
             const entry = {id: item.id, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
@@ -454,7 +481,7 @@ function importDays(data) {
             if (entry.c) {
                 const start = minutes(entry.p), length = minutes(entry.d);
                 if (typeof entry.t !== 'string' || !entry.t.trim() || (start === undefined) || !length) return null;
-                return {originalTitle:entry.ot, id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
+                return {closed:entry.cl,hours:entry.hr,tags:entry.tg,rules:entry.ru,originalTitle:entry.ot, id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
                     place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false};
             }
             const item = find(entry.id) || pool.find(i => i.sourceId === entry.s) && clone(pool.find(i => i.sourceId === entry.s));
@@ -475,6 +502,10 @@ function importDays(data) {
     return {days, flightTime: typeof data.f === 'string' && parse(data.f) !== null ? data.f : ''};
 }
 
+function importForPlan(data,plan) {
+    const previous=planSource;
+    try {planSource=plan;return importDays(data);} finally {planSource=previous;}
+}
 function mount(root, ctx = {}) {
     const nextPlan=ctx.plan||null;
     // Disconnect the prior mount before headers ask for the current schedule.
@@ -526,6 +557,20 @@ function mount(root, ctx = {}) {
     function draftItems() {
         return sourcePlan().days.flatMap(d => visibleItems(days[d.date] || buildSuggested(d.date), d.date));
     }
+    function ruleContext(){return {...ctx,flightTime,departureDate:sourcePlan().end};}
+    function block(item,on,applySuggestion){
+        const reason=blockedOn(item,on,ruleContext());
+        if(!reason)return null;
+        const suggestion=nearestAllowed(item,on,ruleContext());
+        document.querySelectorAll?.('[data-testid=blocked-message]').forEach(node=>node.remove());
+        root.querySelector('[data-testid=blocked-message]')?.remove();
+        const message=document.createElement('div');
+        message.dataset.testid='blocked-message';message.setAttribute('aria-live','polite');message.setAttribute('role','status');
+        message.innerHTML='<p data-testid="blocked-reason">'+esc(reason)+'</p>'+(suggestion?'<button type="button" data-testid="blocked-suggest">Add to '+esc(shortDate(suggestion))+'</button>':'');
+        (root.querySelector('dialog[open]')||root).append(message);
+        if(suggestion)message.querySelector('button').onclick=()=>{message.remove();applySuggestion(suggestion);};
+        return {ok:false,reason,suggestion};
+    }
     function addToDay(nextDate, spec) {
         if (!spec) return {ok: false, reason: 'Missing activity'};
         if (!sourcePlan().days.some(d => d.date === nextDate)) return {ok:false, reason:'Choose a trip date'};
@@ -538,8 +583,10 @@ function mount(root, ctx = {}) {
         let item = base ? clone(base) : {title:String(spec.title || '').trim().slice(0,100), place:spec.place || 'Other', duration:Number(spec.duration) || 60, estimate:true, custom:true};
         if (!item.title) return {ok:false, reason:'Name the activity'};
         if(spec.wellness)item.wellness=clone(spec.wellness);
-        Object.assign(item, {sourceId:identity, preferred:null, locked:false, rules:spec.rules || item.rules || [], tags:spec.tags || item.tags || []});
+        Object.assign(item, {sourceId:identity, preferred:null, locked:false, closed:spec.closed || item.closed,hours:spec.hours || item.hours, rules:spec.rules || item.rules || [], tags:spec.tags || item.tags || []});
         delete item.textTime; delete item.flight;
+        item.preferred=spec.time?toTime(spec.time):null;
+        const blocked=block(item,nextDate,on=>addToDay(on,spec));if(blocked)return blocked;
         item.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
         selectDay(nextDate, false);
         const d = current();
@@ -620,7 +667,7 @@ function mount(root, ctx = {}) {
         const arrivalEstimate = travelTime && (!i.manualTime || i.estimate);
         const showArrivalEstimate = travelTime && i.manualTime && i.estimate;
         const editor = canEditTime && editingTime === on + '|' + i.id ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><p>${i.locked ? 'Unlock first to edit this activity’s time.' : travelTime ? 'Edit departure time' : 'Edit scheduled time'}</p><fieldset ${i.locked ? 'disabled' : ''}><legend>${travelTime ? 'Travel time' : 'Activity time'}</legend><label>${travelTime ? 'Departure' : 'Start'}<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>${travelTime ? 'Arrival' : 'End'} <span data-time-estimate>${travelTime ? (arrivalEstimate ? '(est. from travel duration)' : '') : i.estimate ? '(estimate from default duration)' : ''}</span><input name="end" type="time" ${travelTime && !arrivalEstimate ? 'data-manual="true"' : ''} value="${hhmm(i.end)}"></label><label ${travelTime ? 'hidden' : ''}>Duration (minutes)<input name="duration" type="number" min="1" placeholder="${i.duration}"></label><button>${travelTime ? 'Save departure time' : 'Save activity time'}</button></fieldset><p role="alert" data-testid="activity-time-error"></p><button type="button" data-db-action="close-time">Close time editor</button></form>` : '';
-        const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (ctx.ages || [18,19]).some(age => Number(age) < r.minAge)) : null;
+        const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number).some(age => age < r.minAge)) : null;
         const detail = (ctx.detail ? ctx.detail(src, on, i) : '') + (tray ? (i.rules || []).map(r => `<p>${esc(r.text || r)}</p>`).join('') : '');
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
         const title = (!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
@@ -702,6 +749,12 @@ function mount(root, ctx = {}) {
         d.items.sort((a,b)=>(a.preferred ?? Infinity)-(b.preferred ?? Infinity));
     }
     function resolveTime(on, item, start, duration, apply) {
+        const proposed={...item,start,preferred:start,duration};
+        if(block(proposed,on,target=>{ // A suggested move leaves the original untouched until accepted.
+            Object.values(days).forEach(d=>{d.items=d.items.filter(i=>i.id!==item.id);d.unscheduled=(d.unscheduled||[]).filter(i=>i.id!==item.id);});
+            days[target] ||= buildSuggested(target);days[target].items.push({...item,preferred:start,manualTime:true,duration});
+            root.querySelector('dialog[open]')?.remove();save();selectDay(target,false);
+        }))return;
         days[on] ||= buildSuggested(on);
         const shown=dayResult(days[on],on).items;
         const hits=overlaps(shown,start,duration,item.id);
@@ -737,6 +790,8 @@ function mount(root, ctx = {}) {
         dialog.querySelector('[data-testid=conflict-shift]').onclick=()=>{
             const shifted=shiftConflicts(shown,start,duration,item.id);
             if(shifted.error){dialog.querySelector('[role=status]').textContent=shifted.error;return;}
+            const unsafe=shifted.items.find(i=>blockedOn({...i,preferred:i.start,duration:i.end-i.start},on,ruleContext()));
+            if(unsafe){block({...unsafe,preferred:unsafe.start},on,target=>addToDay(target,{...unsafe,time:clock(unsafe.start)}));return;}
             freeze();
             shifted.items.forEach(v=>{const raw=days[on].items.find(i=>i.id===v.id);if(raw&&v.shifted){if(raw.preferred!==v.start){raw.originalTitle ||= raw.title;raw.title=cleanTimeTitle(raw.title,raw.preferred);}Object.assign(raw,{preferred:v.start,duration:v.end-v.start,manualTime:true});}});
             close();apply();
@@ -744,7 +799,9 @@ function mount(root, ctx = {}) {
         dialog.querySelector('[data-testid=conflict-keep]').onclick=()=>{freeze();item.overlapNote='Overlaps another stop — allow extra flexibility.';close();apply();};
     }
     function openTransfer(id, zone, mode) {
-        const list = listFor(zone), item = list.find(i => i.id === id);
+        const list = listFor(zone);
+        let item = list.find(i => i.id === id);
+        if(!item && zone==='tray'){item=lastResult.unscheduled.find(i=>i.id===id);if(item){current().items=current().items.filter(i=>i.id!==id);list.push(item);}}
         if (!item) return;
         if (item.locked && mode !== 'again') { confirmUnlock(item, () => openTransfer(id, zone, mode)); return; }
         const dialog = document.createElement('dialog');
@@ -781,7 +838,7 @@ function mount(root, ctx = {}) {
             dialog.remove(); editingTime = null; save(); selectDay(target, false);
             if (start !== null) { root.querySelector('.db-dock-tray')?.classList.remove('is-open'); document.querySelector('[data-testid=tray-toggle]')?.setAttribute('aria-expanded','false'); }
             };
-            if (start === null) apply();
+            if (start === null) {if(!block(copy,target,on=>{form.elements.date.value=on;form.requestSubmit();}))apply();}
             else resolveTime(target, copy, start, end === null ? copy.duration : end-start, apply);
         };
     }
@@ -817,7 +874,7 @@ function mount(root, ctx = {}) {
         lastResult = result;
         addedConflicts = result.conflicts.filter(c => !previousConflicts.has(c.id + '|' + c.note)).map(c => result.items.find(i => i.id === c.id).title + ' — ' + c.note);
         previousConflicts = new Map(result.conflicts.map(c => [c.id + '|' + c.note, true]));
-        const availableTray = ctx.shared ? [] : d.unscheduled;
+        const availableTray = ctx.shared ? [] : [...d.unscheduled,...result.unscheduled];
         const summary = result.conflicts.length ? `${result.conflicts.length} heads-up` : 'All clear';
         const chips = sourcePlan().days.map((day, index) => {
             const weekday = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', timeZone: 'UTC'});
@@ -933,6 +990,7 @@ function mount(root, ctx = {}) {
 
     // Position is an insertion boundary in the destination list, before removal.
     function change(id, zone, action, target) {
+        const snapshot=clone(current());
         const list = listFor(zone);
         const index = list.findIndex(i => i.id === id);
         const item = list[index];
@@ -959,6 +1017,8 @@ function mount(root, ctx = {}) {
         list.splice(index, 1);
         if (zone === 'tray') { item.preferred = null; delete item.manualTime; delete item.start; delete item.end; }
         if (zone !== 'tray' || !destination.some(existing => existing.id === item.id)) destination.splice(at, 0, item);
+        const unsafe=dayResult(current(),date).unscheduled.find(i=>!dayResult(snapshot,date).unscheduled.some(old=>old.id===i.id));
+        if(unsafe){days[date]=snapshot;block({...unsafe,preferred:unsafe.start??unsafe.preferred},date,target=>{days[date].items=days[date].items.filter(i=>i.id!==unsafe.id);addToDay(target,{...unsafe,time:clock(unsafe.start??unsafe.preferred??540)});});return;}
         session.open.delete(date + '|' + id);
         save();
         render({id, zone});
@@ -1149,6 +1209,7 @@ function mount(root, ctx = {}) {
         const item = {id: 'custom-' + Date.now(), title: values.get('name').trim(), preferred: start,
             duration: end - start, place: values.get('place'), locked: true, custom: true};
         if (!item.title) return;
+        if(block(item,date,on=>addToDay(on,{...item,time:clock(start)})))return;
         const d = current();
         const at = d.items.findIndex(i => (i.preferred ?? 1440) > start);
         d.items.splice(at < 0 ? d.items.length : at, 0, item);
@@ -1314,6 +1375,7 @@ function mount(root, ctx = {}) {
         shiftUnlocked: (on,id,start) => {
             const stored=days[on]||buildSuggested(on),item=stored.items.find(i=>i.id===id);
             if(!item||item.locked)return false;
+            if(block({...item,start,preferred:start},on,target=>addToDay(target,{...item,time:clock(start)})))return false;
             const before=dayResult(stored,on).items,visible=before.find(i=>i.id===id);
             if(!visible||!canShiftUnlocked(before,id,start))return false;
             const copy=clone(stored),target=copy.items.find(i=>i.id===id);Object.assign(target,{preferred:start,manualTime:true});
@@ -1321,7 +1383,7 @@ function mount(root, ctx = {}) {
             if(before.some(i=>i.locked&&!after.some(j=>j.id===i.id&&j.start===i.start&&j.end===i.end)))return false;
             days[on]=copy;save();render();return true;
         },
-        swapItem: (id, alternative) => { const item=current().items.find(i=>i.id===id); if(!item || item.locked)return false; Object.assign(item, alternative, {id:item.id, preferred:alternative.start ?? item.preferred, manualTime:true, duration:item.duration, checkinSwap:true}); delete item.textTime; save(); render(); return true; },
+        swapItem: (id, alternative) => { const item=current().items.find(i=>i.id===id); if(!item || item.locked)return false; if(block({...item,...alternative},date,target=>addToDay(target,alternative)))return false; Object.assign(item, alternative, {id:item.id, preferred:alternative.start ?? item.preferred, manualTime:true, duration:item.duration, checkinSwap:true}); delete item.textTime; save(); render(); return true; },
         render, selectDay, renderPrint, root, openTime, timeInstances, draftItems: () => clone(draftItems()),
         getDay: () => clone(current()),
         date: () => date,
@@ -1335,8 +1397,8 @@ function mount(root, ctx = {}) {
     return api;
 }
 const active = () => (session.active && session.active.root.isConnected ? session.active : null);
-window.DayBuilder = {canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
-    toggleLock, exportDays, importDays, sourceOf,
+window.DayBuilder = {parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+    toggleLock, exportDays, importDays, importForPlan, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
     openTime: (date, id) => active()?.openTime(date, id),
     timeInstances: identity => active()?.timeInstances(identity) || [],

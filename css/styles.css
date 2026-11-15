@@ -1566,3 +1566,13 @@ html{scroll-padding-bottom:var(--question-footer-clearance)}
 [data-testid="trip-prep"] .checkrow>.pack-quantity-control{display:inline-flex;align-items:center;gap:6px;flex:0 0 auto;white-space:nowrap;width:auto}
 [data-testid="trip-prep"] .pack-quantity-control>.muted{flex:0 0 auto}
 [data-testid="trip-prep"] .pack-quantity-control input{margin:0;flex:0 0 64px}
+
+/* Keep question number fields consistent with the text inputs. */
+.question input[type=number]::-webkit-inner-spin-button,
+.question input[type=number]::-webkit-outer-spin-button {-webkit-appearance:none;margin:0}
+.question input[type=number] {-moz-appearance:textfield;appearance:textfield}
+
+/* Preview polish 4: distinct confirmation and tracking groups. */
+.plan-title button[data-testid="confirm-plan"]{background:var(--accent-text);color:#fff;border-color:var(--accent-text)}
+.plan-title>.badge{display:inline-block;background:var(--soft);color:var(--ink-2);border:0;border-radius:4px;padding:4px 8px;font-size:12px}
+.track-choice{margin-top:28px;padding-top:12px}.track-choice>legend{font-size:14px}

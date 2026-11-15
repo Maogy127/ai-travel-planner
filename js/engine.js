@@ -208,6 +208,16 @@
                 })
             };
         });
+        if(window.DayBuilder)days.forEach(function(day){
+            var rejected=[];
+            day.items=day.items.filter(function(item){
+                Object.assign(item,window.DayBuilder.operatingRules(item));
+                var reason=window.DayBuilder.blockedOn(Object.assign({},item,{preferred:window.DayBuilder.parseClock(item.time||'')}),day.date,{departureDate:days[n-1].date,flightTime:a.flightTime});
+                if(reason)rejected.push(Object.assign({},item,{blockedReason:reason}));
+                return !reason;
+            });
+            day.unscheduled=rejected;
+        });
         var w=d.climate[month(a)-1];
         return {
             id:'template-'+d.id+'-'+start, title:d.name, image:d.image, start:start, end:days[n-1].date, meta:dateRange(start, days[n-1].date)+' · '+n+' days · '+((a.who||'Couple').replace(/^./,function(c){return c.toUpperCase();}))+' ('+(a.ages||[25, 25]).join(' & ')+')', stay:a.stayUnsure?(d.center||'city center'):a.stay||d.center||'city center', banner:'Sample/template plan — live AI generation coming soon', weather: {
@@ -221,7 +231,7 @@
         };
     }
     function applyAgeRules(plan, a) {
-        var ages=(a.ages||[25, 25]).map(Number), youngest=Math.min.apply(null, ages), usa=plan.id.indexOf('oahu')>=0||matchDestination(a.destination).country==='USA';
+        var ages=(Array.isArray(a.ages)?a.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number), youngest=Math.min.apply(null, ages), usa=plan.id.indexOf('oahu')>=0||matchDestination(a.destination).country==='USA';
         plan.ageRules=[];
         if(youngest<21) {
             plan.ageRules.push('Why no rental car: most US rental agencies require drivers to be 21+, and drivers under 25 usually pay a young-driver surcharge. Self-drive UTV/ATV tours usually require a 21+ licensed driver. Check local rules outside the USA.');

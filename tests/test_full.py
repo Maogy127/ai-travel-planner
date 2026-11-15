@@ -12,6 +12,11 @@ def ok(name, cond, extra=''):
   results.append((name, bool(cond), extra)); print(('PASS' if cond else 'FAIL'), name, extra)
 async def continue_prep(pg):
   await pg.locator('[data-testid=trip-prep]:visible, [data-testid=db-root]:visible, [data-testid=plan-day]:visible, [data-testid=treasure-map]:visible').first.wait_for(timeout=45000)
+  if await pg.get_by_test_id('confirm-plan').count():
+    assert await pg.evaluate("window.__gonow.state.screen") == 'plan'
+    assert not await pg.get_by_test_id('trip-prep').count()
+    assert not await pg.get_by_test_id('trip-prep-button').count()
+    await pg.get_by_test_id('confirm-plan').click()
   if await pg.get_by_test_id('trip-prep').count():
     await pg.get_by_test_id('prep-continue').click()
 async def wait_plan(pg):
@@ -22,7 +27,10 @@ async def open_guidance(pg):
 
 async def open_trip_prep(pg):
   if not await pg.get_by_test_id('trip-prep').count():
-    await pg.get_by_test_id('trip-prep-button').click()
+    if await pg.get_by_test_id('confirm-plan').count():
+      await pg.get_by_test_id('confirm-plan').click()
+    else:
+      await pg.get_by_test_id('trip-prep-button').click()
   await pg.get_by_test_id('trip-prep').locator('details').evaluate_all('els=>els.forEach(e=>e.open=true)')
 async def open_day_pace(pg):
   link=pg.get_by_test_id('day-pace-link').first
@@ -32,6 +40,7 @@ async def open_add_menu(pg):
   if await panel.count() and not await panel.evaluate('e=>e.open'):
     await panel.locator('summary').click()
 async def open_group(pg):
+  if await pg.get_by_test_id('track-toggle').get_attribute('aria-pressed')!='true': await pg.get_by_test_id('track-toggle').click()
   button=pg.get_by_test_id('group-toggle').first
   if await button.get_attribute('aria-expanded')!='true': await button.click()
 async def open_info(pg):
@@ -330,7 +339,7 @@ async def run(base, label, shots):
     await open_trip_prep(pg)
     n=await pg.locator('input[data-pack-id]').count(); ok(f'{label} what-to-bring present in Trip prep', n>20, str(n))
     prep_body=await pg.get_by_test_id('trip-prep').inner_text()
-    ok(f'{label} no-fly reminder', 'No flying for 24 h' in prep_body or 'no-fly' in prep_body.lower())
+    ok(f'{label} action-only prep', 'No flying for 24 h' not in prep_body and 'Thanksgiving' not in prep_body)
     await continue_prep(pg)
     ok(f'{label} day1 land 5:30 PM', '5:30 PM' in body)
     ok(f'{label} no Sample (demo data) fake tips', 'Sample (demo data)' not in body)
@@ -380,7 +389,7 @@ async def run(base, label, shots):
     await pg.get_by_test_id('fork-no').click(); await wait_plan(pg)
     body=await pg.locator('main').text_content()
     await open_trip_prep(pg)
-    ok(f'{label} template banner in Trip prep', 'Sample/template plan — live AI generation coming soon' in await pg.locator('main').text_content())
+    ok(f'{label} template banner absent in Trip prep', 'Sample/template plan — live AI generation coming soon' not in await pg.locator('main').text_content())
     await continue_prep(pg)
     ok(f'{label} template age rules', len(await pg.evaluate('__gonow.state.plan.ageRules'))>0)
     ok(f'{label} template no rental car', 'Rental car: optional' not in body.lower() and 'car: recommended' not in body.lower(), )
@@ -513,8 +522,9 @@ async def affiliate_checks(b,base,label):
     await continue_prep(pg)
     await open_trip_prep(pg)
     tile=pg.get_by_test_id('book-links')
-    ok(f'{label} {destination} book-links present',await tile.count()==1)
-    await open_trip_prep(pg)
+    ok(f'{label} {destination} booking searches outside prep',await tile.count()==0)
+    await continue_prep(pg)
+    await pg.get_by_test_id('booking-searches').locator('summary').click()
     note=pg.get_by_test_id('affiliate-disclosure')
     ok(f'{label} {destination} disclosure visible',await note.is_visible() and "GoNow doesn't earn from these yet" in await note.inner_text())
     domains={'booking':'www.booking.com','expedia':'www.expedia.com','skyscanner':'www.skyscanner.com','getyourguide':'www.getyourguide.com','viator':'www.viator.com'}
@@ -540,8 +550,10 @@ async def local_info_checks(b,base,label):
   calls=[];pg.on('request',lambda r: calls.append(r.url))
   await pg.get_by_test_id('demo-oahu').click();await continue_prep(pg)
   tile=pg.get_by_test_id('local-info')
-  ok(f'{label} local info is in prep',await tile.count()==0)
+  ok(f'{label} local info outside prep',await tile.count()==1)
   await open_trip_prep(pg)
+  await continue_prep(pg)
+  await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true')
   await tile.get_by_test_id('info-asof').first.wait_for()
   body=await tile.inner_text()
   ok(f'{label} local static guidance',all(t in body for t in ('Pacific/Honolulu','Types A/B','120 V','USD','Local time now','2026-11','General guidance — check official sources')))
@@ -555,7 +567,7 @@ async def local_info_checks(b,base,label):
   count=len(weather_calls)
   await continue_prep(pg);await open_trip_prep(pg)
   await pg.reload(); await reopen(pg); await continue_prep(pg)
-  await open_trip_prep(pg);tile=pg.get_by_test_id('local-info');await tile.get_by_test_id('info-asof').first.wait_for()
+  await continue_prep(pg);await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info');await tile.get_by_test_id('info-asof').first.wait_for()
   ok(f'{label} weather session cache',len([u for u in calls if 'open-meteo.com/v1/' in u])==count)
   await ctx.close()
   ctx,pg=await new(b,base)
@@ -564,7 +576,7 @@ async def local_info_checks(b,base,label):
   dates=await pg.evaluate("[3,6].map(n=>{let d=new Date();d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})")
   await answer(pg,'Lisbon',start=dates[0],end=dates[1])
   await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await open_trip_prep(pg);tile=pg.get_by_test_id('local-info')
+  await continue_prep(pg);await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
   await tile.get_by_test_id('fx-amount').wait_for();await tile.get_by_text('Weather forecast',exact=True).wait_for()
   await tile.get_by_test_id('fx-amount').fill('100')
   ok(f'{label} Lisbon FX converter',await tile.get_by_test_id('fx-result').inner_text()=='100 USD ≈ 90 EUR')
@@ -580,7 +592,7 @@ async def local_info_checks(b,base,label):
   await pg.route('https://api.frankfurter.dev/**',invalid)
   await answer(pg,'Lisbon',start=dates[0],end=dates[1])
   await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await open_trip_prep(pg);tile=pg.get_by_test_id('local-info')
+  await continue_prep(pg);await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
   await tile.get_by_test_id('info-retry').wait_for();await tile.get_by_text('Live rate unavailable',exact=True).wait_for()
   ok(f'{label} friendly live failure',"Couldn't load live weather — check open-meteo.com" in await tile.inner_text() and 'Europe/Lisbon' in await tile.inner_text())
   await pg.unroute('https://api.open-meteo.com/**',invalid)
@@ -592,7 +604,7 @@ async def local_info_checks(b,base,label):
   calls=[];pg.on('request',lambda r:calls.append(r.url))
   await answer(pg,'Costa Rica',start=dates[0],end=dates[1])
   await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await open_trip_prep(pg);tile=pg.get_by_test_id('local-info')
+  await continue_prep(pg);await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
   await tile.get_by_text('Live rate unavailable',exact=False).wait_for()
   await tile.get_by_test_id('info-asof').first.wait_for()
   ok(f'{label} Costa Rica CRC skips Frankfurter',not any('api.frankfurter.dev' in u for u in calls) and 'CRC' in await tile.inner_text() and await tile.get_by_text('Live rate unavailable',exact=False).is_visible())
@@ -624,6 +636,14 @@ async def db_pointer(pg,handle,target,after=False):
   await pg.mouse.move(dest['x']+dest['width']/2,dest['y']+dest['height']*(.8 if after else .2),steps=18)
   await pg.mouse.up()
 
+async def blocked_dive_is_unscheduled(pg):
+  return await pg.evaluate("""() => {
+    const saved=JSON.parse(localStorage.getItem('gonow:daybuilder:oahu-demo-2026-11'));
+    const date=DayBuilder.selectedDate();
+    const result=DayBuilder.reflow(saved.days[date],{departureDate:'2026-11-29',flightTime:saved.flightTime||''});
+    return !result.items.some(i=>(i.tags||[]).includes('dive')) && result.unscheduled.some(i=>i.blockedReason==='No diving within 24h of your flight');
+  }""")
+
 async def add_reflow_fixture(pg, chest_id):
   """Explicitly seed scheduled intent for legacy reflow checks; tray is day-local.
   User-facing add/schedule behavior is covered in test_time_entry.py.
@@ -645,7 +665,7 @@ async def add_reflow_fixture(pg, chest_id):
 async def daybuilder_checks(b,base,label,shots):
   ctx,pg=await db_open(b,base)
   day=pg.get_by_test_id('db-day-list')
-  expected=[('5:35 AM–5:50 AM','Uber Reserve to Diamond Head'),('6:00 AM–7:30 AM','Diamond Head — 6:00 AM entry slot'),('7:35 AM–7:55 AM','Uber to Twin Fin, 2570 Kalākaua (Kualoa shuttle stop)'),('8:00 AM–9:10 AM','Kualoa Ranch shuttle from Twin Fin'),('9:10 AM–9:25 AM','Breakfast at Aunty Pat’s Café'),('9:30 AM–12:00 PM','Kualoa Ranch — Jurassic Adventure (not UTV)'),('1:00 PM–2:00 PM','Kualoa shuttle back to Waikiki'),('2:00 PM–2:20 PM','Uber to the Kahala'),('2:30 PM–4:30 PM','Free time at the Kahala (pool / beach downtime)'),('4:30 PM–5:30 PM','Get ready / change + makeup'),('5:40 PM–6:40 PM','Kahala Beach “Jennie” palms — sunset photos'),('7:30 PM–9:30 PM','Birthday dinner — La Mer at Halekulani')]
+  expected=[('5:35 AM–5:50 AM','Uber Reserve to Diamond Head'),('6:00 AM–7:30 AM','Diamond Head — 6:00 AM entry slot'),('7:35 AM–7:55 AM','Uber to Twin Fin, 2570 Kalākaua (Kualoa shuttle stop)'),('8:00 AM–9:10 AM','Kualoa Ranch shuttle from Twin Fin'),('9:10 AM–9:25 AM','Grab-and-go breakfast'),('9:30 AM–12:00 PM','Kualoa Ranch — Jurassic Adventure (not UTV)'),('1:00 PM–2:00 PM','Kualoa shuttle back to Waikiki'),('2:00 PM–2:20 PM','Uber to the Kahala'),('2:30 PM–4:30 PM','Free time at the Kahala (pool / beach downtime)'),('4:30 PM–5:30 PM','Get ready / change + makeup'),('5:40 PM–6:40 PM','Kahala Beach “Jennie” palms — sunset photos'),('7:30 PM–9:30 PM','Birthday dinner — La Mer at Halekulani')]
   async def timeline():
     return await day.get_by_test_id('db-pair').evaluate_all("es=>es.map(e=>[e.querySelector('[data-testid=db-time]').textContent,e.querySelector('strong').textContent])")
   ok(label+' db exact default',await timeline()==[list(x) for x in expected])
@@ -776,7 +796,7 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db mobile tap targets',await day.locator('.db-controls button').evaluate_all('es=>es.every(e=>e.getBoundingClientRect().width>=40&&e.getBoundingClientRect().height>=40)'))
   await pg.get_by_test_id('db-day-2026-11-28').click()
   await add_reflow_fixture(pg, 'chest-0')
-  ok(label+' db dive flight warning','Keep 24 hrs between diving and flying' in await day.inner_text())
+  ok(label+' db dive flight blocked',await blocked_dive_is_unscheduled(pg))
   await add_reflow_fixture(pg, 'chest-bar')
   ok(label+' db age warning','21+ only in the US' in await day.inner_text())
   if shots: await pg.screenshot(path=str(ROOT/'screenshots/daybuilder-mobile-conflict.png'))
@@ -949,7 +969,7 @@ async def daybuilder_round5_checks(b,base,label):
   ok(label+' db booking overlap announced','Overlaps' in await pg.get_by_test_id('db-live').inner_text())
   await pg.get_by_test_id('db-day-2026-11-28').click()
   await add_reflow_fixture(pg, 'chest-0')
-  ok(label+' db flight unset', 'Keep 24 hrs between diving and flying' in await day.inner_text())
+  ok(label+' db flight unset blocks dive', await blocked_dive_is_unscheduled(pg))
   await pg.get_by_test_id('db-day-2026-11-29').click()
   await choose_flight_time(pg, '23:00')
   await pg.get_by_test_id('db-day-2026-11-28').click()
@@ -962,12 +982,12 @@ async def daybuilder_round5_checks(b,base,label):
     localStorage.setItem(key,JSON.stringify(saved));
   }""")
   await pg.reload(); await reopen(pg); await pg.get_by_test_id('db-day-2026-11-28').click()
-  ok(label+' db flight late clears','Keep 24 hrs between diving and flying' not in await day.inner_text())
+  ok(label+' db flight late clears',await day.locator('.db-activity').filter(has_text='Beginner intro dive').count() > 0 and 'Keep 24 hrs between diving and flying' not in await day.inner_text())
   await pg.get_by_test_id('db-day-2026-11-29').click()
   ok(label+' db flight persisted',await pg.get_by_test_id('db-flight-time').input_value()=='23:00')
   await choose_flight_time(pg, '08:00')
   await pg.get_by_test_id('db-day-2026-11-28').click()
-  ok(label+' db flight early warns','Keep 24 hrs between diving and flying' in await day.inner_text())
+  ok(label+' db flight early blocks dive',await blocked_dive_is_unscheduled(pg))
   await ctx.close()
   ctx,pg=await db_open(b,base,390,'reduce')
   await (await card_action(pg, pg.get_by_test_id('db-day-list').locator('[data-db-id=photos]'), 'db-down')).click()
@@ -1127,10 +1147,10 @@ async def regression_checks(b,base,label):
   await pg.get_by_test_id('db-day-2026-11-26').click()
   photos=await pg.evaluate("""()=>{const DB=window.DayBuilder,cur=DB.selectedDate(),out=[];
     for(const d of window.__gonow.state.plan.days){DB.selectDay(d.date,false);
-      document.querySelectorAll('.db-content .db-photo img').forEach(i=>out.push({src:i.getAttribute('src'),alt:i.getAttribute('alt'),credit:!!i.closest('.db-photo').querySelector('.image-label a[href]')}));}
+      document.querySelectorAll('.db-content .db-photo img').forEach(i=>out.push({date:d.date,src:i.getAttribute('src'),alt:i.getAttribute('alt'),credit:!!i.closest('.db-photo').querySelector('.image-label a[href]')}));}
     DB.selectDay(cur,false);return out;}""")
   ok(label+' activity photos are credited and specific', len(photos)>=8 and all(p['src'] and 'oahu.jpg' not in p['src'] and p['src'].startswith('images/activity-') and p['alt'] and p['credit'] for p in photos), str(photos)[:400])
-  ok(label+' Diamond Head photo is the crater', any(p['src'].endswith('activity-diamond-head.jpg') and 'Diamond Head crater' in p['alt'] for p in photos))
+  ok(label+' Diamond Head photo shows Waikiki silhouette', any(p['date']=='2026-11-26' and p['src'].endswith('activity-waikiki-sunset.jpg') and 'Waikiki' in p['alt'] for p in photos))
   await ctx.close()
 
 async def main():

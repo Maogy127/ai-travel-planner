@@ -17,7 +17,7 @@ console.log('PASS food migration, explicit constraints, unknowns, ranking, reser
 
 const foodCopy=app.slice(app.indexOf('function foodQuestion()'),app.indexOf('function bindWellnessDetails'));assert(!banned.test(foodCopy));
 
-assert(app.includes('data-testid="dinner-balance"'));
+assert(!app.includes('data-testid="dinner-balance"'));
 const local=require('../js/local');
 const localPlan=local.generate({localCity:'Honolulu',localLength:'full',allergens:['Shellfish']},[{id:'oahu',activities:{food:['Seafood restaurant','Neighborhood cafe'],nature:['Park'],wandering:['Walk'],scenic:['View'],culture:['Museum']}}]);
 assert(!localPlan.days.flatMap(d=>d.blocks).some(b=>b.title==='Seafood restaurant'));

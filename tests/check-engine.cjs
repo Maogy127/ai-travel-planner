@@ -11,3 +11,10 @@ for(const pace of ['Easy','Moderate','Full-on']){const p=E.buildTemplatePlan({..
 assert.equal(E.tripDays({...a,end:'2026-12-29'}),10);const ids=new Set(O.packing.flatMap(g=>g.items).map(i=>i.id));assert(O.days.flatMap(d=>d.items).every(i=>i.bring.every(id=>ids.has(id))));assert(!ids.has('license'));assert(O.tips.every(t=>t.url&&t.sourceType));assert.equal(O.days.length,5);
 const young=E.applyAgeRules(JSON.parse(JSON.stringify(O)),{...a,ages:[23,24]});assert(young.ageRules[0].includes('surcharge'));
 AI.generatePlan({...a,templateOahu:true}).then(p=>{assert.equal(p.id,'template-oahu-2026-11-25');assert(p.ageRules.length>=2);assert(p.days.every(d=>d.car.level==='No rental car'));assert.notEqual(p,O);console.log('PASS: catalog, aliases, recommendations, budget arithmetic, template pace, requests, day cap, age rules, packing references and AI routing.');});
+
+for(const [ages,under21,young,kids] of [[[30],false,false,false],[[22],false,true,false],[[30,20],true,true,false],[[40,38,10],true,true,true],[['',30],false,false,false],[[null,'bad',-1,111,30],false,false,false],[[0,30],true,true,true]]){
+ const p=E.applyAgeRules(JSON.parse(JSON.stringify(O)),{...a,ages});
+ assert.equal(p.ageRules.some(t=>t.includes('legal drinking')),under21);
+ assert.equal(p.ageRules.some(t=>/surcharge/.test(t)),young);
+ assert.equal(p.ageRules.some(t=>t.includes('Traveling with kids')),kids);
+}

@@ -1,6 +1,6 @@
 # GoNow
 
-Open `index.html` directly, or serve this directory with any static HTTP server. Home lists trips saved on this device. Start a trip, shape it in Draft, then Generate my plan to freeze a finished copy. Draft edits do not change that copy until you generate again. Activity search uses the on-device library only. It is not a live worldwide place search. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Fraunces Variable and Inter Variable are self-hosted in `fonts/` with `font-display: swap`, Georgia/system fallbacks and SIL OFL licenses in each family directory. No font service is contacted. Use `?fast=1` to skip the simulated planning delay.
+Open `index.html` directly, or serve this directory with any static HTTP server. Home lists trips saved on this device. Start a trip and review the plan as a Draft. Confirm plan saves a finished snapshot and opens Trip prep. The draft editor’s Generate my plan also freezes a finished copy. Draft edits do not change that copy until you generate again. Activity search uses the on-device library only. It is not a live worldwide place search. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Fraunces Variable and Inter Variable are self-hosted in `fonts/` with `font-display: swap`, Georgia/system fallbacks and SIL OFL licenses in each family directory. No font service is contacted. Use `?fast=1` to skip the simulated planning delay.
 
 Files: `index.html`, `css/styles.css`, `js/catalog.js`, `js/oahu.js`, `js/daybuilder.js`, `js/engine.js`, `js/ai.js`, `js/credits.js`, `js/localinfo.js`, `js/affiliates.js`, `js/app.js`, `credits.json` and `images/*.jpg`.
 
@@ -250,13 +250,15 @@ suffix, or a trailing `H[:MM] AM/PM [entry] slot`. A trailing dashed `sunrise` o
 
 ### Simple days and Trip prep (budget-fix)
 
-Finished trips open **Trip prep** once per saved trip ID. Its three sections are
+Questions and the Oahu sample open the **plan first**, marked Draft until confirmed.
+**Confirm plan** saves a finished snapshot and opens **Trip prep**. Its three sections are
 **Budget**, **Before you go**, and **What to bring**; none is rendered below the
 itinerary. Continue focuses the plan heading. The compact header button reopens
 prep and reports unchecked prep items. `gonow.prep.v1` stores each trip's `seen`
 flag and checkbox map. Packing ticks also synchronize with the existing packing
-store and activity checklists. Opening prep marks it seen; subsequent visits to
-that saved trip open its plan directly. Drafts retain their existing editing flow.
+store and activity checklists. Opening prep marks it seen. Confirmed trips can reopen prep from the plan header
+or dashboard card. Loads always open Home or Your trips, ignoring stale screen/hash
+routes; malformed trip lists are treated as empty and legacy migration is guarded. Drafts retain their existing editing flow.
 
 Each item's home follows its scope:
 
@@ -303,8 +305,7 @@ reload of `#plan` / `#prep`. First visits keep the original home screen. `+ New
 trip` opens that flow with a Your trips back button and the Oahu sample.
 
 Dashboard status uses destination-local calendar dates from `Intl` (catalog
-IANA time zone; UTC for unknown destinations). No finished snapshot means
-Draft. A finished trip whose start is in the future is Upcoming · N days;
+IANA time zone; UTC for unknown destinations). Trips are Draft until `confirmed === true` or a legacy finished snapshot exists. A finished trip whose start is in the future is Upcoming · N days;
 start through end inclusive is In progress; otherwise it is Ready, including
 undated and ended plans. A valid `?today=YYYY-MM-DD` overrides that calendar
 date and treats next-activity selection as midnight; invalid dates are ignored.
@@ -318,8 +319,7 @@ The existing `wayfare:` key migration also runs before reading trips. Records
 retain answers, finished snapshot, plan, time zone, prep count and per-trip
 builder/edit/packing archives. The active trip's existing storage keys remain
 compatible; switching restores the selected trip's archive. Prep seen/tick
-state stays in `gonow.prep.v1`, keyed by saved trip ID. Opening a plan respects
-its first-visit Trip prep screen. Shared links retain their separate view flow.
+state stays in `gonow.prep.v1`, keyed by saved trip ID. Opening a plan always shows the itinerary; Trip prep opens only through an explicit action. Shared links retain their separate view flow.
 
 Dashboard hooks: `dashboard`, `new-trip`, `trip-card`, `trip-status`,
 `today-block`, `back-dashboard`. Card titles open live plans or drafts. The

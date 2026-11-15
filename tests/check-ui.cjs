@@ -39,7 +39,7 @@ const ctx = {
 ctx.window=ctx;ctx.scrollTo=()=>{};ctx.addEventListener=()=>{};ctx.history={state:null,pushState(s){this.state=s},replaceState(s){this.state=s}};
 vm.createContext(ctx);
 const jsRoot = fs.existsSync(`${__dirname}/../site/js/app.js`) ? `${__dirname}/../site/js/` : `${__dirname}/../js/`;
-for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','local','checkin','jetlag','dashboard','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8'),ctx);
+for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','local','checkin','jetlag','dashboard','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8').replace('state:state, go:go,','libraryEntries:libraryEntries, state:state, go:go,'),ctx);
 const api=ctx.__gonow;
 const click=id=>node(`[data-testid="${id}"]`).click();
 (async()=>{
@@ -47,6 +47,31 @@ const click=id=>node(`[data-testid="${id}"]`).click();
   assert(!node('view').innerHTML.includes('sample-rings'));
 assert(!node('view').innerHTML.includes('wellness-rings'));
 assert(!node('view').innerHTML.includes('rank-badge'));
+  const originalAnswers=JSON.parse(JSON.stringify(api.state.answers));
+  for(const [who,adults,kids,count] of [['solo',1,0,1],['couple',2,0,2],['friends',3,0,3],['family',2,1,3]]){
+    Object.assign(api.state.answers,{mode:'trip',who,adults,kids,ages:[]});
+    api.go('ages');
+    let html=node('view').innerHTML;
+    assert.equal((html.match(/data-age="/g)||[]).length,count);
+    for(let i=0;i<count;i++)assert(html.includes(who==='solo'?'Your age':'Traveler '+(i+1)+' age'));
+    for(const forbidden of ['ages-25','ages-21','ages-under','Everyone is 25+','Someone is 21–24','Someone is under 21'])assert(!html.includes(forbidden));
+    const disabled=()=>/data-testid="q-continue"[^>]* disabled/.test(node('view').innerHTML);
+    assert(disabled());
+    for(const value of [0,30,110]){api.state.answers.ages=Array(count).fill(value);api.go('ages');assert(!disabled());}
+    for(const value of ['',-1,111,NaN]){api.state.answers.ages[0]=value;api.go('ages');assert(disabled());}
+    // Exercise the actual age-input handler, including blank preservation.
+    const input={dataset:{age:'0'},value:'22'};
+    node('view').querySelectorAll=selector=>selector==='[data-age]'?[input]:[];
+    api.state.answers.ages=Array(count).fill(30);api.go('ages');input.oninput();
+    assert.equal(api.state.answers.ages[0],22);assert.equal(node('[data-testid="q-continue"]').disabled,false);
+    input.value='';input.oninput();assert.equal(api.state.answers.ages[0],'');assert.equal(node('[data-testid="q-continue"]').disabled,true);
+    node('view').querySelectorAll=()=>[];
+    click('q-back');assert.equal(api.state.screen,'who');api.go('ages');click('q-skip');
+    assert.equal(api.state.screen,'style');assert.equal(api.state.answers.ages.length,count);
+    assert.equal(api.state.answers.ages[count-1],kids?10:25);
+    api.state.answers.ages=[30,31,32,33];api.go('ages');assert.equal(api.state.answers.ages.length,count);
+  }
+  Object.assign(api.state.answers,originalAnswers);
   node('photo-credits').onclick();
   assert.equal((node('view').innerHTML.match(/class="card credit-card"/g)||[]).length, ctx.PHOTO_CREDITS.length);
   assert.ok(ctx.PHOTO_CREDITS.length >= 22);
@@ -84,10 +109,16 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   api.state.answers.mode='trip';
   api.go('start');click('demo-oahu');
   await new Promise(r=>setTimeout(r,20));
+  assert.equal(api.state.screen,'plan');
+  assert(node('view .plan-title').innerHTML.includes('data-testid="confirm-plan"'));
+  assert(!JSON.parse(memory.get('gonow:trips'))[0].snapshot);
+  click('confirm-plan');
   assert.equal(api.state.screen,'prep');
   assert.equal((node('view').innerHTML.match(/data-testid="prep-section"/g)||[]).length,3);
   assert(!node('toast').innerHTML.includes('Your plan is ready.'));
-  assert(node('view').innerHTML.includes('Before you go · 14 notes'));
+  assert(node('view').innerHTML.includes('Before you go · 8 to do'));
+  assert(!node('view').innerHTML.includes('data-testid="trip-prep-button"'));
+  assert(node('view').innerHTML.includes('Book 4 Uber Reserve rides'));
   const assertPacking = n => {
     const html=node('view').innerHTML;
     assert(html.includes('Packed '+n+' of 51'));
@@ -102,7 +133,7 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   api.go('prep');
   packCheckbox.onchange();
   assert.equal(node('packing-status').textContent,'Packed 1 of 51');
-  assert.equal(node('[data-testid="trip-prep-button"]').textContent,'Trip prep · 14 left');
+  assert.equal(node('[data-testid="trip-prep-button"]').textContent,'Trip prep · 8 left');
   api.go('prep');assertPacking(1);
   click('reset-packing');
   node('sheet [data-testid="modal-0"]').click();
@@ -110,7 +141,7 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert.equal(Object.values(api.state.packed).filter(Boolean).length,0);
   node('view').querySelectorAll=()=>[];
   assert(!node('view').innerHTML.includes('<small>From: '));
-  assert(node('view').innerHTML.includes('class="prep-day-notes"'));
+  assert(!node('view').innerHTML.includes('class="prep-day-notes"'));
   click('prep-continue');
   assert(!node('toast').innerHTML.includes('Your plan is ready.'));
   assert.equal(api.state.screen,'plan');
@@ -136,10 +167,18 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert(node('view').innerHTML.includes('data-testid="today-block"'));
   assert(node('view').innerHTML.includes('Next · 5:35 AM'));
   ctx.DayBuilder=undefined;api.go('plan');ctx.location.search='?fast=1';
+  const savedAges=api.state.answers.ages;
+  const savedBuilder=ctx.DayBuilder;
+  ctx.DayBuilder={trayItems:()=>[{id:'chest-bar',title:'Drinks',tags:['alcohol']}],draftItems:()=>[]};
+  for(const [ages,blocked] of [[[30,20],true],[[30,21],false],[['',30],false],[[0,30],true]]){
+    api.state.answers.ages=ages;
+    assert.equal(!!api.libraryEntries().find(e=>e.id==='chest-bar').blocked,blocked);
+  }
+  api.state.answers.ages=savedAges;ctx.DayBuilder=savedBuilder;
   const prepTrip=api.state.tripId;
   assert(JSON.parse(memory.get('gonow.prep.v1'))[prepTrip].seen);
   api.go('plan');assert.equal(api.state.screen,'plan');
-  api.state.tripId='independent-prep-trip';api.go('plan');assert.equal(api.state.screen,'prep');
+  api.state.tripId='independent-prep-trip';api.go('plan');assert.equal(api.state.screen,'plan');
   api.state.tripId=prepTrip;api.go('plan');assert.equal(api.state.screen,'plan');
   assert(!node('view').innerHTML.includes('curated-notice'));
   assert(node('view').innerHTML.includes('Day 1 · Wed 25'));
@@ -176,6 +215,14 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   memory.set('gonow:answers',JSON.stringify({styles:['relaxing','adventure']}));
   vm.runInContext(fs.readFileSync(`${jsRoot}app.js`,'utf8'),ctx);
   assert.equal(JSON.stringify(ctx.__gonow.state.answers.styles),'["nature"]');
+  for(const ages of [['30','31'],null,'25+']){
+    memory.set('gonow:answers',JSON.stringify({who:'couple',ages,ageBand:'25+',ageRange:'adult',agesChoice:'25'}));
+    vm.runInContext(fs.readFileSync(`${jsRoot}app.js`,'utf8'),ctx);
+    const loaded=ctx.__gonow.state.answers;
+    assert.equal(JSON.stringify(loaded.ages),Array.isArray(ages)?'[30,31]':'[]');
+    for(const key of ['ageBand','ageRange','agesChoice'])assert(!(key in loaded));
+    ctx.__gonow.go('ages');assert.equal(loaded.ages.length,2);
+  }
   // An existing level takes precedence over an older legacy pace.
   memory.set('gonow:answers',JSON.stringify({pace:'Full-on',level:'unsure'}));
   vm.runInContext(fs.readFileSync(`${jsRoot}app.js`,'utf8'),ctx);

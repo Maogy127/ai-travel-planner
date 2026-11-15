@@ -29,6 +29,7 @@ async def checks(browser):
             from test_full import continue_prep
             await continue_prep(pg)
             await wait_plan(pg)
+            await pg.get_by_test_id('track-toggle').click()
             await expect(pg.get_by_test_id('morning-checkin')).to_have_count(0)
             await pg.evaluate("__gonow.go('food')")
             await expect(pg.get_by_test_id('morning-checkin')).to_have_count(0)

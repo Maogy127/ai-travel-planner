@@ -67,13 +67,40 @@ ctx.state={plan:ctx.OAHU_SAMPLE};
 ctx.packingGroups=()=>ctx.OAHU_SAMPLE.packing;
 ctx.prepRecord=()=>({checked:{}});
 const prep=ctx.prepTasks(),notes=prep.filter(t=>t.group==='before'),packs=prep.filter(t=>t.group==='pack');
-assert(notes.length<=15);assert(notes.some(t=>t.date));
+assert.equal(notes.length,8);const rides=notes.find(t=>t.id==='book-uber-reserve');assert.equal(rides.legacyIds.length,4);assert.equal(rides.rides.length,4);assert.equal(rides.text,'Book 4 Uber Reserve rides');assert(notes.some(t=>t.date));
 assert.equal(new Set(notes.map(t=>ctx.normalizePrep(t.text))).size,notes.length);
-assert.equal(notes.filter(t=>/No flying for 24 h/.test(t.text)).length,1);
-assert(notes.some(t=>/Thanksgiving/.test(t.text)));
+assert(notes.every(t=>['book','id','insurance','visa'].includes(t.kind)));
+assert(notes.every(t=>t.text.length<=48&&t.text.split(/\s+/).length<=8));
+assert(!notes.some(t=>/Thanksgiving|No flying/.test(t.text)));
+ctx.prepRecord=()=>({checked:{'notice-old':true}});
+assert.equal(ctx.prepRemaining(),notes.length);
 assert.equal(ctx.prepRemaining(),notes.length);
 ctx.prepRecord=()=>({checked:Object.fromEntries(notes.map(t=>[t.id,true]))});
 assert.equal(ctx.prepRemaining(),0,'Unpacked items must not block All set');
 assert(!app.includes('<small>From: '));
 assert(packs.some(t=>t.text==='Reservation QR codes'));
 console.log(`PASS demo prep: ${notes.length} left, ${notes.length} notes, ${packs.length} packing items`);
+
+// Saved-list parsing and explicit confirmation must survive stale/corrupt storage.
+for(const name of ['readTrips','tripConfirmed']){
+ vm.runInContext(app.split('\n').find(line=>line.includes('function '+name+'(')),ctx);
+}
+ctx.TRIPS='gonow:trips';
+for(const raw of ['{bad','null','{}','[null,{},7,"trip"]']){
+ ctx.localStorage={getItem:()=>raw};assert.equal(ctx.readTrips().length,0);
+}
+ctx.localStorage={getItem:()=>'[{"id":"old","snapshot":{}},{"id":"draft"}]'};
+const saved=ctx.readTrips();assert.equal(saved.length,2);
+assert(ctx.tripConfirmed(saved[0]));assert(!ctx.tripConfirmed(saved[1]));
+assert(ctx.tripConfirmed({confirmed:true}));assert(!ctx.tripConfirmed({confirmed:'true'}));
+console.log('PASS malformed saved lists and confirmed/legacy trip detection');
+
+const recordBody=app.match(/    function prepRecord\([^]*?\n    function savePrep/)[0].replace(/\n    function savePrep$/, '');
+vm.runInContext(recordBody,ctx);
+ctx.prepTripKey=()=> 'legacy-rides';ctx.state.packed={};
+for(const done of [4,3,0]){
+ const checked=Object.fromEntries(rides.legacyIds.map((id,i)=>[id,i<done]));
+ ctx.read=()=>({'legacy-rides':{checked}});
+ assert.equal(ctx.prepRecord().checked[rides.id],done===4);
+}
+console.log('PASS merged ride legacy ticks require every ride');

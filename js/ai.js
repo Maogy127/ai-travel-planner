@@ -19,7 +19,7 @@
             budget: 6000,
             mustdos: 'Diamond Head, Kualoa Ranch, intro dive, parasailing, birthday dinner 11/26 7:30 PM, Black Friday shopping'
         };
-        var ages = (answers.ages || []).map(Number).sort(function (a, b) {
+        var ages = (Array.isArray(answers.ages)?answers.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number).sort(function (a, b) {
             return a - b;
         });
         return Object.keys(expected).every(function (key) {

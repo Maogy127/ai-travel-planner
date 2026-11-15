@@ -60,9 +60,7 @@ async def checks(browser):
                     await expect(pg.locator('[data-db-id=lamer]')).to_contain_text('La Mer')
                     await expect(pg.locator('[data-db-id=lamer]')).to_contain_text('Check the menu for Shellfish')
                     await open_trip_prep(pg)
-                    notes = pg.get_by_test_id('trip-prep').locator('.prep-day-notes').filter(has_text='Nov 26')
-                    await expect(notes.get_by_test_id('dinner-balance')).to_be_visible()
-                    assert not BANNED.search(' '.join(await pg.get_by_test_id('dinner-balance').all_text_contents()))
+                    await expect(pg.get_by_test_id('trip-prep').locator('.prep-day-notes')).to_have_count(0)
                     await continue_prep(pg)
                 assert await pg.locator('.db-activity > [data-testid=diet-tag]').filter(has_text='Check the menu').count() > 0 if day < 4 else True
                 for row in await pg.locator('[data-db-source]').all():

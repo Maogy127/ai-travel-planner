@@ -493,3 +493,168 @@ Expected fresh Oahu demo: **Trip prep · 14 left**, **Before you go · 14 notes*
 - App: remove the duplicate What to bring count paragraph and its tick updater; use `Packed N of M` beside the existing progress bar, retaining the completion note on that same line. No Before-you-go note text or high-elevation wrapping changed. Search of tests excluding `baseline-before-merge` found no other old packing-count expectations.
 
 Validation: all 21 Node suites pass; JavaScript syntax passes on 40 files (including the root service worker), Python AST syntax passes on 35 files without cache writes, and `git diff --check` passes. Chromium/screenshots remain supervisor-run. The known `snapshot weather is seasonal` failure is untouched. No Chromium, network, commit or push; existing untracked Python cache left untouched.
+
+### Preview polish 4
+
+- `tests/check-ui.cjs`: require exact-age inputs only (no range buttons/copy), labeled input counts for solo/couple/friends/family, Continue boundaries and real input handlers, Back/Skip, mismatched saved lengths, legacy numeric-string ages and removal of obsolete range keys. Exercise the actual library alcohol restriction with adults, under-21 travelers, age zero and blank ages; the internal library helper is exposed only inside the test VM.
+- `tests/check-engine.cjs`: cover solo 30/22, groups 30+20 and 40+38+10, blanks, invalid values and age zero against drinking, young-driver and kids rules.
+- `tests/daybuilder_logic.js`: blanks, invalid and missing ages do not create alcohol conflicts. `tests/test_daybuilder_logic.js`: supply exact under-21 ages for the existing alcohol restriction assertion and require no assumed restriction when ages are absent.
+- App: remove the range buttons and handlers; normalize saved/imported/shared ages and drop obsolete age band/range/choice keys. Repair input counts on the Ages step while preserving entered values. Apply valid exact ages consistently in engine, app library, DayBuilder and AI matching, preserving the Skip fallback. Hide native number spinners in question fields.
+
+Validation: all 21 Node suites pass; `node --check` passes on 39 JavaScript files; `python3 -m py_compile` passes on 35 Python files with cache redirected to `/tmp`; `git diff --check` passes. Repo search outside `tests/baseline-before-merge` found no obsolete range-button references other than the new negative assertions. No Chromium, network, commit or push. The known `snapshot weather is seasonal` assertion, Before-you-go note text and high-elevation wrapping are untouched. Existing untracked screenshots and Python cache are left untouched.
+
+#### Plan first, then confirm
+
+- Remove the first-plan prep redirect. Questions and the Oahu sample show the itinerary as Draft, with one Confirm plan action and hint. Confirm saves `confirmed=true` and the builder/edits/packed/time/weather snapshot, announces success and focuses the Trip prep heading. The draft editor’s Generate action also confirms; ordinary `rememberTrip()` saves never create a snapshot. Continue returns through normal plan navigation.
+- Confirmed plans expose the existing `trip-prep-button`; confirmed dashboard cards add `card-trip-prep` with `data-trip` and saved `prepLeft` (fallback calculation for old records). Saved-trip opening can target prep after generation finishes. Draft cards retain their existing editor actions. Status accepts explicit true or a legacy snapshot; otherwise it remains Draft. Unconfirmed prep navigation, including popstate, resolves to plan.
+- Load always selects Home/Your trips rather than restoring screen/hash/active-trip routes (shared trip links retain their existing flow). Legacy migration is guarded; malformed/non-array trip JSON is empty, and invalid list entries lacking an ID are ignored. Missing optional card fields keep their fallbacks. README flow text now documents these choices.
+- `tests/check-ui.cjs` and `tests/test_plan_render.cjs`: require plan before confirmation, no implicit snapshot, explicit confirmation/prep, saved confirmation, and independent unconfirmed plans staying on plan. Preserve all Ages checks. `tests/test_budget_fix.js`: exercise actual saved-list parsing against malformed data and explicit/legacy confirmation. `tests/test_dashboard.js`: add strict boolean confirmation, legacy snapshot and date-status cases.
+- `tests/test_plan_confirm.py` (new, supervisor port 8850): at 1280/390 cover sample/questions to plan, exclusive confirm/prep buttons, Draft dashboard, draft Generate, confirmation snapshot/seen/focus, header count, card prep navigation, unconfirmed popstate, empty/legacy/malformed storage and missing fields with #prep and no page errors. `tests/test_trip_prep.py` now explicitly confirms before first prep. `tests/test_full.py` shared helpers assert plan first then confirm before prep, covering dependent food tests too; dashboard, smoke and verify-ui explicitly confirm where required. Existing seasonal-weather assertions remain unchanged.
+
+Validation: all 21 Node suites pass; `node --check` passes on 39 JavaScript files; `python3 -m py_compile` passes on 36 Python files with cache redirected to `/tmp`; `git diff --check` passes. Chromium/Playwright remain supervisor-run. No network, commit or push. Existing Ages work, screenshots/cache, known seasonal snapshot-weather failure, high-elevation wrapping and Before-you-go note text are preserved.
+
+#### Planner-enforced rules; Before you go = actions only
+
+Preserves the uncommitted exact Ages inputs and Plan-first / Confirm plan flow. The owner's earlier note-text restriction is lifted for this change. No network, commit, push, Chromium or Playwright execution.
+
+- `js/oahu.js`: Thanksgiving closures for Pearl Harbor, Bishop Museum, Polynesian Cultural Center, Ala Moana Center/shopping and Rainbow Drive-In; curated opening hours for Diamond Head, Kualoa Jurassic Adventure, Aunty Pat's and Black Friday shopping. Reserve rides/shuttle are bookable actions; existing La Mer/Senia reservations are already booked.
+- `js/daybuilder.js`: shared `closedOn`, `blockedOn`, `nearestAllowed` and operating-rule helpers. Template generation and reflow exclude blocked stops, retaining them in the unscheduled tray. Add, transfer/move, drag/reorder, custom booking, time edits and conflict shifts validate before applying. Rejections preserve the original and offer an open-day action. Diving uses activity end to flight departure, with exactly 24 hours allowed. Unknown flight times conservatively use departure-day midnight. Generic trips use their own departure date. No parasail/elevation science was added: those existed only as prose, not modeled rules.
+- `js/engine.js`: applies the same operating rules before returning generated templates, including requested stops; blocked requests remain unscheduled.
+- `js/app.js`: Before you go has only `book`, `id`, `insurance`, `visa` actions, short labels and checkboxes. ID/insurance are omitted for local outings. Actions honor removed/booked items and persisted builder changes; legacy notice ticks cannot affect counts. Dashboard recomputes counts rather than trusting stale `prepLeft`. Informational notices, sources, day groups, tips and demo footer are removed from prep. Existing weather/FX/local information and partner searches remain available in collapsed plan disclosures, outside prep. Live local information initializes only when opened. The known seasonal snapshot-weather assertion and weather classification remain unchanged.
+- New testids: `blocked-message`, `blocked-reason`, `blocked-suggest`, `travel-info`, `booking-searches`. Action labels expose `data-action-kind`; existing `prep-item`/`data-prep-id` remain.
+- New `tests/test_planner_rules.cjs`: real helpers, engine, mounted add/move handlers, suggestion clicks, time edits, boundary timing, prep actions, legacy ticks and hidden empty prep. Updated prior note/count assertions in Node and Python suites, including affiliate/local-info checks relocated to the plan disclosures.
+- New supervisor-only `tests/test_planner_rules.py`, port **8851**, 1280 and 390px: reason/suggestion visibility, successful suggestion add, safe diving, action kinds/lengths/counts, empty section and overflow; PASS/FAIL output. Browser execution remains pending supervisor.
+
+#### Track together vs each person
+
+- Parties of 2+ get preselected `Track together` / `Track each person` radio options on Who’s coming. Solo has no choice; exact Ages remain one input per traveler. Header `track-toggle` changes modes in one tap, re-renders and saves answers plus the saved trip. New testids: `track-choice`, `opt-together`, `opt-each`, `track-toggle`.
+- Names, individual pace selectors/rings, group disclosure, person check-in tabs and traveler alternatives require both `track === 'each'` and 2+ travelers. Together uses a shared ring/check-in and shared swaps. Switching retains individual data for switching back.
+- Migration: explicit `together`/`each` wins. Missing/invalid track becomes `each` only for a nonblank personal name (excluding old `Traveler N` placeholders), a non-unsure pace different from the first traveler, or nonempty `gonow.checkin.v1` records for `traveler-1` or higher. Otherwise use `together`. Migration reads the small existing check-in map; no expensive schedule reconstruction. Saved-trip opening uses the same normalizer.
+- Existing browser per-person tests in `test_pace.py`, `test_checkin.py` and the `test_full.py` group helper now explicitly opt into Each person.
+
+#### No empty sections
+
+Audit findings and fixes:
+
+- Group disclosure repeated `Pace not set yet` below the day pace. Its button now says `Each person`; the day has exactly one pace status/control line.
+- Day guidance used regex relocation into the pace disclosure. Removed that relocation: Sleep timing / Suggestions keep their own content and disclosures. The shared `section()` guard omits blank generated guidance; controls count as content.
+- Final `pruneEmptySections()` checks h2–h4 and summary sibling bodies, removing empty headings or heading-only disclosures. Runs after plan/prep render and DayBuilder `afterRender`, covering day details, plan and Trip prep, including headings nested in divs.
+- Lazy Travel info initially had an empty body. It now has the short placeholder `Open for local details.` until its existing on-open mount fills it.
+- `Pace suggestions` becomes `Suggestions`, avoiding a second Pace-prefixed line. Detailed suggestions remain behind a tap. No additional empty guidance/status found in the offline all-days audit of Oahu sample, generated Oahu and Lisbon across solo / 2 together / 2 each / 3 each.
+- New `tests/test_track_mode.js`: actual render helpers, default/solo choices, all migration branches, persistence through the actual header handler, section helper and DOM guard, all-day mode/pace/empty-disclosure audit.
+- New supervisor-only `tests/test_track_mode.py`, port **8852**, 1280/390: sample and Lisbon, four party/mode fixtures, one-tap toggle, saved answers, per-person UI/check-in tabs, every rendered day expanded and scanned for empty headings/duplicate pace lines, plus plan/Trip prep scans. PASS/FAIL output; not executed here.
+
+Validation: all **23 Node suites pass**. JS/Python syntax and `git diff --check` pass. No browser, network, commit or push. Existing polish-4 work and the known seasonal snapshot-weather failure remain untouched. Browser layout/DOM confirmation is pending supervisor execution.
+
+COPY-AUDIT (each changed or retained flow label → final text):
+
+| String/context | Final text |
+|---|---|
+| Track option / hint | Track together / One shared plan |
+| Track option / hint | Track each person / Per-person check-ins |
+| Header tracking toggle | Tracking: Together / Tracking: Each person |
+| Individual group disclosure | Each person |
+| Day guidance disclosure | Suggestions |
+| Lazy travel info body | Open for local details. |
+| Ages heading | How old is everyone? / How old are you? |
+| Ages legend (screen readers) | Traveler ages |
+| Ages subtitle | We check activity age limits. |
+| Ages field | Your age / Traveler N age |
+| Ages validation | Native number input, 0–110; Continue disabled until valid |
+| Plan label / dashboard draft status | Draft |
+| Plan confirmation button | Confirm plan |
+| Confirmation hint | Confirm to start prep. |
+| Finished status | Ready |
+| Prep heading | Trip prep |
+| Header / dashboard prep button | Trip prep · N left / Trip prep · All set |
+| Prep sections | Budget / Before you go · N to do / What to bring |
+| Budget disclosure / continue button | Budget breakdown / Continue to my plan |
+| Closure reason | Closed Thu, Nov 26 |
+| Opening-hours reason | Outside opening hours |
+| Dive reason | No diving within 24h of your flight |
+| Suggestion button | Add to Fri, Nov 27 (date varies) |
+| Successful library add | Added · booking still needed |
+| Plan information / search disclosures | Travel info / Booking searches |
+| Diamond Head booking | Book Diamond Head |
+| Kualoa booking | Book Kualoa Jurassic Adventure |
+| Dive booking | Book Intro dive |
+| Parasail booking | Book Waikiki parasail |
+| Diamond Head transport | Book Uber Reserve to Diamond Head |
+| Kailua transport | Book Uber Reserve to Kailua Beach Park |
+| Makapuʻu transport | Book Uber Reserve: Makapuʻu → Waikiki |
+| Kahala shuttle | Book Kahala shuttle |
+| Airport transport | Book Uber Reserve to HNL |
+| Domestic / international ID | Bring photo ID / Bring passport |
+| Insurance / visa | Consider travel insurance / Check visa rules |
+| Generic bookings | Book + activity label; at most 8 words / 48 characters |
+
+Former Before-you-go inventory (all 14 former Oahu checkbox notices, plus informational blocks and generic notices):
+
+| OLD NOTE | Became |
+|---|---|
+| Thanksgiving closure / Kualoa / Diamond Head / Black Friday hours; dinner clocks | **Enforced rule**: closure/hour data; existing dinner anchors remain |
+| No flying for 24 h after diving (trip/item/day duplicates) | **Enforced rule**: hard 24-hour window |
+| Book Diamond Head’s 6 AM slot | **Action**: Book Diamond Head |
+| Book Kualoa direct / request shuttle pickup | **Action**: Book Kualoa Jurassic Adventure |
+| Book Thursday's 5:35 AM Uber Reserve | **Action**: Book Uber Reserve to Diamond Head |
+| Reconfirm birthday dinner | **Dropped**: existing reservation is already booked |
+| Reconfirm Senia / plan dinner Uber | **Dropped**: existing reservation and travel anchor |
+| Reserve Saturday's Kahala shuttle | **Action**: Book Kahala shuttle |
+| Dive: Book now / confirm check-in and sizes | **Action**: Book Intro dive |
+| No high elevation / same-day parasail | **Dropped**: prose only, no existing modeled rule |
+| Book Sunday airport Uber Reserve | **Action**: Book Uber Reserve to HNL |
+| Skip wet Pillbox trail / shoes grip | **Dropped**: condition prose, no modeled condition input |
+| Parasail conditions / refund policy | **Action**: Book Waikiki parasail |
+| Check in online | **Dropped**: outside the owner's four action kinds |
+| Per-day booking/meal balance/todo groups | **Action** bookings consolidated; informational groups **dropped** |
+| Local tips / sources / demo research footer | **Dropped** from Before you go |
+| Typical conditions / weather / local time, voltage, FX | **Dropped** from Before you go; weather/FX/local info retained under plan Travel info |
+| Booking searches | **Action**: collapsed Booking searches in plan |
+| Generic booking/lead-time notes | **Action**: one Book label per unbooked bookable item |
+| Generic age/height/weight, safety, car, opening-hour prose | **Dropped** from prep; existing age blocks and modeled opening rules remain enforced |
+| Generic tips / conditions / source lists / template banner | **Dropped** from Before you go |
+| New identity / insurance / international entry tasks | **Action**: ID or passport, insurance, visa |
+
+The Oahu sample now starts with **11 actions**: four activities, five reserved rides/shuttle, ID and insurance. Packing remains excluded. Browser checks own the 390px visual fit verification.
+
+Final validation: **22/22 Node suites pass**, **41 JS/CJS syntax checks pass**, **37 Python AST syntax checks pass**, and **git diff --check passes**. Includes a regression proving frozen prep counts ignore later draft builder changes. Browser/390px checks are prepared for the supervisor, not executed here. Existing screenshots/cache and the known seasonal snapshot-weather test remain untouched.
+
+#### Demo day audit
+
+- **Nov 25:** arrival/check-in photos match HNL/Kahala. Arrival stays unknown until a flight time is supplied. No titled-clock mismatch, conflict or blocked stop.
+- **Nov 26:** the fresh source and mounted app already produced Diamond Head **6:00–7:30 AM**, locked, with the **5:35–5:50 AM** ride before it. Made its preferred 6 AM start and 90-minute duration explicit alongside the lock. Verified `images/activity-diamond-head.jpg` exists and is credited; Kualoa uses its separate ranch photo. No miss/overlap warnings. The reported 8:15 start/Kualoa photo did not reproduce with default state; no existing test asserted that old time or those warnings.
+- **Nov 27:** Kewalo photo matches the dive location; Senia remains locked at 6 PM. No titled-clock mismatch, conflict or blocked stop.
+- **Nov 28 — fixed:** `Waikiki Beach sunset with Diamond Head` incorrectly inherited the crater park's 6 AM–6 PM hours and was removed as outside opening hours. Diamond Head's rule now requires the title to start with the park name, in both source-data enrichment and dynamic operating rules. Waikiki sunset remains scheduled with its credited Waikiki sunset image. Lanikai/Makapuʻu photos match their stops. No conflicts or blocked stops.
+- **Nov 29:** flight time stays unknown; HNL photo mapping is correct. No titled-clock mismatch, conflict or blocked stop.
+- New `tests/test_demo_days.js`: offline real-app DOM harness plus standalone DayBuilder reflow; all five days in Together and Each modes, zero conflicts/notes or blocked stops, every clock-bearing rendered title matches its scheduled start, all mapped photos match expected places and existing files/credits, Diamond Head's lock/start/duration and preceding ride, and retention of Day 4 sunset.
+- New supervisor-only `tests/test_demo_days.py`: port **8853**, **1280/390**, Together/Each, Day 2 exact 6:00–7:30 AM display, Diamond Head thumbnail and expanded images, no Kualoa photo or warning elements, no page errors/overflow; PASS/FAIL lines. Added but not run here.
+
+Preserved Ages, Plan-first/Confirm, planner rules, Before you go actions, tracking and empty-section work. No pick-activities or Check-out changes; no network, commit, push or browser execution. The known seasonal snapshot-weather failure is untouched. No new product copy.
+
+Validation: all **24 Node suites pass**; syntax passes for **42 JavaScript** and **39 Python** files (Python cache redirected to `/tmp/gonow-demo-audit-pycache`). `git diff --check` passes. Playwright remains pending supervisor execution.
+
+#### Supervisor run fixes + proofread
+
+- r20 planner rules: replace the contradictory empty Before you go text assertion with Continue to plan and a `Trip prep · All set` header check; Python compilation and `git diff --check` pass, with no Chromium run.
+- Read r19 supervisor logs. Updated full-suite assertions for prep’s removed demo footer and hard dive-flight block: unsafe/unknown/early departures retain dives unscheduled, while a late departure schedules the dive. The seasonal snapshot-weather assertion stays untouched.
+- Storage cases now navigate through about:blank for a real load. Prep heading layout checks allow the icon-free Before you go summary. Prep-page count checks use that summary; plan-header checks remain after Continue. Chromium tests are edited only, pending supervisor execution.
+- Ages gets a question heading, short subtitle, hidden legend and solo label. Tracking choices have their own visible legend and spacing. Confirm plan has a filled primary style; Draft has a muted status style. Header tracking names include Tracking and retain one-tap pressed-state behavior.
+- Curated notice and template button shortened. Plan metadata uses actual entered party/ages; explicit sample opening still supplies 18/19.
+- Removed the repeated prep-page header button. Four sample Uber Reserve bookings merge into one action with ride details behind a tap: eight sample actions total. Counts persist consistently; legacy ticks migrate only when every underlying ride was checked. Node coverage checks all/partial/no legacy ticks.
+- Diamond Head thumbnail and expanded photo use the credited Waikiki silhouette. The crater interior is no longer displayed. Day 4 also uses this image, on a different day; no same-day duplicate. Demo-day and provenance assertions updated.
+- Day 2 shuttle arrives 9:10 before the fixed 9:30 tour. The 15-minute stop is explicitly Grab-and-go breakfast, with quick-bite/earlier-breakfast guidance in expanded details. Preserved the Kualoa place lookup to avoid adding a spurious transfer. All five demo days retain zero warnings in both tracking modes.
+
+COPY-AUDIT additions:
+
+| Context | Final text |
+|---|---|
+| Tracking group legend | How should we track? |
+| Curated notice | Curated Oahu demo · not tailored to you |
+| Template button | Use my answers instead |
+| Merged booking | Book N Uber Reserve rides |
+| Ride disclosure | Ride details |
+| Dive booking | Book intro dive |
+| Quick breakfast | Grab-and-go breakfast |
+| Prep count | Before you go · N to do |
+
+Validation: all 24 Node suites pass; syntax checks pass for 42 JavaScript and 39 Python files; git diff --check passes. No browser tests, network, commit or push. All prior uncommitted polish work retained.

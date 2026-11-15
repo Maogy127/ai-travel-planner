@@ -63,6 +63,11 @@ function smoke(label){
 (async()=>{
  api.go('start');click('demo-oahu');
  await new Promise(r=>setTimeout(r,20));
+ assert.equal(api.state.screen,'plan');
+ assert.equal(JSON.parse(memory.get('gonow:trips'))[0].snapshot,null);
+ api.go('prep');assert.equal(api.state.screen,'plan');
+ click('confirm-plan');assert.equal(api.state.screen,'prep');
+ assert.equal(JSON.parse(memory.get('gonow:trips'))[0].confirmed,true);
  click('prep-continue');
  smoke('demo');
  assert.equal(api.state.plan.id,'oahu-demo-2026-11');

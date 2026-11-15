@@ -44,7 +44,10 @@ async def main():
         bring = details.get_by_test_id("bring-item").first
         pack_id = await bring.get_attribute("data-pack-id")
         await bring.check()
-        await page.get_by_test_id("trip-prep-button").click()
+        if await page.get_by_test_id('confirm-plan').count():
+          await page.get_by_test_id('confirm-plan').click()
+        else:
+          await page.get_by_test_id("trip-prep-button").click()
         await page.get_by_test_id("trip-prep").locator("details").evaluate_all("els=>els.forEach(e=>e.open=true)")
         await check("packing")
         pack = page.locator(f'input[data-pack-id="{pack_id}"]')

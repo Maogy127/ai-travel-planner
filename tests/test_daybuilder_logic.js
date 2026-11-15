@@ -15,7 +15,7 @@ const expectedTimes = [
 const expectedTitles = [
     'Uber Reserve to Diamond Head', 'Diamond Head — 6:00 AM entry slot',
     'Uber to Twin Fin, 2570 Kalākaua (Kualoa shuttle stop)', 'Kualoa Ranch shuttle from Twin Fin',
-    'Breakfast at Aunty Pat’s Café', 'Kualoa Ranch — Jurassic Adventure (not UTV)',
+    'Grab-and-go breakfast', 'Kualoa Ranch — Jurassic Adventure (not UTV)',
     'Kualoa shuttle back to Waikiki', 'Uber to the Kahala', 'Free time at the Kahala (pool / beach downtime)',
     'Get ready / change + makeup', 'Kahala Beach “Jennie” palms — sunset photos', 'Birthday dinner — La Mer at Halekulani'
 ];
@@ -45,12 +45,13 @@ assert.equal(B.reflow(afterDinner).items.find(i => i.id === 'lamer').start, 1170
 for (const date of ['2026-11-28', '2026-11-29']) {
     const day = B.buildSuggested(date);
     day.items.push(B.trayItems()[0]);
-    assert(B.reflow(day).conflicts.some(c => c.note === 'Keep 24 hrs between diving and flying'));
+    assert(B.reflow(day).unscheduled.some(c => c.blockedReason === 'No diving within 24h of your flight'));
 }
 for (const day of window.OAHU_SAMPLE.days) {
     const plan = B.buildSuggested(day.date);
     plan.items.push(B.trayItems().at(-1));
-    assert(B.reflow(plan).conflicts.some(c => c.note.startsWith('21+')));
+    assert(B.reflow(plan, {ages: [18, 19]}).conflicts.some(c => c.note.startsWith('21+')));
+    assert(!B.reflow(plan).conflicts.some(c => c.note.startsWith('21+')));
     assert(!B.reflow(plan, {ages: [25, 26]}).conflicts.some(c => c.note.startsWith('21+')));
 }
 const flight = B.reflow(B.buildSuggested('2026-11-29')).items[0];

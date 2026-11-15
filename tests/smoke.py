@@ -25,7 +25,10 @@ async def main():
   tick=first.get_by_test_id('bring-item').first
   pid=await tick.get_attribute('data-pack-id')
   await tick.check()
-  await page.get_by_test_id('trip-prep-button').click()
+  if await page.get_by_test_id('confirm-plan').count():
+    await page.get_by_test_id('confirm-plan').click()
+  else:
+    await page.get_by_test_id('trip-prep-button').click()
   await page.get_by_test_id('trip-prep').locator('details').evaluate_all('els=>els.forEach(e=>e.open=true)')
   assert await page.locator('input[data-pack-id="'+pid+'"]').is_checked()
   await page.reload()

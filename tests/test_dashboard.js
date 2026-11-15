@@ -12,4 +12,8 @@ assert.equal(D.status(trip,{now:new Date('2026-11-30T10:30Z')}).label,'Ready');
 assert.equal(D.status(trip,{today:'2026-11-26',now:new Date('2026-12-30T10:30Z')}).label,'In progress');
 for(const s of ['',null,'2026-02-30','2026-13-01','11/26/2026','2026-1-01'])assert.equal(D.parseToday(s),null);
 assert.equal(D.parseToday('2026-11-26'),'2026-11-26');
+for(const confirmed of [false,undefined,null,'true'])assert.equal(D.status({confirmed},{today:'2026-11-26'}).label,'Draft');
+assert.equal(D.status({confirmed:true},{today:'2026-11-26'}).label,'Ready');
+assert.equal(D.status({...trip,confirmed:true,snapshot:null},{today:'2026-11-14'}).label,'Upcoming · 11 days');
+assert.equal(D.status({...trip,confirmed:false},{today:'2026-11-30'}).label,'Ready');
 console.log('PASS dashboard status, destination date boundaries and today override');
