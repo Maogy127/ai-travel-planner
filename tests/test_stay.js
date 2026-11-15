@@ -1,0 +1,4 @@
+const assert=require('assert');global.window={};require('../js/catalog');require('../js/oahu');require('../js/daybuilder');const J=require('../js/jetlag');
+assert(window.CATALOG.every(d=>d.center));assert.equal(J.center(window.CATALOG.find(d=>d.id==='oahu')),'Waikiki');assert.equal(J.center(), 'city center');
+const items=[{id:'s',kind:'stay',title:'Settle in',place:'Waikiki',time:'8:00 AM',start:480,end:540},{id:'b',kind:'activity',title:'Booked activity',place:'Park',start:600,end:660,locked:true}];
+const copy=JSON.stringify(items);const result=window.DayBuilder.replanStay(items,'Waikiki','My booked place');assert.equal(JSON.stringify(items),copy);assert.equal(result[0].place,'My booked place');assert.deepStrictEqual([result[1].start,result[1].end,result[1].locked],[600,660,true]);assert(result[1].travel);console.log('PASS all centers, fallback and hotel reflow immutability/locks/connectors');

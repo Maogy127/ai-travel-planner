@@ -24,12 +24,11 @@ assert.equal(C.suggest(items,{energy:'high',sleep:'poor'}).suggestions[0].type,'
 assert.deepEqual(C.suggest(items,{energy:'ok',soreness:'none',sleep:'ok'}).suggestions,[]);
 assert.deepEqual(C.suggest(items,{skipped:true,energy:'low'}).suggestions,[]);
 const goal=R.selectLevel('gentle','athlete');assert.equal(C.score(items,goal,[],{}, {soreness:'some'}).goals.move,54);assert.equal(C.score(items,goal,[],{},{}).goals.move,90);
-const html=R.render(C.score([],goal,[],{},{}));assert(html.includes('Rest is part of the plan'));assert(!/\b(missed|failed|behind|fell short|only|not enough)\b/i.test(html.replace(/<[^>]*>/g,'')));
+const html=R.render(C.score([],goal,[],{},{}));assert(html.includes('No recovery block today. Rest is part of the plan —'));assert(!/\b(missed|failed|behind|fell short|only|not enough)\b/i.test(html.replace(/<[^>]*>/g,'')));
 const memory=new Map();global.localStorage={getItem:k=>memory.get(k),setItem:(k,v)=>memory.set(k,v)};
 C.put('gonow.checkin.v1','2026-11-26','traveler-0',{done:true,soreness:'some',dismissed:['h']});
 C.put('gonow.checkin.v1','2026-11-26','traveler-1',{skipped:true});
-C.put('gonow.moments.v1','2026-11-26','traveler-0',{text:'Sunset'});
-assert.equal(C.get('gonow.checkin.v1','2026-11-26','traveler-0').soreness,'some');assert(C.get('gonow.checkin.v1','2026-11-26','traveler-1').skipped);assert.deepEqual(C.get('gonow.checkin.v1','2026-11-27','traveler-0'),{});assert.equal(C.get('gonow.moments.v1','2026-11-26','traveler-0').text,'Sunset');
+assert.equal(C.get('gonow.checkin.v1','2026-11-26','traveler-0').soreness,'some');assert(C.get('gonow.checkin.v1','2026-11-26','traveler-1').skipped);assert.deepEqual(C.get('gonow.checkin.v1','2026-11-27','traveler-0'),{});
 console.log('PASS check-in parser, immutable suggestions, locks, goal precedence, persistence and encouraging copy');
 
 // Personal alternatives change one score without mutating shared activities.
@@ -43,3 +42,15 @@ Object.assign(hike,{title:'Beach walk',wellness:{type:'walk'},checkinSwap:true,m
 const restored=B.importDays(B.exportDays({'2026-11-28':day},''));
 assert.equal(restored.days['2026-11-28'].items.find(i=>i.id===hike.id).title,'Beach walk');
 console.log('PASS personal score isolation and swapped activity snapshot round trip');
+
+// The destination date, not the browser's date, controls today's optional UI.
+const midnight=new Date('2026-11-27T05:00:00Z');
+assert.equal(C.today('Pacific/Honolulu',null,midnight),'2026-11-26');
+assert.equal(C.today('Asia/Tokyo',null,midnight),'2026-11-27');
+assert.equal(C.today('Pacific/Honolulu','2026-11-28',midnight),'2026-11-28');
+for(const bad of ['2026-02-29','2026-11-31','2026-1-01','garbage',null]){
+ assert.equal(C.validDate(bad),null);
+ assert.equal(C.today('Pacific/Honolulu',bad,midnight),'2026-11-26');
+}
+assert.equal(C.validDate('2028-02-29'),'2028-02-29');
+console.log('PASS destination-local date, validated override and leap dates');

@@ -1,6 +1,12 @@
 /* Optional day adaptation: movement goal ×0.6, recovery +15 minutes, sleep unchanged. */
 (function(root){
 'use strict';
+function validDate(value){return /^\d{4}-\d{2}-\d{2}$/.test(value||'')&&!isNaN(Date.parse(value))&&new Date(value).toISOString().slice(0,10)===value?value:null;}
+function today(zone,override,now){
+ const forced=validDate(override);if(forced)return forced;
+ const parts=Object.fromEntries(new Intl.DateTimeFormat('en-US',{timeZone:zone,year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(now||new Date()).map(p=>[p.type,p.value]));
+ return parts.year+'-'+parts.month+'-'+parts.day;
+}
 function parse(text){
  const t=String(text||'').toLowerCase(), r={};
  if(/tired|exhausted|low energy|累|没精神/.test(t))r.energy='low';
@@ -28,6 +34,6 @@ function suggest(items,c,options){
 function read(key){try{return JSON.parse(localStorage.getItem(key)||'{}');}catch(e){return {};}}
 function get(key,date,id){return (read(key)[date]||{})[id]||{};}
 function put(key,date,id,value){const all=read(key);all[date]=all[date]||{};all[date][id]=value;try{localStorage.setItem(key,JSON.stringify(all));}catch(e){} }
-function score(items,level,next,prefs,c){const result=root.GoNowRings.scoreDay(items,level,next,prefs), adjusted=suggest(items,c,{goals:result.goals});result.goals=adjusted.goals;['move','rec','sleep'].forEach(k=>result[k]=Math.min(1,result.values[k]/result.goals[k]));return result;}
-const api={parse,gentle,suggest,get,put,score};root.GoNowCheckin=api;if(typeof module!=='undefined')module.exports=api;
+function score(items,level,next,prefs,c){const result=root.GoNowRings.scoreDay(items,level,next,prefs), adjusted=suggest(items,c,{goals:result.goals});result.goals=adjusted.goals;result.eased=gentle(c);['move','rec','sleep'].forEach(k=>result[k]=Math.min(1,result.values[k]/result.goals[k]));return result;}
+const api={today,validDate,parse,gentle,suggest,get,put,score};root.GoNowCheckin=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -1,7 +1,9 @@
-from test_full import card_action
 """Day-local unscheduled and time entry regressions, in isolated contexts.
 All 18:00 values below are test-only.
 """
+from test_full import dashboard_action
+from test_full import open_add_menu
+from test_full import card_action
 import asyncio
 from test_full import new, SITE, db_pointer
 from playwright.async_api import async_playwright, expect
@@ -11,6 +13,8 @@ async def checks(browser, base, width):
     ctx, pg = await new(browser, base, width, 844, has_touch=width == 390)
     try:
         await pg.get_by_test_id('demo-oahu').click()
+        from test_full import continue_prep
+        await continue_prep(pg)
         await expect(pg.get_by_test_id('db-root')).to_be_visible()
         await pg.evaluate("window.__gonow.go('draft')")
         await expect(pg.get_by_test_id('draft-screen')).to_be_visible()
@@ -60,6 +64,7 @@ async def checks(browser, base, width):
         dialog = pg.get_by_test_id('schedule-dialog')
         await dialog.locator('[name=start]').fill('19:00')
         await dialog.get_by_role('button', name='Schedule', exact=True).click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(tray.locator('[data-db-id]')).to_have_count(0)
         row = day.locator('[data-db-id="'+identity+'"]')
         await expect(row.get_by_test_id('db-time')).to_contain_text('7:00 PM')
@@ -80,24 +85,29 @@ async def checks(browser, base, width):
         await form.locator('[name=start]').fill('16:00')
         await form.locator('[name=end]').fill('17:00')
         await form.get_by_role('button', name='Save activity time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(row.get_by_test_id('db-time')).to_have_text('4:00 PM–5:00 PM')
         await row.get_by_test_id('db-time').click()
         await form.locator('[name=start]').fill('15:00')
         await form.get_by_role('button', name='Save activity time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(row.get_by_test_id('db-time')).to_have_text('3:00 PM–4:00 PM')
         assert await pg.evaluate("JSON.parse(localStorage.getItem('"+KEY+"')).days['2026-11-26'].items.find(i=>i.id==='"+identity+"').estimate")
         await row.get_by_test_id('db-time').click()
         await form.locator('[name=start]').fill('16:00')
         await form.locator('[name=end]').fill('15:00')
         await form.get_by_role('button', name='Save activity time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(form.get_by_test_id('activity-time-error')).not_to_be_empty()
         await form.locator('[name=duration]').fill('30')
         await form.locator('[name=end]').fill('17:00')
         await form.get_by_role('button', name='Save activity time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(row.get_by_test_id('db-time')).to_have_text('4:00 PM–5:00 PM')
         await row.get_by_test_id('db-time').click()
         await form.locator('[name=start]').fill('15:00')
         await form.get_by_role('button', name='Save activity time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         # Locked Diamond Head requires confirmation; photos edits directly.
         diamond = day.locator('[data-db-id="2026-11-26-1"]')
         await diamond.get_by_test_id('db-time').click()
@@ -120,6 +130,7 @@ async def checks(browser, base, width):
         dialog = pg.get_by_test_id('add-again-dialog')
         await expect(dialog.get_by_role('heading', name='Add it again')).to_be_visible()
         await pg.get_by_test_id('add-again-dialog').get_by_role('button', name='Add a copy', exact=True).click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         copy_id = await tray.locator('[data-db-id]').first.get_attribute('data-db-id')
         assert copy_id != identity
         await expect(row.get_by_test_id('db-time')).to_have_text('3:00 PM–4:00 PM')
@@ -129,6 +140,7 @@ async def checks(browser, base, width):
         await expect(dialog).to_have_attribute('aria-labelledby', 'db-transfer-title')
         await dialog.locator('[name=start]').fill('18:00')
         await dialog.get_by_role('button', name='Add a copy', exact=True).click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         assert await day.locator('[data-db-id="'+identity+'"]').count() == 1
         assert await day.locator('[data-db-id^=instance-]').count() == 2
         await expect(row.get_by_test_id('db-time')).to_have_text('3:00 PM–4:00 PM')
@@ -150,6 +162,7 @@ async def checks(browser, base, width):
         await expect(pg.get_by_test_id('schedule-dialog')).to_be_visible()
         await pg.get_by_test_id('schedule-dialog').locator('[name=start]').fill('14:00')
         await pg.get_by_test_id('schedule-dialog').get_by_role('button', name='Schedule', exact=True).click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(tray.locator('[data-db-id]')).to_have_count(0)
         # Moving preserves the id, including a subsequent move with time.
         await (await card_action(pg, row, 'db-move-day')).click()
@@ -157,7 +170,9 @@ async def checks(browser, base, width):
         await expect(dialog.get_by_role('heading', name='Move to another day')).to_be_visible()
         await expect(dialog).to_have_attribute('aria-labelledby', 'db-transfer-title')
         await dialog.locator('[name=date]').select_option('2026-11-27')
+        await dialog.locator('[name=start]').fill('')
         await dialog.get_by_role('button', name='Move', exact=True).click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(tray.locator('[data-db-id="'+identity+'"]').get_by_test_id('db-time')).to_have_count(0)
         raw = await pg.evaluate("JSON.parse(localStorage.getItem('"+KEY+"')).days")
         assert not any(i['id'] == identity for i in raw['2026-11-26']['items'])
@@ -166,7 +181,7 @@ async def checks(browser, base, width):
         imported = await pg.evaluate('data=>DayBuilder.importDays(data)', exported)
         assert imported['days']['2026-11-27']['unscheduled'][0]['id'] == identity
         await pg.reload()
-        await pg.get_by_test_id('edit-draft').first.click()
+        await dashboard_action(pg, 'edit-draft')
         await expect(pg.get_by_test_id('draft-screen')).to_be_visible()
         await expect(pg.get_by_test_id('db-root')).to_be_visible()
         if width == 390:
@@ -176,10 +191,11 @@ async def checks(browser, base, width):
             await expect(pg.get_by_test_id('tray-toggle')).to_have_attribute('aria-expanded', 'false')
             await expect(pg.get_by_test_id('tray-toggle')).to_be_focused()
         await pg.get_by_test_id('db-day-2026-11-27').click()
-        if width == 390: await pg.get_by_test_id('tray-toggle').click()
+        await expect(pg.get_by_test_id('needs-time')).to_be_visible()
         await tray.locator('[data-db-id="'+identity+'"]').get_by_test_id('schedule-item').click()
         await pg.get_by_test_id('schedule-dialog').locator('[name=start]').fill('12:00')
         await pg.get_by_test_id('schedule-dialog').get_by_role('button', name='Schedule', exact=True).click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         row = day.locator('[data-db-id="'+identity+'"]')
         await (await card_action(pg, row, 'db-move-day')).click()
         dialog = pg.get_by_test_id('move-day-dialog')
@@ -188,6 +204,7 @@ async def checks(browser, base, width):
         await dialog.locator('[name=date]').select_option('2026-11-26')
         await dialog.locator('[name=start]').fill('18:00')
         await dialog.get_by_role('button', name='Move', exact=True).click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(row.get_by_test_id('db-time')).to_contain_text('6:00 PM')
         # Reservations require explicit unlock; declining does nothing.
         await (await card_action(pg, lamer, 'db-move-day')).click()
@@ -203,12 +220,15 @@ async def checks(browser, base, width):
         form = lamer.get_by_test_id('activity-time-form')
         await form.locator('[name=start]').fill('18:00')
         await form.get_by_role('button', name='Save activity time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(lamer.get_by_test_id('db-time')).to_have_text('6:00 PM–8:00 PM')
+        await open_add_menu(pg)
         await pg.get_by_test_id('db-reset').click()
         await expect(lamer.get_by_test_id('db-time')).to_have_text('7:30 PM–9:30 PM')
         await expect(tray.locator('[data-db-id]')).to_have_count(0)
         await pg.evaluate("DayBuilder.addToDay('2026-11-26',{title:'Reset sentinel'})")
         assert await tray.locator('[data-db-id]').count() == 1
+        await open_add_menu(pg)
         await pg.get_by_test_id('db-reset').click()
         await expect(tray.locator('[data-db-id]')).to_have_count(0)
         assert await pg.evaluate("!(DayBuilder.exportState()?.d?.['2026-11-26']?.u?.length)")
@@ -240,16 +260,18 @@ async def checks(browser, base, width):
         before = await pg.evaluate('window.__gonow.buildICS()')
         assert 'Magic Island' not in before
         await pg.get_by_test_id('logo').click()
-        await pg.get_by_test_id('edit-draft').first.click()
+        await dashboard_action(pg, 'edit-draft')
         await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-move-day')).click()
         dialog = pg.get_by_test_id('move-day-dialog')
         await expect(dialog.get_by_role('heading', name='Move to another day')).to_be_visible()
         await expect(dialog).to_have_attribute('aria-labelledby', 'db-transfer-title')
         await dialog.locator('[name=date]').select_option('2026-11-26')
+        await dialog.locator('[name=start]').fill('')
         await dialog.get_by_role('button', name='Move', exact=True).click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         assert await tray.locator('[data-db-id=photos]').count() == 1
         await pg.get_by_test_id('logo').click()
-        await pg.get_by_test_id('view-finished').first.click()
+        await dashboard_action(pg, 'view-finished')
         await expect(pg.get_by_test_id('finished-banner')).to_be_visible()
         await expect(section.get_by_role('heading', name='Unscheduled', exact=True)).to_be_visible()
         await expect(section.locator('li')).to_have_text([unscheduled_title])

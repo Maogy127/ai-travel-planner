@@ -1,10 +1,47 @@
 /* Oahu Day Builder: user intent is saved; times, travel and prep are derived. */
 (function () {
 'use strict';
-const KEY = 'gonow:daybuilder:oahu-demo-2026-11';
+let KEY = 'gonow:daybuilder:oahu-demo-2026-11';
+let planSource=null;
+// Templates need not carry the curated sample's weather or optional fields.
+const sourcePlan=()=>{
+    const plan=planSource||window.OAHU_SAMPLE||{};
+    return {...plan, days:Array.isArray(plan.days)?plan.days:[], weather:{text:'',...plan.weather}};
+};
 const HOTEL = 'Kahala';
+let stayOverride='';
 const WAIKIKI = 'Waikiki';
 const clone = value => JSON.parse(JSON.stringify(value));
+// Remove only trailing clock/slot labels, or a trailing sunrise/sunset label
+// when the old clock is in that period. Preserve descriptive words elsewhere.
+function cleanTimeTitle(title, oldStart) {
+    return String(title).replace(/\s*[—–]\s*\d{1,2}(?::\d{2})?\s*[AP]M\b.*$/i, '')
+        .replace(/\s*(?:[—–]\s*)?\d{1,2}(?::\d{2})?\s*[AP]M\s+(?:entry\s+)?slot\b.*$/i, '')
+        .replace(/\s*[—–]\s*(sunrise|sunset)(?:\s+photos)?$/i, (all, word) =>
+            oldStart != null && (word.toLowerCase() === 'sunrise' ? oldStart < 600 : oldStart >= 960) ? '' : all).trim();
+}
+function overlaps(items, start, duration, id) {
+    return items.filter(i => i.id !== id && Number.isFinite(i.start) && i.start < start + duration && i.end > start);
+}
+function canShiftUnlocked(items,id,start){
+    const item=items.find(i=>i.id===id);
+    return !!item&&!item.locked&&Number.isFinite(start)&&start>=0&&start+item.duration<=1440&&!overlaps(items,start,item.duration,id).length;
+}
+function shiftConflicts(items, start, duration, id) {
+    const result = clone(items).filter(i => i.id !== id).sort((a,b) => a.start-b.start);
+    let end = start + duration;
+    for (const item of result) {
+        if (item.end <= start) continue;
+        if (item.start < end) {
+            if (item.locked) return {error:'Cannot shift past locked item: ' + item.title};
+            const length = item.end-item.start;
+            item.start = item.preferred = end; item.end = end + length; item.manualTime = true; item.shifted = true;
+            if (item.end > 1440) return {error:'There is not enough time left in this day.'};
+            end = item.end;
+        } else break;
+    }
+    return {items:result};
+}
 const clean = value => String(value).replace(/\p{Extended_Pictographic}/gu, '').trim();
 const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -80,18 +117,23 @@ function parseDuration(text) {
 function duration(item) {
     return parseDuration(item.desc) ?? 60;
 }
-function convert(item) {
+function convert(item = {}) {
     return {
-        id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title), place: place(item.title), preferred: parse(item.time),
+        id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: place(item.title || 'Activity'), preferred: parse(item.time),
         duration: duration(item), walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
     };
 }
 function buildSuggested(date) {
-    const day = window.OAHU_SAMPLE.days.find(day => day.date === date);
+    const day = sourcePlan().days.find(day => day.date === date);
     if (!day) return {date, items: [], unscheduled: []};
-    let items = day.items.map(convert);
+    const sourceItems=(day.items || []).filter(Boolean);
+    let items = sourceItems.map((item,index)=>convert({...item,id:item.id||date+'-'+index}));
+    if (planSource && planSource.id !== 'oahu-demo-2026-11') {
+        items.forEach((item,index)=>{item.locked=!!sourceItems[index].locked;if(item.preferred===null)item.textTime=sourceItems[index].time;});
+        return {date, items, unscheduled:[]};
+    }
     items.forEach((item, index) => {
         if (item.kind === 'travel' && items[index + 1]) {
             item.to = items[index + 1].place;
@@ -147,8 +189,10 @@ function buildSuggested(date) {
         items = [ride, dive, lunch, shop, toHotel, dinner, home];
     }
 
+    if (date === '2026-11-25' && items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title))) Object.assign(items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title)), {flight:true, textTime:'Add flight time', preferred:null, detail:'Sample arrival: 5:30 PM — add your actual flight time.'});
+
     // The flight remains an unknown-time anchor until the traveler supplies a time.
-    if (date === '2026-11-29') items.forEach(item => {
+    if (date === '2026-11-29') items.filter(item => /flight|HNL/i.test(item.title)).slice(-1).forEach(item => {
         item.locked = true;
         item.title = 'Flight (add your time)';
         item.flight = true;
@@ -162,18 +206,48 @@ function buildSuggested(date) {
 const chestOnly = [{id: 'magic-island', time: '5:15 PM', kind: 'sight', title: 'Magic Island sunset',
     desc: 'Ala Moana Beach Park. Be in place by about 5:30 PM; sunset about 5:48 PM.'}];
 function trayItems() {
-    const all = window.OAHU_SAMPLE.days.flatMap(day => day.items);
+    const all = sourcePlan().days.flatMap(day => day.items || []).filter(Boolean);
+    if (planSource && planSource.id !== 'oahu-demo-2026-11') {
+        return all.filter(item=>!['travel','flight','stay'].includes(item.kind)).map((item,index)=>({
+            ...convert({...item,id:item.id||'idea-'+index}), sourceId:item.id||'idea-'+index,
+            id:'chest-'+index, preferred:null, locked:false
+        }));
+    }
     const patterns = [/Beginner intro dive/, /Waikiki parasail/, /Jurassic Adventure/, /Black Friday shopping/,
         /^Royal Hawaiian Center/, /palms — sunset/, /^Magic Island/, /^Waikiki Beach sunset/, /Free time at the Kahala/,
         /Lanikai Pillbox/, /^Makapuʻu Lighthouse Trail/, /Diamond Head —/];
     return patterns.map((pattern, index) => {
-        const item = convert(all.find(item => pattern.test(item.title)) || chestOnly.find(item => pattern.test(item.title)));
+        const source = all.find(item => pattern.test(item.title)) || chestOnly.find(item => pattern.test(item.title));
+        if (!source) return null;
+        const item = convert(source);
         Object.assign(item, {sourceId: item.id, id: 'chest-' + index, preferred: null, locked: false});
         if (index === 5) Object.assign(item, {place: 'Kahala palms', duration: 60, estimate: false});
         if (index === 8) item.title = 'Hotel downtime';
         return item;
-    }).concat([{id: 'chest-bar', title: 'Sunset bar / cocktails', place: WAIKIKI, duration: 60,
+    }).filter(Boolean).concat([{id: 'chest-bar', title: 'Sunset bar / cocktails', place: WAIKIKI, duration: 60,
         estimate: true, tags: ['alcohol'], detail: '21+'}]);
+}
+// Reuse the same connector/reflow path for template hotel changes. Untimed
+// arrival/departure blocks retain their position and descriptive clock labels.
+function replanStay(items, oldStay, newStay) {
+    const prepared=items.map(item=>{
+        const copy=clone(item);
+        ['place','from','to','title','desc'].forEach(k=>{if(typeof copy[k]==='string'&&oldStay)copy[k]=copy[k].split(oldStay).join(newStay);});
+        if(copy.kind==='stay'){copy.place=newStay;copy.desc=newStay;}
+        if(copy.from===oldStay)copy.from=newStay;
+        return copy;
+    });
+    const timed=prepared.filter(i=>Number.isFinite(i.start)||parse(i.time||'')!==null);
+    if(!timed.length)return prepared;
+    const result=reflow({items:timed.map(i=>({...i,place:i.place||i.title,preferred:Number.isFinite(i.start)?i.start:parse(i.time),duration:Number.isFinite(i.duration)?i.duration:Number.isFinite(i.end)&&Number.isFinite(i.start)?i.end-i.start:60}))}).items;
+    return prepared.map(item=>{
+        const updated=result.find(i=>i.id===item.id);
+        if(!updated)return item;
+        if(item.locked){updated.start=Number.isFinite(item.start)?item.start:updated.start;updated.end=Number.isFinite(item.end)?item.end:updated.end;}
+        updated.time=clock(updated.start);
+        if(updated.travel)updated.travelToNext=updated.travel.label+' · from '+newStay+' area — confirm route';
+        return updated;
+    });
 }
 function reflow(day, ctx = {}) {
     const output = [];
@@ -181,6 +255,7 @@ function reflow(day, ctx = {}) {
     const ages = (ctx.ages?.length ? ctx.ages : [18, 19]).map(Number);
     const raw = clone(day.items);
     raw.forEach(item => { delete item.notes; delete item.noteSources; delete item.notePriority; delete item.noteSource; });
+    if(stayOverride)raw.forEach(item=>{['place','to'].forEach(k=>{if(item[k]===HOTEL)item[k]=stayOverride;});if(item.prepBlock&&item.prepBlock.place===HOTEL)item.prepBlock.place=stayOverride;});
     let previous = null;
     function warn(item, note, source) {
         item.notes ||= [];
@@ -191,10 +266,11 @@ function reflow(day, ctx = {}) {
     }
     // Prep belongs before sunset photos, but never after the dressy booking.
     const dinner = raw.find(item => item.dressy);
-    if (dinner) {
+    const prepId=dinner?.prepBlock?.id || 'prep-dress';
+    if (dinner && !raw.some(i=>i.id===prepId) && !(day.unscheduled||[]).some(i=>i.id===prepId)) {
         let at = raw.findIndex(item => item.id === 'photos');
         if (at < 0 || at > raw.indexOf(dinner)) at = raw.indexOf(dinner);
-        raw.splice(at, 0, dinner.prepBlock || {id: 'prep-dress', title: 'Get ready / change + makeup', place: HOTEL,
+        raw.splice(at, 0, dinner.prepBlock || {id: 'prep-dress', title: 'Get ready / change + makeup', place: stayOverride||HOTEL,
             duration: 60, preferred: 990, kind: 'prep'});
     }
     for (let index = 0; index < raw.length; index++) {
@@ -268,7 +344,7 @@ function reflow(day, ctx = {}) {
                 warn(item, 'Overlaps ' + booking.title, undefined, 1);
             }
         }
-        const sunset = window.OAHU_SAMPLE.weather.text.match(/sunset approx\. (\d{1,2}:\d{2} PM)/i);
+        const sunset = String(sourcePlan().weather.text || '').match(/sunset approx\. (\d{1,2}:\d{2} PM)/i);
         if ((item.tags || []).includes('sunset') && sunset && item.start > parse(sunset[1])) {
             warn(item, item.start > parse(sunset[1]) + 30 ? 'After dark — sunset ~' + sunset[1] : 'Starts after sunset (~' + sunset[1] + ')', undefined, item.start > parse(sunset[1]) + 30 ? -1 : 4);
         }
@@ -295,7 +371,7 @@ const icons = {
     unlock: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 017.6-1.7M12 15v2"/>'),
     add: '+ Add', delete: svg('<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>')
 };
-const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'To chest', add: 'Add to day', delete: 'Delete booking'};
+const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'To ideas', add: 'Add to day', delete: 'Delete booking'};
 function button(action, title, disabled = false) {
     const label = esc(labels[action] + ' ' + title);
     return `<button type="button" data-testid="db-${action}" data-db-action="${action}"${disabled ? ' disabled aria-disabled="true"' : ''} aria-label="${label}" title="${label}">${icons[action]}</button>`;
@@ -343,18 +419,21 @@ function exportDays(days, flightTime) {
         const base = buildSuggested(date).items;
         const pool = base.concat(tray);
         const items = day.items.map(item => {
-            if (item.custom) return {c: 1, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
+            if (item.custom) return {c: 1, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
             const original = pool.find(candidate => candidate.id === item.id);
-            if (original && !item.manualTime && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
+            if (original && !item.routeReview && !item.originalTitle && !item.manualTime && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
             const entry = {id: item.id, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
+            if(item.overlapNote)entry.ov=item.overlapNote;
+            if(item.routeReview)entry.rv=item.title;
+            if(item.originalTitle){entry.ot=item.originalTitle;entry.tt=item.title;}
             if (item.checkinSwap) entry.a = item.title;
             if (item.userLocked) Object.assign(entry, {u: 1, bp: item.basePreferred, bd: item.baseDuration});
             return entry;
         });
         const trayIds = [];
-        const u = (day.unscheduled || []).map(({id,sourceId,title,place,duration,estimate,locked}) => ({id,sourceId,title,place,duration,estimate,locked}));
+        const u = (day.unscheduled || []).map(({id,sourceId,title,originalTitle,needsTime,place,duration,estimate,locked}) => ({id,sourceId,title,originalTitle,needsTime,place,duration,estimate,locked}));
         if (JSON.stringify(items) !== JSON.stringify(base.map(item => item.id)) || u.length) {
-            out[date] = {i: items, t: trayIds, u};
+            out[date] = {cg:!!day.chronological, i: items, t: trayIds, u};
         }
     });
     return Object.keys(out).length || flightTime ? {f: flightTime || '', d: out} : null;
@@ -363,11 +442,11 @@ function importDays(data) {
     const days = {};
     const minutes = value => (value === null || (Number.isFinite(value) && value >= 0 && value <= 1440)) ? value : undefined;
     if (!data || typeof data !== 'object') return {days, flightTime: ''};
-    const dates = new Set(window.OAHU_SAMPLE.days.map(day => day.date));
+    const dates = new Set(sourcePlan().days.map(day => day.date));
     Object.entries(data.d && typeof data.d === 'object' ? data.d : {}).forEach(([date, day]) => {
         if (!dates.has(date) || !day || !Array.isArray(day.i) || !Array.isArray(day.t)) return;
         const tray = trayItems();
-        const pool = window.OAHU_SAMPLE.days.flatMap(d => buildSuggested(d.date).items).concat(tray);
+        const pool = sourcePlan().days.flatMap(d => buildSuggested(d.date).items).concat(tray);
         const find = id => { const found = pool.find(item => item.id === id); return found ? clone(found) : null; };
         const items = day.i.map(entry => {
             if (typeof entry === 'string') return find(entry);
@@ -375,12 +454,15 @@ function importDays(data) {
             if (entry.c) {
                 const start = minutes(entry.p), length = minutes(entry.d);
                 if (typeof entry.t !== 'string' || !entry.t.trim() || (start === undefined) || !length) return null;
-                return {id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
+                return {originalTitle:entry.ot, id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
                     place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false};
             }
             const item = find(entry.id) || pool.find(i => i.sourceId === entry.s) && clone(pool.find(i => i.sourceId === entry.s));
             if (!item) return null;
             if (['Beach walk','Gentle stretch'].includes(entry.a)) Object.assign(item,{title:entry.a,wellness:{type:entry.a==='Beach walk'?'walk':'recovery'},checkinSwap:true});
+            if(entry.ov)item.overlapNote=entry.ov;
+            if(entry.rv){item.title=entry.rv;item.routeReview=true;}
+            if(entry.ot){item.originalTitle=entry.ot;item.title=entry.tt;}
             item.id = entry.id; item.manualTime = !!entry.m; if (entry.e !== undefined) item.estimate = entry.e;
             item.locked = !!entry.l;
             if (minutes(entry.p) !== undefined) item.preferred = entry.p;
@@ -388,12 +470,19 @@ function importDays(data) {
             if (entry.u && item.locked) Object.assign(item, {userLocked: true, basePreferred: minutes(entry.bp) ?? null, baseDuration: minutes(entry.bd) ?? item.duration});
             return item;
         }).filter(Boolean);
-        days[date] = {date, items, unscheduled: (day.u || []).filter(e => e && typeof e.id === "string" && typeof e.title === "string" && e.duration > 0).map(e => ({...clone(pool.find(i => i.sourceId === e.sourceId) || {}), ...e, custom: !pool.some(i => i.sourceId === e.sourceId), preferred:null}))};
+        days[date] = {date, chronological:!!day.cg, items, unscheduled: (day.u || []).filter(e => e && typeof e.id === "string" && typeof e.title === "string" && e.duration > 0).map(e => ({...clone(pool.find(i => i.sourceId === e.sourceId) || {}), ...e, custom: !pool.some(i => i.sourceId === e.sourceId), preferred:null}))};
     });
     return {days, flightTime: typeof data.f === 'string' && parse(data.f) !== null ? data.f : ''};
 }
 
 function mount(root, ctx = {}) {
+    const nextPlan=ctx.plan||null;
+    // Disconnect the prior mount before headers ask for the current schedule.
+    session.active=null;
+    const nextKey='gonow:daybuilder:'+(nextPlan?.id||'oahu-demo-2026-11');
+    if(KEY!==nextKey){session.date=nextPlan?.id==='oahu-demo-2026-11'?'2026-11-26':nextPlan?.days?.[0]?.date||'2026-11-26';session.open.clear();Object.keys(sourceCache).forEach(k=>delete sourceCache[k]);}
+    KEY=nextKey;planSource=nextPlan;
+    if(!sourcePlan().days.some(d=>d.date===session.date))session.date=sourcePlan().days[0]?.date||'2026-11-26';
     let saved = {};
     if (ctx.shared) {
         const key = JSON.stringify(ctx.initial || null);
@@ -435,13 +524,13 @@ function mount(root, ctx = {}) {
         return days[date];
     }
     function draftItems() {
-        return window.OAHU_SAMPLE.days.flatMap(d => visibleItems(days[d.date] || buildSuggested(d.date), d.date));
+        return sourcePlan().days.flatMap(d => visibleItems(days[d.date] || buildSuggested(d.date), d.date));
     }
     function addToDay(nextDate, spec) {
         if (!spec) return {ok: false, reason: 'Missing activity'};
-        if (!window.OAHU_SAMPLE.days.some(d => d.date === nextDate)) return {ok:false, reason:'Choose a trip date'};
+        if (!sourcePlan().days.some(d => d.date === nextDate)) return {ok:false, reason:'Choose a trip date'};
         if (spec.time && toTime(spec.time) === null) return {ok:false, reason:'Enter a clock time'};
-        const pool = window.OAHU_SAMPLE.days.flatMap(d => buildSuggested(d.date).items).concat(trayItems());
+        const pool = sourcePlan().days.flatMap(d => buildSuggested(d.date).items).concat(trayItems());
         const base = spec.chestId ? pool.find(i => i.id === spec.chestId)
             : spec.sourceId ? pool.find(i => i.sourceId === spec.sourceId) : null;
         const identity = spec.sourceId || base?.sourceId || base?.id || ('own:' + String(spec.title || '').trim().toLowerCase());
@@ -466,6 +555,7 @@ function mount(root, ctx = {}) {
         addedConflicts = [];
     }
     function save() {
+        if(ctx.saveDraft&&!ctx.shared)ctx.saveDraft({days,flightTime});
         if (ctx.shared) { saved.flightTime = flightTime; return; }
         try { localStorage.setItem(KEY, JSON.stringify({days, flightTime})); } catch (e) {}
     }
@@ -487,12 +577,15 @@ function mount(root, ctx = {}) {
         });
     }
     function dayResult(stored, on) {
-        return reflow({...stored, items: adjustedItems(visibleItems(stored, on), on)}, {...ctx, flightTime});
+        const intent=adjustedItems(visibleItems(stored,on),on);
+        const result=reflow({...stored,items:stored.chronological?intent.map(i=>({...i,manualTime:true})):intent}, {...ctx,flightTime});
+        if(stored.chronological)result.items.sort((a,b)=>(a.start ?? Infinity)-(b.start ?? Infinity));
+        return result;
     }
     function schedule() {
         return {
             flightTime,
-            days: window.OAHU_SAMPLE.days.map(day => {
+            days: sourcePlan().days.map(day => {
                 const stored = days[day.date] || buildSuggested(day.date);
                 return {date: day.date, items: dayResult(stored, day.date).items};
             })
@@ -508,13 +601,18 @@ function mount(root, ctx = {}) {
     }
     function lockButton(i, title, uid) {
         const label = i.locked ? 'Unlock time' : 'Lock time';
-        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${label}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}</button>`;
+        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(i.locked ? 'Unlock time' : 'Lock time')}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}</button>`;
     }
     function pair(i, tray, options = {}) {
         const on = options.date || date;
         const print = !!options.print;
         const uid = uidFor(on, i.id);
         const src = sourceOf(i, on);
+        const transport = ['travel','flight'].includes(i.kind) || i.flight;
+        const cardFlightTime = on === '2026-11-25' ? (i.manualTime && i.preferred != null ? clock(i.preferred) : '') : flightTime;
+        const transportType = i.flight || /flight|land at|airport/i.test(i.title) ? 'plane' : /shuttle/i.test(i.title) ? 'shuttle' : /bus/i.test(i.title) ? 'bus' : 'car';
+        const paths = {plane:'M2 13l8-3V3l2-1 2 1v7l8 3v2l-8-1v5l3 2v1l-5-1-5 1v-1l3-2v-5l-8 1Z',car:'M4 10l2-6h12l2 6M3 10h18v9H3ZM6 19v3m12-3v3M6 14h2m8 0h2',bus:'M5 3h14v16H5ZM5 11h14M8 19v3m8-3v3M8 15h1m6 0h1',shuttle:'M3 6h14l4 6v7H3ZM3 12h18M7 6v6m6-6v6M6 19v3m12-3v3'};
+        const transportIcon = `<svg class="transport-icon" data-transport-icon="${transportType}" aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="${paths[transportType]}"/></svg>`;
         const hhmm = n => String(Math.floor(n / 60)).padStart(2,'0') + ':' + String(n % 60).padStart(2,'0');
         const canEditTime = !ctx.shared && !tray && !print && !i.textTime && !i.flight && i.kind !== 'prep';
         const travelTime = i.kind === 'travel';
@@ -528,18 +626,18 @@ function mount(root, ctx = {}) {
         const title = (!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
         const movable = !i.locked && i.kind !== 'prep' && !print;
         const canLock = !tray && !print && lockable(i);
-        const classes = ['db-pair', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
+        const classes = ['db-pair', transport && 'db-transport', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
             i.kind === 'prep' && 'db-prep', i.flex && 'db-free', detail && 'db-expandable', open && 'is-open',
             picked?.id === i.id && picked.zone === (tray ? 'tray' : 'day') && 'db-picked'].filter(Boolean).join(' ');
-        const moves = tray ? button('handle', title) + '<button type="button" data-testid="schedule-item" data-db-action="schedule">Schedule</button>' : (movable ? button('handle', title) + button('up', title) + button('down', title) + button('remove', title) : '');
+        const moves = tray ? button('handle', title) + `<button type="button" data-testid="schedule-item" data-db-action="schedule">${i.needsTime ? 'Pick a time' : 'Schedule'}</button>${i.needsTime ? '<small>Needs a time</small>' : ''}` : (movable ? button('handle', title) + button('up', title) + button('down', title) + button('remove', title) : '');
         const actions = !tray && !print && i.kind !== 'prep' ? '<div class="db-item-actions"><button type="button" data-db-action="again">Add it again</button><button type="button" data-db-action="move-day">Move to another day</button></div>' : '';
         const lockChip = i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : '';
-        const menuLabels = {handle: 'Drag to reorder', up: 'Move up', down: 'Move down', remove: 'Move to chest', delete: 'Delete booking'};
+        const menuLabels = {handle: 'Drag to reorder', up: 'Move up', down: 'Move down', remove: 'Move to ideas', delete: 'Delete booking'};
         const menuMoves = (moves + (i.custom && !print ? button('delete', title) : '')).replace(/(<button[^>]*data-db-action="([^"]+)"[^>]*>)([\s\S]*?)(<\/button>)/g,
             (_, start, action, icon, end) => start + icon + '<span>' + menuLabels[action] + '</span>' + end);
         const menuItems = (menuMoves + actions.replace('>Add it again', '><span aria-hidden="true">＋</span> Add it again').replace('>Move to another day', '><span aria-hidden="true">↗</span> Move to another day')).replace(/<button /g, '<button role="menuitem" ');
         const hasMenu = !tray && !print && (i.custom || i.kind !== 'prep');
-        const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}">⋯ More</button>` : '';
+        const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}" aria-label="More actions for ${esc(title)}">⋯</button>` : '';
         const menu = hasMenu ? `<div hidden id="db-more-${uid}" data-testid="db-more-menu" role="menu">${menuItems}</div>` : '';
         const controls = moves || canLock || hasMenu ? `<div class="db-controls">${canLock ? lockChip : ''}${tray ? moves : menuButton}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
         const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
@@ -551,16 +649,16 @@ function mount(root, ctx = {}) {
             : `<strong id="db-title-${uid}">${esc(title)}</strong><small>${placeText}</small>`;
         const lockedLabel = i.userLocked ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
-            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? flightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight ? esc(flightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
-            ${!tray && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt="">` : ''}
+            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight ? esc(cardFlightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
+            ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt="">` : ''}
             <div class="db-activity" data-testid="db-activity">
                 ${heading}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
-                ${i.flight && !print ? `<label>Flight time<input type="time" aria-label="Flight time" data-testid="db-flight-time" value="${flightTime ? String(Math.floor(parse(flightTime) / 60)).padStart(2, '0') + ':' + String(parse(flightTime) % 60).padStart(2, '0') : ''}"></label>` : ''}
+                ${i.flight && !print ? `<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${cardFlightTime ? String(Math.floor(parse(cardFlightTime) / 60)).padStart(2, '0') + ':' + String(parse(cardFlightTime) % 60).padStart(2, '0') : ''}"><button type="button" data-testid="add-flight-time" aria-haspopup="dialog" ${ctx.shared ? 'disabled' : ''}>${cardFlightTime ? esc(cardFlightTime)+' · Edit' : 'Add flight time'}</button>` : ''}
                 ${!tray && i.detail ? `<small>${esc(i.detail)}</small>` : ''}
                 ${canLock ? '' : lockChip}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
                 ${controls}
-                ${(i.notes || []).map((note, index) => `<p class="db-note" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
+                ${i.overlapNote ? `<p class="db-note">${esc(i.overlapNote)}</p>` : ''}${(i.notes || []).map((note, index) => `<p class="db-note" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div>
             ${menu}
             ${editor}
@@ -590,6 +688,61 @@ function mount(root, ctx = {}) {
         dialog.querySelector('[data-testid=unlock-decline]').onclick = () => dialog.remove();
         dialog.querySelector('[data-testid=unlock-accept]').onclick = () => { toggleLock(item, lastResult.items.find(i => i.id === item.id)); save(); dialog.remove(); apply(); };
     }
+    function reviewTransfers(day,item) {
+        if(item.kind==='travel')return;
+        day.items.forEach(ride=>{
+            if(ride.kind==='travel' && (ride.place===item.place || ride.to===item.place || ride.from===item.place || ride.title.includes(item.place)) && !ride.routeReview) {
+                ride.title+=' — route changed; review this transfer';ride.routeReview=true;
+            }
+        });
+    }
+    function sortDay(on) {
+        const d=days[on];
+        d.chronological=true;
+        d.items.sort((a,b)=>(a.preferred ?? Infinity)-(b.preferred ?? Infinity));
+    }
+    function resolveTime(on, item, start, duration, apply) {
+        days[on] ||= buildSuggested(on);
+        const shown=dayResult(days[on],on).items;
+        const hits=overlaps(shown,start,duration,item.id);
+        // Preserve existing displayed clocks BEFORE moving the edited item.
+        // Otherwise reflow would push every following flexible stop later first.
+        const freeze=()=>days[on].items.forEach(raw=>{const v=shown.find(i=>i.id===raw.id);if(raw.id!==item.id&&v&&v.start!=null)Object.assign(raw,{preferred:v.start,duration:v.end-v.start});if(raw.prepBlock){const prep=shown.find(i=>i.id===raw.prepBlock.id);if(prep)Object.assign(raw.prepBlock,{preferred:prep.start,manualTime:true});}});
+        if(!hits.length){freeze();apply();return;}
+        const dialog=document.createElement('dialog');
+        dialog.dataset.testid='move-conflict'; dialog.setAttribute('role','alertdialog');
+        dialog.setAttribute('aria-modal','true');dialog.setAttribute('aria-labelledby','conflict-title');
+        dialog.innerHTML='<h2 id="conflict-title">This time overlaps</h2><ul>'+hits.map(i=>'<li>'+esc(i.title)+' · '+range(i.start,i.end)+'</li>').join('')+'</ul>'+hits.map(i=>'<button type="button" data-testid="conflict-replace" data-id="'+esc(i.id)+'" '+(i.locked?'disabled':'')+'>Replace '+esc(i.title)+'</button>'+(i.locked?'<p>Locked reservation — unlock it first to replace.</p>':'')).join('')+'<button type="button" data-testid="conflict-shift">Shift it later</button><button type="button" data-testid="conflict-keep">Keep both</button><button type="button" data-cancel>Cancel</button><p role="status"></p>';
+        const opener=document.activeElement;
+        root.append(dialog);dialog.showModal();
+        const close=()=>{dialog.close();dialog.remove();opener?.focus();};
+        dialog.addEventListener('cancel',e=>{e.preventDefault();close();});
+        dialog.addEventListener('keydown',e=>{
+            if(e.key==='Escape'){e.preventDefault();e.stopPropagation();close();}
+            if(e.key==='Tab'){e.preventDefault();e.stopPropagation();const buttons=[...dialog.querySelectorAll('button:not(:disabled)')];const at=buttons.indexOf(document.activeElement);buttons[(at+(e.shiftKey?-1:1)+buttons.length)%buttons.length].focus();}
+        });
+        dialog.querySelector('[data-cancel]').onclick=close;
+        dialog.querySelectorAll('[data-testid=conflict-replace]').forEach(b=>b.onclick=()=>{
+            const before=clone(days);
+            const d=days[on], index=d.items.findIndex(i=>i.id===b.dataset.id);
+            const derived=index<0 && shown.find(i=>i.id===b.dataset.id && i.kind==='prep');
+            const candidate=index>=0?d.items[index]:derived;
+            if(!candidate||candidate.locked)return;
+            freeze();
+            const replaced=index>=0?d.items.splice(index,1)[0]:clone(derived);
+            replaced.needsTime=true;replaced.preferred=null;d.unscheduled.push(replaced);
+            close();apply();
+            if(ctx.undo)ctx.undo('Item moved to Needs a time.',()=>{Object.keys(days).forEach(k=>delete days[k]);Object.assign(days,before);save();render();});
+        });
+        dialog.querySelector('[data-testid=conflict-shift]').onclick=()=>{
+            const shifted=shiftConflicts(shown,start,duration,item.id);
+            if(shifted.error){dialog.querySelector('[role=status]').textContent=shifted.error;return;}
+            freeze();
+            shifted.items.forEach(v=>{const raw=days[on].items.find(i=>i.id===v.id);if(raw&&v.shifted){if(raw.preferred!==v.start){raw.originalTitle ||= raw.title;raw.title=cleanTimeTitle(raw.title,raw.preferred);}Object.assign(raw,{preferred:v.start,duration:v.end-v.start,manualTime:true});}});
+            close();apply();
+        };
+        dialog.querySelector('[data-testid=conflict-keep]').onclick=()=>{freeze();item.overlapNote='Overlaps another stop — allow extra flexibility.';close();apply();};
+    }
     function openTransfer(id, zone, mode) {
         const list = listFor(zone), item = list.find(i => i.id === id);
         if (!item) return;
@@ -600,23 +753,36 @@ function mount(root, ctx = {}) {
         const title = mode === 'again' ? 'Add it again' : mode === 'move-day' ? 'Move to another day' : 'Schedule';
         const explanation = mode === 'again' ? 'Creates a separate copy. The original stays where it is.' : mode === 'move-day' ? 'Moves this same item. It leaves the original day.' : '';
         dialog.setAttribute('aria-labelledby', 'db-transfer-title');
-        dialog.innerHTML = `<h2 id="db-transfer-title">${title}</h2>${explanation ? `<p>${explanation}</p>` : ''}<form><label>Target date<select name="date">${window.OAHU_SAMPLE.days.map(d => `<option ${d.date === date ? 'selected' : ''}>${d.date}</option>`).join('')}</select></label><label>Start clock time (AM/PM)${mode === 'schedule' ? '' : ' — optional'}<input name="start" type="time" ${mode === 'schedule' ? 'required' : ''}></label>${mode === 'schedule' ? '<label>End clock time (AM/PM) — optional<input name="end" type="time"></label><p>Start only: end is an estimate from default duration.</p>' : ''}<button>${mode === 'again' ? 'Add a copy' : mode === 'move-day' ? 'Move' : 'Schedule'}</button><button type="button" data-cancel>Cancel</button><p role="alert"></p></form>`;
+        dialog.innerHTML = `<h2 id="db-transfer-title">${title}</h2>${explanation ? `<p>${explanation}</p>` : ''}<form><label>Target date<select name="date">${sourcePlan().days.map(d => `<option ${d.date === date ? 'selected' : ''}>${d.date}</option>`).join('')}</select></label><label>${mode === 'move-day' ? 'Time on new day' : 'Start clock time (AM/PM)'}${mode === 'schedule' ? '' : ' — optional'}<input name="start" type="time" value="${mode === 'move-day' ? ((n)=>n == null ? '' : String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0'))(lastResult.items.find(i => i.id === id)?.start) : ''}" ${mode === 'schedule' ? 'required' : ''}></label>${mode === 'schedule' ? '<label>End clock time (AM/PM) — optional<input name="end" type="time"></label><p>Start only: end is an estimate from default duration.</p>' : ''}<button>${mode === 'again' ? 'Add a copy' : mode === 'move-day' ? 'Move' : 'Schedule'}</button><button type="button" data-cancel>Cancel</button><p role="alert"></p></form>`;
         root.append(dialog); dialog.showModal();
         dialog.querySelector('[data-cancel]').onclick = () => dialog.remove();
         dialog.querySelector('form').onsubmit = e => {
             e.preventDefault(); const form = e.target, target = form.elements.date.value, start = toTime(form.elements.start.value);
+            if(mode === 'schedule' && start === null){form.querySelector('[role=alert]').textContent='Pick a start time.';return;}
             const end = form.elements.end?.value ? toTime(form.elements.end.value) : null;
             if (end !== null && (start === null || end <= start)) { form.querySelector('[role=alert]').textContent = 'End must be after start'; return; }
             const copy = clone(item);
             if (mode === 'again') copy.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
-            else list.splice(list.findIndex(i => i.id === id), 1);
+
             copy.locked = false; delete copy.start; delete copy.end; delete copy.textTime; delete copy.travel; delete copy.notes; delete copy.userLocked; delete copy.basePreferred; delete copy.baseDuration;
+            copy.originalTitle ||= copy.title;
+            copy.title = cleanTimeTitle(copy.title, item.preferred);
             copy.preferred = start; delete copy.manualTime;
+            const apply = () => {
+            if(mode !== 'again') list.splice(list.findIndex(i => i.id === id), 1);
+            if(mode === 'move-day') {
+                const old=days[date];
+                reviewTransfers(old,item);
+            }
             days[target] ||= buildSuggested(target); days[target].unscheduled ||= [];
-            if (start === null) days[target].unscheduled.push(copy);
+            if (start === null) {copy.needsTime=true; days[target].unscheduled.push(copy);}
             else { copy.manualTime = true; copy.estimate = end === null; if (end !== null) copy.duration = end-start; days[target].items.push(copy); }
+            if(start !== null) sortDay(target);
             dialog.remove(); editingTime = null; save(); selectDay(target, false);
             if (start !== null) { root.querySelector('.db-dock-tray')?.classList.remove('is-open'); document.querySelector('[data-testid=tray-toggle]')?.setAttribute('aria-expanded','false'); }
+            };
+            if (start === null) apply();
+            else resolveTime(target, copy, start, end === null ? copy.duration : end-start, apply);
         };
     }
     function closeTime() {
@@ -626,12 +792,12 @@ function mount(root, ctx = {}) {
         Array.from(root.querySelectorAll('[data-db-id]')).find(r => r.dataset.dbId === id)?.querySelector('[data-db-action=edit-time]')?.focus();
     }
     function timeInstances(identity) {
-        return window.OAHU_SAMPLE.days.flatMap(d => dayResult(days[d.date] || buildSuggested(d.date), d.date).items
+        return sourcePlan().days.flatMap(d => dayResult(days[d.date] || buildSuggested(d.date), d.date).items
             .filter(i => (i.sourceId || i.id) === identity && !i.textTime && !i.flight && !['prep','travel'].includes(i.kind))
             .map(i => ({id:i.id, date:d.date, time:range(i.start,i.end)})));
     }
     root.addEventListener('keydown', e => {
-        if (e.key === 'Escape' && editingTime) { e.preventDefault(); e.stopImmediatePropagation(); closeTime(); }
+        if (e.key === 'Escape' && editingTime && !root.querySelector('dialog[open]')) { e.preventDefault(); e.stopImmediatePropagation(); closeTime(); }
     });
     function alreadyOnDay(item) {
         return draftItems().some(existing => (existing.sourceId || existing.id) === (item.sourceId || item.id));
@@ -639,11 +805,11 @@ function mount(root, ctx = {}) {
     function timelineHTML(result, options) {
         return result.items.map(i => {
             const travel = i.travel ? `<div class="db-travel${i.travel.late ? ' db-travel-late' : ''}" data-testid="db-travel">${i.travel.late ? esc(i.travel.label) + ' · leave by ' + clock(i.travel.depart) : clock(i.travel.depart) + ' · ' + esc(i.travel.label) + (i.travel.minutes ? ' · arrive ' + clock(i.travel.arrive) : '')}</div>` : '';
-            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">${clock(i.walkBack.depart)} · Walk ~10 min · arrive ${clock(i.walkBack.arrive)}</div>` : '') + travel + pair(i, false, options);
+            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">${clock(i.walkBack.depart)} · Walk ~10 min · arrive ${clock(i.walkBack.arrive)}</div>` : '') + (travel ? '<div data-testid="travel-chip">'+travel+'</div>' : '') + pair(i, false, options);
         }).join('');
     }
     function dayIndex(on) {
-        return window.OAHU_SAMPLE.days.findIndex(day => day.date === on);
+        return sourcePlan().days.findIndex(day => day.date === on);
     }
     function render(focus) {
         const d = current();
@@ -653,7 +819,7 @@ function mount(root, ctx = {}) {
         previousConflicts = new Map(result.conflicts.map(c => [c.id + '|' + c.note, true]));
         const availableTray = ctx.shared ? [] : d.unscheduled;
         const summary = result.conflicts.length ? `${result.conflicts.length} heads-up` : 'All clear';
-        const chips = window.OAHU_SAMPLE.days.map((day, index) => {
+        const chips = sourcePlan().days.map((day, index) => {
             const weekday = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', timeZone: 'UTC'});
             const label = weekday + ' ' + Number(day.date.slice(-2));
             return `<button type="button" data-db-action="day" data-date="${day.date}" data-testid="db-day-${day.date}" aria-pressed="${day.date === date}"${ctx.dayHead ? ` aria-label="Day ${index + 1} · ${label}"` : ''}>${ctx.dayHead ? `<span class="db-day-num">Day ${index + 1}</span> ` : ''}${label}</button>`;
@@ -662,12 +828,12 @@ function mount(root, ctx = {}) {
         const card = inner => ctx.dayHead
             ? `<section class="card day db-daycard" id="day-${index}" data-testid="plan-day" data-date="${date}">${ctx.dayHead(date)}${inner}${ctx.dayFooter ? ctx.dayFooter(date) : ''}</section>`
             : inner;
-        content.innerHTML = `<div class="db-heading"><h2>${ctx.dayHead ? 'Your days' : 'Build your day'}</h2><span class="db-summary" data-testid="db-summary">${summary}</span><button type="button" data-testid="db-reset" data-db-action="reset">Reset to suggested</button></div>
+        content.innerHTML = `<div class="db-heading"><h2>${ctx.dayHead ? 'Your days' : 'Build your day'}</h2><span class="db-summary" data-testid="db-summary">${summary}</span></div>
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
             ${card(`<div class="db-day" data-testid="db-day-list">${timelineHTML(result)}</div>
             ${ctx.dayExtras ? ctx.dayExtras(date) : ''}
             ${ctx.shared && d.unscheduled.length ? `<section data-testid="unscheduled-section"><h3>Unscheduled</h3><ul>${d.unscheduled.map(i => `<li>${esc(i.title)}</li>`).join('')}</ul></section>` : ''}
-            <div class="db-tools">
+            <details class="day-add-panel" ${expanded || bookingOpen ? 'open' : ''}><summary data-testid="day-add">+ Add</summary><button type="button" data-testid="db-reset" data-db-action="reset">Reset to suggested</button><div class="db-tools">
             <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Activity ideas <span class="db-count">${availableTray.length}</span></button>
             <button type="button" data-testid="db-booking-toggle" data-db-action="booking" aria-expanded="${bookingOpen}" aria-controls="db-booking">+ Add booking</button>
             </div>
@@ -678,7 +844,7 @@ function mount(root, ctx = {}) {
                 <label>End<input name="end" data-testid="db-booking-end" type="time" required></label>
                 <label>Place<select name="place" data-testid="db-booking-place">${[HOTEL, WAIKIKI, 'Kewalo Basin', 'Kualoa Ranch', 'Diamond Head', 'Ala Moana', 'Kailua', 'Makapuu', 'HNL', 'Other'].map(p => `<option>${p}</option>`).join('')}</select></label>
                 <button data-testid="db-booking-add">Anchor it</button><p data-testid="db-form-note" role="status">${esc(formStatus)}</p>
-            </form>`)}`;
+            </form></details>`)}`;
         if (!reducedMotion()) {
             root.querySelectorAll('.db-conflict').forEach(element => {
                 element.classList.add('db-shake');
@@ -700,6 +866,14 @@ function mount(root, ctx = {}) {
             }
         }
         if (ctx.afterRender) ctx.afterRender(content, date);
+        const pending=d.unscheduled.filter(i=>i.needsTime);
+        if(pending.length && !ctx.shared) {
+            content.querySelector('[data-testid=db-day-list]').insertAdjacentHTML('afterend','<section data-testid="needs-time"><h3>Needs a time</h3></section>');
+            // Relocate the real tray, preserving unique IDs, controls and drag/drop.
+            const tray=root.querySelector('[data-testid=db-tray]');
+            tray.hidden=false;
+            content.querySelector('[data-testid=needs-time]').append(tray);
+        }
         if (focus) {
             const row = Array.from(root.querySelectorAll('[data-db-id]')).find(e => e.dataset.dbId === focus.id && e.dataset.dbZone === focus.zone);
             const target=row?.querySelector(`[data-db-action="${focus.action || 'handle'}"]`);
@@ -710,17 +884,24 @@ function mount(root, ctx = {}) {
     }
     // Print shows every day once, with every box open and no controls.
     function renderPrint(on) {
-        if (!on) { printAll.innerHTML = ''; root.classList.remove('db-printing'); return; }
-        printAll.innerHTML = window.OAHU_SAMPLE.days.map(day => {
+        if (!on) {
+            if (!content.isConnected) (root.querySelector('.db-workspace') || root).prepend(content);
+            printAll.innerHTML = ''; root.classList.remove('db-printing'); return;
+        }
+        printAll.innerHTML = sourcePlan().days.map(day => {
             const stored = days[day.date] || buildSuggested(day.date);
             const result = dayResult(stored, day.date);
             return `<section class="card day db-print-day" data-date="${day.date}">${ctx.dayHead ? ctx.dayHead(day.date, {print: true}) : ''}<div class="db-day">${timelineHTML(result, {print: true, date: day.date})}</div>${ctx.dayExtras ? ctx.dayExtras(day.date, {print: true}) : ''}</section>`;
         }).join('');
         printAll.querySelectorAll('[data-testid]').forEach(element => element.removeAttribute('data-testid'));
+        printAll.querySelectorAll('.db-print-day').forEach(element=>element.setAttribute('data-testid','plan-day'));
         printAll.querySelectorAll('[id]').forEach(element => element.removeAttribute('id'));
         printAll.querySelectorAll('[tabindex]').forEach(element => element.removeAttribute('tabindex'));
         printAll.querySelectorAll('input[type=checkbox]').forEach(box => box.replaceWith(document.createTextNode(box.checked || box.hasAttribute('checked') ? '☑ ' : '☐ ')));
         printAll.querySelectorAll('details').forEach(element => { element.open = true; });
+        // Keep the screen disclosures out of the print DOM, rather than hiding
+        // their bodies behind a display:none ancestor. Restore the same nodes.
+        content.remove();
         root.classList.add('db-printing');
     }
     function setExpanded(row, force) {
@@ -741,7 +922,7 @@ function mount(root, ctx = {}) {
         return true;
     }
     function selectDay(next, focusChip = true) {
-        if (!window.OAHU_SAMPLE.days.some(day => day.date === next)) return;
+        if (!sourcePlan().days.some(day => day.date === next)) return;
         date = next;
         session.date = next;
         formStatus = '';
@@ -774,6 +955,7 @@ function mount(root, ctx = {}) {
         } else if (action === 'position') {
             at = target > index ? target - 1 : target;
         }
+        if(['up','down','position'].includes(action))current().chronological=false;
         list.splice(index, 1);
         if (zone === 'tray') { item.preferred = null; delete item.manualTime; delete item.start; delete item.end; }
         if (zone !== 'tray' || !destination.some(existing => existing.id === item.id)) destination.splice(at, 0, item);
@@ -797,18 +979,26 @@ function mount(root, ctx = {}) {
 
     // The popup stays in the card for action lookup and drag delegation, outside the controls row.
     function positionMenu(trigger, panel) {
-        const card = trigger.closest('[data-db-id]');
-        const box = card.getBoundingClientRect();
+        // Keep the popup in its card for delegated actions, but use viewport
+        // coordinates so tall cards and scrolling containers cannot clip it.
+        panel.hidden = false;
+        panel.style.display = 'block';
+        panel.style.position = 'fixed';
+        panel.style.top = '16px';
+        panel.style.left = '16px';
+        panel.style.maxHeight = `${Math.max(44, window.innerHeight - 32)}px`;
+        panel.style.overflowY = 'auto';
         const anchor = trigger.getBoundingClientRect();
-        const width = panel.getBoundingClientRect().width;
-        const left = Math.max(16, Math.min(anchor.left, document.documentElement.clientWidth - width - 16));
-        panel.style.left = `${left - box.left - card.clientLeft}px`;
-        panel.style.top = `${anchor.bottom - box.top - card.clientTop}px`;
+        const bounds = panel.getBoundingClientRect();
+        const left = Math.max(16, Math.min(anchor.left, document.documentElement.clientWidth - bounds.width - 16));
+        const top = Math.max(16, Math.min(anchor.bottom + bounds.height <= window.innerHeight - 16 ? anchor.bottom : anchor.top - bounds.height, window.innerHeight - bounds.height - 16));
+        panel.style.left = `${left}px`;
+        panel.style.top = `${top}px`;
     }
     window.addEventListener?.('resize', () => {
-        if (root.isConnected) root.querySelectorAll('[data-testid=db-more][aria-expanded=true]').forEach(b => positionMenu(b, document.getElementById(b.getAttribute('aria-controls'))));
+        if (root.isConnected) root.querySelectorAll('[data-testid=db-more][aria-expanded=true]').forEach(b => positionMenu(b, b.closest('[data-db-id]').querySelector('[data-testid=db-more-menu]')));
     });
-    function closeMenus(focus=false){root.querySelectorAll('[data-testid=db-more][aria-expanded=true]').forEach(b=>{b.setAttribute('aria-expanded','false');document.getElementById(b.getAttribute('aria-controls')).hidden=true;if(focus)b.focus();});}
+    function closeMenus(focus=false){root.querySelectorAll('[data-testid=db-more][aria-expanded=true]').forEach(b=>{b.setAttribute('aria-expanded','false');b.closest('[data-db-id]').querySelector('[data-testid=db-more-menu]').hidden=true;b.closest('[data-db-id]').querySelector('[data-testid=db-more-menu]').style.display='';if(focus)b.focus();});}
     const outsideMenuClick = e => {
         if(root.isConnected === false){document.removeEventListener('click',outsideMenuClick);return;}
         if(!e.target.closest('[data-testid=db-more], [data-testid=db-more-menu]')&&!drag)closeMenus(true);
@@ -822,6 +1012,8 @@ function mount(root, ctx = {}) {
         if(['ArrowUp','ArrowDown'].includes(e.key)&&!picked){e.preventDefault();e.stopImmediatePropagation();const items=[...menu.querySelectorAll('button:not(:disabled)')];const n=items.indexOf(document.activeElement);items[(n+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();}
     });
     root.addEventListener('click', e => {
+        const flightButton=e.target.closest('[data-testid=add-flight-time]');
+        if(flightButton){flightButton.previousElementSibling.dataset.flightDirection=date==='2026-11-25'?'arrival':'departure';window.GoNowTimepicker.open(flightButton.previousElementSibling,flightButton);return;}
         if (suppressClick) { suppressClick = false; if (e.target.closest('[data-db-id]')) return; }
         const anchor = e.target.closest('a[href^="#item-"]');
         const href = anchor && anchor.getAttribute && anchor.getAttribute('href');
@@ -844,7 +1036,7 @@ function mount(root, ctx = {}) {
         }
         const action = b.dataset.dbAction;
         const row = b.closest('[data-db-id]');
-        if(action==='more'){ const panel=document.getElementById(b.getAttribute('aria-controls'));const open=panel.hidden;closeMenus();panel.hidden=!open;b.setAttribute('aria-expanded',String(open));if(open){positionMenu(b,panel);panel.querySelector('button')?.focus();}return;}
+        if(action==='more'){ e.stopPropagation();const panel=b.closest('[data-db-id]').querySelector('[data-testid=db-more-menu]');const open=b.getAttribute('aria-expanded')!=='true';closeMenus();panel.hidden=!open;b.setAttribute('aria-expanded',String(open));if(open){positionMenu(b,panel);panel.querySelector('button')?.focus({preventScroll:true});}return;}
         if(action!=='handle')closeMenus();
         if (['again','move-day','schedule'].includes(action)) { openTransfer(row.dataset.dbId, row.dataset.dbZone, action);
         } else if (action === 'edit-time') {
@@ -910,8 +1102,10 @@ function mount(root, ctx = {}) {
     root.addEventListener('change', e => {
         if (e.target.matches('[data-testid=db-flight-time]')) {
             const [h, m] = e.target.value.split(':').map(Number);
-            flightTime = e.target.value ? clock(h * 60 + m) : '';
-            save(); render(); root.querySelector('[data-testid=db-flight-time]').focus(); announce('Flight time updated');
+            if(!Number.isFinite(h)||!Number.isFinite(m))return;
+            if(date==='2026-11-25'){const item=current().items.find(i=>i.flight);Object.assign(item,{preferred:h*60+m,manualTime:true});}
+            else flightTime = clock(h * 60 + m);
+            save(); render(); root.querySelector('[data-testid=add-flight-time]').focus(); announce('Flight time updated');
         }
     });
     root.addEventListener('submit', e => {
@@ -931,8 +1125,12 @@ function mount(root, ctx = {}) {
                 form.setAttribute('aria-invalid','true');
                 [form.elements.start, endField, durationField].forEach(field => field.setAttribute('aria-invalid','true')); return;
             }
+            resolveTime(date,item,start,length,()=>{
+            reviewTransfers(current(),item);
+            item.originalTitle ||= item.title; item.title=cleanTimeTitle(item.title,item.preferred);
             Object.assign(item,{preferred:start,duration:length,manualTime:true,estimate: !(durationField.value || endField.dataset.manual)});
-            save(); closeTime(); announce(item.kind === 'travel' ? 'Departure time updated.' : 'Activity time updated. Travel and prep are estimated separately.');
+            sortDay(date); save(); closeTime(); announce(item.kind === 'travel' ? 'Departure time updated.' : 'Activity time updated. Travel and prep are estimated separately.');
+            });
             return;
         }
         if (!e.target.matches('.db-form')) return;
@@ -1113,6 +1311,16 @@ function mount(root, ctx = {}) {
     root.addEventListener('pointercancel', cancelDrag);
     root.addEventListener('lostpointercapture', () => { if (drag) cancelDrag(); });
     const api = {
+        shiftUnlocked: (on,id,start) => {
+            const stored=days[on]||buildSuggested(on),item=stored.items.find(i=>i.id===id);
+            if(!item||item.locked)return false;
+            const before=dayResult(stored,on).items,visible=before.find(i=>i.id===id);
+            if(!visible||!canShiftUnlocked(before,id,start))return false;
+            const copy=clone(stored),target=copy.items.find(i=>i.id===id);Object.assign(target,{preferred:start,manualTime:true});
+            const after=dayResult(copy,on).items;
+            if(before.some(i=>i.locked&&!after.some(j=>j.id===i.id&&j.start===i.start&&j.end===i.end)))return false;
+            days[on]=copy;save();render();return true;
+        },
         swapItem: (id, alternative) => { const item=current().items.find(i=>i.id===id); if(!item || item.locked)return false; Object.assign(item, alternative, {id:item.id, preferred:alternative.start ?? item.preferred, manualTime:true, duration:item.duration, checkinSwap:true}); delete item.textTime; save(); render(); return true; },
         render, selectDay, renderPrint, root, openTime, timeInstances, draftItems: () => clone(draftItems()),
         getDay: () => clone(current()),
@@ -1127,7 +1335,7 @@ function mount(root, ctx = {}) {
     return api;
 }
 const active = () => (session.active && session.active.root.isConnected ? session.active : null);
-window.DayBuilder = {parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+window.DayBuilder = {canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
     toggleLock, exportDays, importDays, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
     openTime: (date, id) => active()?.openTime(date, id),
@@ -1146,7 +1354,8 @@ window.DayBuilder = {parseDuration, buildSuggested, reflow, commuteMinutes, moun
     print: on => active()?.renderPrint(on),
     schedule: () => active()?.schedule() || null,
     draftItems: () => active()?.draftItems() || [],
+    shiftUnlocked: (on,id,start) => active()?.shiftUnlocked(on,id,start) || false,
     swapItem: (id, alternative) => active()?.swapItem(id, alternative),
     addToDay: (date, spec) => active()?.addToDay(date, spec) || {ok: false, reason: 'Open a draft first'},
-    resetSession: () => { session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
+    resetSession: () => { stayOverride=''; session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
 })();

@@ -1,4 +1,6 @@
 """Supervisor-run browser regressions. No synthetic state changes."""
+from test_full import reopen_dashboard
+from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
 from playwright.async_api import expect
 from test_full import new, show_day
@@ -7,25 +9,34 @@ BASE = 'http://127.0.0.1:8833/index.html'
 
 async def reopen(pg):
     await pg.reload()
-    await pg.get_by_test_id('continue-saved').click()
+    await reopen_dashboard(pg)
+    await wait_plan(pg)
     # Saved trips open in the editable draft.
-    await pg.get_by_test_id('day-pace').wait_for()
+    await wait_plan(pg)
+
+async def expand_group(pg):
+    toggle = pg.get_by_test_id('group-toggle')
+    if await toggle.get_attribute('aria-expanded') != 'true':
+        await toggle.click()
 
 async def goals(pg):
-    return await pg.locator('.day-head > .wellness-rings .ring-values').inner_text()
+    return await pg.locator('.day-head > .wellness-rings svg').get_attribute('aria-label')
 
 async def checks(browser):
     for width in (1280, 390):
         ctx, pg = await new(browser, BASE, width)
         try:
             await pg.get_by_test_id('demo-oahu').click()
-            await pg.get_by_test_id('day-pace').wait_for(timeout=45000)
+            from test_full import continue_prep
+            await continue_prep(pg)
+            await wait_plan(pg)
             before = []
             for i in range(3):
                 await show_day(pg, i)
                 await expect(pg.locator('[data-testid=day-pace-option][data-value=trip]')).to_be_checked()
                 before.append(await goals(pg))
             await show_day(pg, 1)
+            await open_day_pace(pg)
             await pg.locator('[data-testid=day-pace-option][data-value=athlete]').click()
             text = await goals(pg)
             assert '8 h 30 m' in text and '90 min' in text and '40 min' in text
@@ -35,8 +46,10 @@ async def checks(browser):
             await reopen(pg)
             await show_day(pg, 1)
             await expect(pg.locator('[data-testid=day-pace-option][data-value=athlete]')).to_be_checked()
+            await open_day_pace(pg)
             await pg.locator('[data-testid=day-pace-option][data-value=trip]').click()
             assert await goals(pg) == before[1]
+            await expand_group(pg)
             rows = pg.get_by_test_id('traveler-row')
             await expect(rows).to_have_count(2)
             name = rows.nth(1).get_by_test_id('traveler-name')
@@ -59,9 +72,12 @@ async def checks(browser):
             await expect(details).to_have_attribute('aria-expanded', 'false')
             assert not any(w in text.lower() for w in ('winner', 'best', 'rank'))
             await reopen(pg)
+            await expand_group(pg)
             await expect(pg.get_by_test_id('traveler-name').nth(1)).to_have_value('Sam')
             await expect(pg.get_by_test_id('traveler-pace').nth(1)).to_have_value('gentle')
             await pg.evaluate("window.__gonow.go('pace')")
+            await expect(pg.get_by_test_id('pace-option')).to_have_count(0)
+            await pg.get_by_test_id('pace-summary-edit').click()
             await expect(pg.get_by_test_id('pace-option')).to_have_count(4)
             await pg.locator('[data-testid=pace-option][data-value=gentle]').check()
             assert await pg.evaluate('window.__gonow.state.answers.level') == 'gentle'

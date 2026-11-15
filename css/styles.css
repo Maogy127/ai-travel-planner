@@ -921,7 +921,31 @@ h1[tabindex="-1"]:focus, h2[tabindex="-1"]:focus, [tabindex="-1"]:focus:not(:foc
 .tile-toggle small{display:block;color:var(--ink-2);font-size:12px;font-weight:400}
 .tile-content{padding:24px}.tile-content[hidden]{display:none}
 .bucket{display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:16px 0;border-top:1px solid var(--line)}.bucket small{grid-column:1/-1}
-.covers{display:flex;flex-wrap:wrap;gap:12px;background:var(--soft);padding:16px;border-radius:14px}.covers .checkrow{flex:1 1 110px}
+/* Keep option words intact, including in narrow flex/grid tracks. */
+label:has(input[type=checkbox]),label:has(input[type=radio]),
+button[aria-pressed],[role=radio],[role=checkbox]{
+ white-space:normal;overflow-wrap:normal;word-break:normal;hyphens:none;
+}
+/* Legends flow inside painted panels rather than cutting the top edge. */
+.covers>legend,.db-time-editor fieldset>legend{float:left;width:100%;flex:0 0 100%;padding:0;margin:0 0 10px;box-sizing:border-box}
+.db-time-editor fieldset>legend+*{clear:both}
+.covers{display:block;min-width:0;background:var(--soft);padding:16px;border-radius:14px}
+.covers>legend{float:left;width:100%;margin-bottom:10px}
+.covers-grid{clear:both;display:flex;flex-wrap:wrap;gap:10px}
+.covers .checkrow{
+ flex:0 1 auto;min-height:44px;box-sizing:border-box;max-width:100%;
+ gap:8px;padding:10px 12px;margin:0;border:1px solid var(--boundary);
+ border-radius:999px;background:var(--surface);color:var(--ink);cursor:pointer;
+}
+.covers .checkrow input,.covers .checkrow svg{flex-shrink:0}
+.covers .checkrow input{accent-color:var(--ink)}
+.covers .checkrow:has(input:checked){background:var(--paper);border-color:var(--ink)}
+@media(max-width:480px){
+ .covers-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}
+ .covers .checkrow{padding:8px;gap:5px;font-size:13px}
+ .covers .checkrow span{overflow-wrap:normal;word-break:normal}
+ .covers .checkrow:last-child{grid-column:1/-1}
+}
 .reduce-motion *{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 @media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
 /* Share, route and rank stay small companions to the journal. */
@@ -1364,7 +1388,6 @@ button{overflow-wrap:normal;word-break:normal}
 .day-feel textarea{display:block;width:100%;box-sizing:border-box;margin:6px 0;font:inherit;color:var(--ink);background:var(--surface)}
 .day-feel article{padding:8px 12px;margin:6px 0;background:var(--soft);border-radius:12px}
 .day-feel article p{margin:0 0 4px}.feel-selector{display:flex;flex-wrap:wrap;gap:4px}
-.moments-summary{padding:16px;background:var(--surface);border:1px solid var(--boundary);border-radius:14px;margin:16px 0}
 .traveler-alternative{display:block;font-size:12px;color:var(--ink);margin:4px 0}
 
 /* v2: focused home and compact, accessible daily controls. */
@@ -1383,7 +1406,6 @@ button{overflow-wrap:normal;word-break:normal}
 .feel-input .voice-controls{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .feel-input .voice-controls label{display:flex;align-items:center;gap:8px}
 .day-feel textarea::placeholder,.day-feel [role=status]{color:var(--ink-2)}
-.moment-dot{width:6px;height:6px;border-radius:50%;background:currentColor;display:inline-block;margin-right:8px;flex:none}
 .travelers{display:grid;grid-template-columns:minmax(0,1fr);width:100%;gap:8px}
 [data-testid=traveler-row]{grid-template-columns:minmax(90px,140px) minmax(100px,136px) minmax(0,1fr);gap:12px}
 [data-testid=traveler-rings]{min-width:0;grid-column:auto}
@@ -1405,7 +1427,7 @@ button{overflow-wrap:normal;word-break:normal}
 /* v2 regression fixes: inline traveler details and full-size check-in targets. */
 @media(max-width:360px){
  /* The padlock retains its accessible name and pressed state; omit the duplicate badge. */
- .db-root .db-controls>.db-lock{display:none}
+ .db-root .db-controls>.db-lock{display:inline-flex}
  .db-daycard .db-activity{min-width:0}
  .db-daycard .db-controls{gap:2px}
 }
@@ -1415,4 +1437,121 @@ button{overflow-wrap:normal;word-break:normal}
 .db-root .day-feel button{min-width:44px;min-height:44px;box-sizing:border-box;flex-shrink:0}
 @media(min-width:768px){
  [data-testid=traveler-row]{grid-template-columns:140px 136px minmax(0,1fr)}
+}
+
+/* Interest choices share the existing whole-word option rules and target sizing. */
+@media(min-width:768px){.style-options{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Compact home mode choice and local catalog cards. */
+.mode-switch{display:flex;gap:4px;background:var(--surface);border:1px solid var(--boundary);border-radius:12px;padding:2px;margin:8px 0 12px}
+.mode-switch button{flex:1;min-height:44px;padding:8px 10px;border:0;border-radius:9px;white-space:normal;word-break:normal;overflow-wrap:normal;color:var(--ink)}
+.mode-switch button[aria-checked=true]{background:var(--ink);color:var(--surface)}
+.mode-switch button:focus-visible,.local-length-options label:focus-within{outline:3px solid var(--ink);outline-offset:3px}
+.local-length-options{display:flex;flex-wrap:wrap;gap:8px}.local-length-options label{display:flex;align-items:center;gap:8px;min-height:44px;padding:8px 12px;border:1px solid var(--boundary);border-radius:12px}
+.local-plan{max-width:780px}.local-plan .card{padding:18px;margin:12px 0}.local-plan h3{margin:8px 0;word-break:normal;overflow-wrap:normal}.local-plan time{font-weight:600}
+
+/* Merged food groups share the accessible wrapping activity pills. */
+.food-group {display:flex;flex-direction:column;gap:12px;padding:20px;margin:16px 0;border:1px solid var(--line,#626b65);border-radius:16px;background:var(--panel,#fff)}
+.food-group>legend {float:left;width:100%;padding:0;font-weight:700;font-size:1.2rem}
+.food-group .activity-chips {display:flex;flex-wrap:wrap;gap:8px}
+.food-group button {min-height:44px;white-space:normal;word-break:normal;overflow-wrap:normal}
+.food-group button:focus-visible {outline:3px solid #245a43;outline-offset:3px}
+[hidden] {display:none!important}
+
+.time-field{display:flex;align-items:center;border:1px solid #a48170;border-radius:12px;background:#fffaf3;min-height:48px;cursor:pointer;overflow:hidden}.time-field .time-value{width:7em;min-height:48px;border:0;background:transparent;color:#49382f;margin:0}.time-display{flex:1;min-height:48px;background:#fffaf3;color:#713d2c;border:0;margin:0;white-space:nowrap}.time-picker{position:fixed;margin:0;width:min(350px,calc(100vw - 24px));padding:20px;border:1px solid #a48170;border-radius:18px;background:#fff8ef;color:#49382f;font-family:Inter,sans-serif;max-height:85dvh;overflow:auto}.time-picker::backdrop{background:rgb(40 27 20 / .25)}.time-picker button{min-width:44px;min-height:44px;color:#713d2c;background:#fff8ef;border:1px solid #a48170;border-radius:10px;margin:4px;padding:8px 12px}.time-chips{display:flex;flex-wrap:wrap}.time-picker output{display:inline-block;min-width:48px;text-align:center}.time-picker [data-steppers]>div{display:flex;align-items:center;justify-content:center}@media(max-width:767px){.time-picker{left:0;right:0;top:auto;bottom:0;width:100%;max-width:none;box-sizing:border-box;border-radius:20px 20px 0 0}}
+
+[data-testid="needs-time"]{padding:16px;border:1px solid var(--boundary);border-radius:14px;margin:12px 0}
+[data-testid="move-conflict"]{max-width:min(540px,94vw)}
+
+/* Ring suggestions stay below their estimates and wrap on narrow screens. */
+[data-testid=sleep-nudge],[data-testid=recovery-suggestion]{grid-column:1/-1;flex-basis:100%;min-width:0;max-width:100%;font-size:14px;overflow-wrap:anywhere}
+[data-testid=sleep-nudge] button,[data-testid=recovery-suggestion] button{white-space:normal;max-width:100%;min-height:44px;margin:4px 6px 4px 0}
+/* budget-fix: quiet itinerary and trip prep */
+[data-testid="trip-prep"] section[data-testid="prep-section"]{margin:24px 0;padding:20px;border:1px solid var(--line);border-radius:16px}
+[data-testid="prep-section"]>h2{display:flex;align-items:center;gap:12px;text-align:left;justify-content:flex-start}
+[data-testid="trip-prep"] .checkrow{min-height:44px;align-items:center}
+[data-testid="trip-prep"] input[type=checkbox]{width:24px;height:24px;flex-shrink:0}
+[data-testid="trip-prep"]{overflow-wrap:normal;word-break:normal}
+[data-testid="trip-prep"] button,[data-testid="trip-prep"] summary,.prep-header{min-height:44px}
+.day-head{display:flex;flex-direction:column;align-items:stretch;gap:8px}
+.day-head > .wellness-rings{order:-1;margin:0;display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+.day-head .day-title{order:-2}.day-title>p{margin:4px 0}.day-title .section-label{display:none}
+.day-head > .compact-rings svg{width:32px;height:32px;flex:none}
+.day-head .compact-values{font-size:13px;white-space:normal}
+.day-head [data-testid="ring-breakdown-toggle"]{min-height:44px;background:transparent;border:0;padding:4px;display:flex;align-items:center;gap:8px;text-align:left;color:var(--ink)}
+.day-head [data-testid="ring-breakdown"]{flex-basis:100%}
+.day-head summary,.day-options>summary,.day-add-panel>summary{font-size:14px;min-height:44px;display:flex;align-items:center;cursor:pointer}
+.day-head [data-testid="group-toggle"]{background:transparent;border:0;text-align:left;padding:4px 0;min-height:44px}
+.db-root [data-testid="db-more"],.db-root [data-testid="db-lock"]{min-width:44px;min-height:44px;padding:12px;background:transparent;border:0;box-shadow:none;color:var(--ink)}
+.db-root .db-travel{display:block;border:0;border-left:1px solid var(--line);border-radius:0;margin:0 0 0 24px;padding:10px 12px;background:transparent}
+.db-root .db-lock{display:inline-flex}.db-heading .db-summary{display:none}
+.day-add-panel{margin-top:12px}.day-head [data-testid="dinner-balance"]{display:none}
+@media(max-width:600px){.day-head .compact-values{font-size:12px}.day-head [data-testid="ring-breakdown-toggle"]{width:100%}.shell{max-width:100%}}
+.day-add-panel>summary,.day-options>summary,.plan-options>summary{color:var(--ink-2);font-weight:500}
+.db-daycard .db-activity>.db-expand small,.db-daycard .db-activity>small:not(.traveler-alternative){display:none}
+[data-testid="prep-section"] .sources{display:block;margin:0 0 12px 36px}
+.plan-options>summary{min-height:44px;cursor:pointer}
+[data-testid="trip-prep"] #local-info p,[data-testid="trip-prep"] #local-info small,[data-testid="trip-prep"] .partner-link{overflow-wrap:normal;word-break:normal}
+[data-testid="trip-prep"] .checkrow>span{min-width:0;white-space:normal}
+#tab-content>.tile-grid{display:block}
+#tab-content>.tile-grid>.day{margin-bottom:24px}
+
+/* Returning travelers and compact transport cards. */
+.dashboard-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:20px;margin-top:24px}.dashboard .card{min-width:0;padding:20px}.dashboard h1{font-family:var(--font-display);margin-bottom:20px}.dashboard button,.dashboard summary,dialog[role=alertdialog] button{min-height:44px;min-width:44px}.trip-title{font:inherit;color:inherit;text-align:left;padding:0;background:none;border:0;white-space:normal}.dashboard,.dashboard *{word-break:normal;overflow-wrap:normal;hyphens:none}.trip-menu>div{display:flex;flex-wrap:wrap;gap:8px;padding-top:8px}.today-block{margin-top:24px}dialog[role=alertdialog]{max-width:min(480px,calc(100vw - 32px));box-sizing:border-box;padding:24px;border:1px solid var(--boundary);border-radius:16px;background:var(--surface);color:var(--ink)}.db-transport>.transport-icon{flex:0 0 28px;align-self:center;margin:8px}.db-daycard .db-transport>.db-activity{padding-block:4px}.db-transport .db-expand{min-height:44px}.db-transport [data-testid=add-flight-time]{min-height:44px;padding:4px 8px;font-size:14px}.db-transport .db-thumb{display:none}
+.db-daycard .db-activity{overflow-wrap:normal;word-break:normal;hyphens:none}
+.item.travel,.item.flight{padding-block:8px}.item.travel>svg,.item.flight>svg{width:24px;height:24px}
+/* Focused preparation and a single time value at every viewport. */
+.time-field{position:relative}.time-field .time-value{width:100%;flex:1}.time-field .time-value:not(:focus){color:transparent}.time-field .time-display{position:absolute;inset:0;width:100%;text-align:left;padding-left:14px}.time-field .time-value{position:absolute;width:1px;height:1px;min-height:0;padding:0;clip-path:inset(50%)}
+.time-field .time-display{display:block;position:relative;inset:auto}
+.plan-title .local-times{display:block;margin:12px 0}.export-actions{gap:8px;padding:20px 0}.export-actions button{font-size:13px;padding:8px 12px}
+[data-testid="trip-prep"]{width:100%;max-width:900px;box-sizing:border-box;min-width:0}
+[data-testid="trip-prep"] [data-testid="prep-section"]{display:block;width:100%;box-sizing:border-box;margin:14px 0;padding:16px;border:1px solid var(--line);border-radius:16px;min-width:0}
+[data-testid="trip-prep"] summary{padding:10px 0;font-weight:600;cursor:pointer}
+[data-testid="trip-prep"] .packing-category{display:block;margin:10px 0;border-top:1px solid var(--line)}
+[data-testid="trip-prep"] .checkrow{display:flex;width:100%;box-sizing:border-box;min-height:44px;gap:10px;padding:8px 0}
+[data-testid="trip-prep"] .checkrow>span{flex:1;min-width:0}[data-testid="trip-prep"] .checkrow>label{width:auto;flex:0 0 64px;margin:0}[data-testid="trip-prep"] [data-quantity]{width:64px;min-width:0}
+[data-testid="trip-prep"] [data-testid="packing-list"]{display:block;width:100%;min-width:0}
+.start-grid.origin-question{display:block;max-width:720px;margin:auto}.origin-question .intro{width:100%}
+[data-testid="trip-prep"] #trip-essentials>summary{display:flex;align-items:center;gap:12px}
+@media print{.itinerary-days,.itinerary-days[hidden]{display:block!important}}
+/* Compact day disclosures and anchored time controls. */
+.day-head{gap:0;margin-bottom:8px}.day-head>details,.day-head>[data-testid="group-section"]{margin:0;padding:0}
+.day-head>details>summary,.day-head [data-testid="group-toggle"],.day-notes>summary{min-height:32px;font-size:14px;line-height:1.4;margin:0;padding:4px 0}
+.day-head>[data-testid="morning-feel"]{order:-1}
+.day-head [data-testid="ring-breakdown-toggle"]{margin:0;min-height:44px;min-width:44px}
+.day-head [data-testid="group-toggle"]{min-height:44px;min-width:44px}
+.day-head .pace-control .day-guidance{margin:6px 0}
+.origin-destination{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.text-button{border:0;background:none;padding:0;text-decoration:underline}
+.covers .checkrow{min-width:0;width:auto;box-sizing:border-box}.covers .checkrow span{min-width:0;overflow-wrap:normal;word-break:normal}
+@media(max-width:480px){.covers .checkrow input{margin:0}.covers .checkrow svg{width:16px;height:16px}.covers .checkrow span{white-space:normal}.covers .checkrow:not(:last-child) span{white-space:nowrap}}
+.trip-menu>summary,.item-more>summary{list-style:none;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center;font-size:24px;cursor:pointer}.trip-menu>summary::-webkit-details-marker,.item-more>summary::-webkit-details-marker{display:none}
+[data-testid="prep-section"]>h2{display:block;text-align:left}[data-testid="prep-section"]>h2>svg{display:inline-block;vertical-align:middle;margin-right:8px}
+.time-picker{box-sizing:border-box;max-height:calc(100dvh - 24px)}.time-chips[hidden]{display:none}
+.day-head .day-title{order:-3}.day-head>.wellness-rings{order:-2}.day-head>.day-feel{order:-1}
+[data-testid="prep-section"]>summary{display:block;text-align:left;list-style:none}[data-testid="prep-section"]>summary>svg{display:inline-block;vertical-align:middle;margin-right:8px}
+[data-trip-more],.item-more>summary,.icon-button{width:44px;height:44px;min-width:44px;padding:8px;border:1px solid var(--line);border-radius:12px;background:var(--surface);color:var(--ink);font-size:24px;display:inline-flex;align-items:center;justify-content:center}.icon-button svg{width:20px;height:20px}
+.traveler-alternative{grid-column:1/-1;display:block;padding:4px 10px}
+
+@media print{main details::details-content{display:block!important;content-visibility:visible!important;height:auto!important}main details> :not(summary){display:block!important;content-visibility:visible!important;height:auto!important;max-height:none!important}}
+
+/* Print disclosure bodies remain readable, including action-only bodies. */
+@media print {
+ main details > *:not(summary), main details > div > button {
+  display:block!important; visibility:visible!important; content-visibility:visible!important;
+  height:auto!important; max-height:none!important;
+ }
+}
+
+.db-root:not(.db-dragging) [data-testid=db-more-menu]:not([hidden]){visibility:visible;max-height:calc(100dvh - 32px);overflow-y:auto}
+
+/* Keep coarse targets full sized; raw time values remain fillable off screen. */
+.db-root input:not([type=hidden]):not(.time-value),.db-root select{min-width:44px;min-height:44px;box-sizing:border-box}
+.db-root .time-field .time-value{left:0;top:0;width:44px;height:44px;min-height:44px;clip-path:inset(50%)}
+.db-root [data-testid=db-more-menu]:not([hidden]){display:block;z-index:1000}
+.db-root [data-testid=db-more-menu] .db-item-actions{display:block;visibility:visible}
+
+/* Pending cards live in the day list: keep mobile activity search in flow. */
+@media(max-width:959px){
+ .db-root.db-dock:has([data-testid="needs-time"]) .db-dock-tray{position:static;transform:none;max-height:none;display:none}
+ .db-root.db-dock:has([data-testid="needs-time"]) .db-dock-tray.is-open{display:block}
 }

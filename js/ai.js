@@ -7,6 +7,8 @@
        makes no network requests and claims no live inventory.
     */
     function matchesCuratedDemo(answers) {
+        // Both new demo interests and migrated legacy demo interests match.
+        var styles = JSON.stringify(window.GoNowStyles.normalize(answers.styles).sort());
         var expected = {
             origin: 'Los Angeles (LAX)',
             start: '2026-11-25',
@@ -24,12 +26,13 @@
             return answers[key] === expected[key];
         }) && !answers.flexible && answers.personal && answers.includeFlights !== false
             && JSON.stringify(ages) === '[18,19]'
-            && JSON.stringify((answers.styles || []).slice().sort()) === '["relaxing","scenic"]'
-            && !(answers.food || []).length && !answers.allergies;
+            && (styles === '["hotel","scenic"]' || styles === '["scenic"]')
+            && !(answers.foodLoves || []).length; // Dietary checks adapt cards without replacing the curated itinerary.
     }
 
     window.AI = {
         generatePlan: function (answers, opts) {
+            answers = Object.assign({}, answers, {styles: window.GoNowStyles.normalize(answers.styles)});
             return new Promise(function (resolve) {
                 setTimeout(function () {
                     var destination = Engine.matchDestination(answers.destination);
@@ -43,7 +46,7 @@
                         plan.end || plan.days[plan.days.length - 1].date
                     ) + ' · ' + plan.days.length + ' days · ' + (curated
                         ? 'Couple · Ages 18 & 19'
-                        : (answers.who || 'Travelers') + ' · Ages ' + (answers.ages || []).join(' & '));
+                        : (answers.who || 'Travelers').replace(/^./,function(c){return c.toUpperCase();}) + ' · Ages ' + (answers.ages || []).join(' & '));
                     // Safety guidance for the fixed demo must reflect its fixed travelers.
                     resolve(Engine.applyAgeRules(plan, curated
                         ? Object.assign({}, answers, { ages: [18, 19] })

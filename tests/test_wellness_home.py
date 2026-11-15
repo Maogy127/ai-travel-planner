@@ -1,4 +1,6 @@
 """Wellness home and persistence regressions; run in a Chromium-capable environment."""
+from test_full import open_home_flow
+from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
 import subprocess
 import sys
@@ -61,21 +63,27 @@ async def checks(browser):
             assert not any('fonts.googleapis.com' in u for u in requests)
             await calm(pg, f'home {width}')
             await pg.get_by_test_id('start-new-trip').click()
-            await expect(pg.get_by_test_id('start-to')).to_have_value('San Diego, morning walks')
+            await expect(pg.get_by_test_id('edit-destination')).to_be_visible()
+            assert await pg.get_by_test_id('start-to').count() == 0
+            assert await pg.evaluate('__gonow.state.answers.destination') == 'San Diego, morning walks'
             for screen in ('dates','budget','who','ages','style','food','pace','musts'):
                 await pg.evaluate('(s)=>__gonow.go(s)', screen)
                 await calm(pg, f'{screen} {width}')
             await pg.evaluate("__gonow.go('home')")
+            await open_home_flow(pg)
             await pg.get_by_test_id('demo-oahu').click()
+            from test_full import continue_prep
+            await continue_prep(pg)
             await expect(pg.get_by_test_id('db-root')).to_be_visible()
             await calm(pg, f'plan {width}')
-            await expect(pg.locator('.day-head > .wellness-rings figcaption')).to_have_text('Plan estimates, not medical advice')
+            await expect(pg.locator('.day-head > .wellness-rings figcaption')).to_have_count(0)
             await expect(pg.get_by_test_id('rank-badge')).to_have_count(0)
             await expect(pg.locator('.day-head > [data-testid=wellness-rings]')).to_be_visible()
             await pg.get_by_test_id('view-map').click()
             await expect(pg.get_by_test_id('trip-map')).to_be_visible()
             await calm(pg, f'map {width}')
             await pg.evaluate('window.SpeechRecognition=undefined;window.webkitSpeechRecognition=undefined;__gonow.go("home")')
+            await open_home_flow(pg)
             await expect(pg.get_by_test_id('home-voice-unsupported')).to_have_text('Voice input needs Chrome, Edge or Safari.')
             await expect(pg.get_by_test_id('home-voice-btn')).to_be_disabled()
             print('PASS wellness picker, chips, voice, persistence, rings and local fonts', width)

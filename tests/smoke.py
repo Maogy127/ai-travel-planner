@@ -1,3 +1,5 @@
+from test_full import reopen_dashboard
+from test_full import wait_plan
 import asyncio,json
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -14,7 +16,7 @@ async def main():
   await page.goto(SITE.joinpath('index.html').resolve().as_uri()+'?fast=1')
   await page.screenshot(path=str(ROOT/'screenshots'/'start-mobile.png'),full_page=True)
   await page.get_by_test_id('demo-oahu').click()
-  await page.get_by_test_id('age-rules').wait_for(state='attached')
+  await wait_plan(page)
   print('Days:',await page.get_by_test_id('plan-day').count())
   print('Overflow:',await page.evaluate('document.documentElement.scrollWidth > innerWidth'))
   first=page.locator('details').filter(has=page.locator('summary',has_text='What to bring')).first
@@ -23,15 +25,16 @@ async def main():
   tick=first.get_by_test_id('bring-item').first
   pid=await tick.get_attribute('data-pack-id')
   await tick.check()
-  await page.get_by_test_id('tab-packing').click()
+  await page.get_by_test_id('trip-prep-button').click()
+  await page.get_by_test_id('trip-prep').locator('details').evaluate_all('els=>els.forEach(e=>e.open=true)')
   assert await page.locator('input[data-pack-id="'+pid+'"]').is_checked()
   await page.reload()
-  if await page.get_by_test_id('continue-saved').count():
-    await page.get_by_test_id('continue-saved').first.click()
-  await page.get_by_test_id('age-rules').wait_for(state='attached')
-  await page.get_by_test_id('tab-packing').click()
+  await reopen_dashboard(page)
+  await wait_plan(page)
+  await page.get_by_test_id('trip-prep-button').click()
+  await page.get_by_test_id('trip-prep').locator('details').evaluate_all('els=>els.forEach(e=>e.open=true)')
   assert await page.locator('input[data-pack-id="'+pid+'"]').is_checked()
-  await page.get_by_test_id('tab-plan').click()
+  await page.get_by_test_id('prep-continue').click()
   await page.locator('[data-testid=item-remove]').first.evaluate("""e=>{const d=e.closest('.db-detail');if(d&&d.hidden){const b=document.querySelector('[aria-controls=\"'+d.id+'\"]');if(b)b.click();}}""")
   await page.get_by_test_id('item-remove').first.click()
   await page.get_by_test_id('undo').click()
@@ -39,30 +42,27 @@ async def main():
   await page.locator('#day-1 [data-testid=relax-toggle]').check()
   assert await page.locator('h3',has_text='Diamond Head —').count()==0
   await page.reload()
-  if await page.get_by_test_id('continue-saved').count():
-    await page.get_by_test_id('continue-saved').first.click()
-  await page.get_by_test_id('age-rules').wait_for(state='attached')
+  await reopen_dashboard(page)
+  await wait_plan(page)
   assert await page.locator('#day-1 [data-testid=relax-toggle]').is_checked()
   await page.locator('[data-testid=item-edit]').first.evaluate("""e=>{const d=e.closest('.db-detail');if(d&&d.hidden){const b=document.querySelector('[aria-controls=\"'+d.id+'\"]');if(b)b.click();}}""")
   await page.get_by_test_id('item-edit').first.click()
   await page.get_by_test_id('edit-note').fill('Testing saved note')
   await page.get_by_test_id('edit-save').click()
   await page.reload()
-  if await page.get_by_test_id('continue-saved').count():
-    await page.get_by_test_id('continue-saved').first.click()
-  await page.get_by_test_id('age-rules').wait_for(state='attached')
+  await reopen_dashboard(page)
+  await wait_plan(page)
   assert await page.get_by_text('Your note: Testing saved note').count()==1
   await page.get_by_test_id('start-over').click()
-  await page.get_by_test_id('start-new-trip').click()
+  await page.get_by_test_id('home-unsure').click()
   await page.get_by_test_id('start-from').fill('Seattle')
-  await page.get_by_test_id('start-unsure').click()
   await page.get_by_test_id('start-next').click()
   for step in range(5): await page.get_by_test_id('q-skip').click()
   print('Recommendations:',await page.get_by_test_id('rec-card').count())
   await page.get_by_test_id('rec-more').click()
   await page.get_by_test_id('rec-choose').first.click()
   await page.get_by_test_id('fork-no').click()
-  await page.get_by_test_id('tab-plan').wait_for()
+  await wait_plan(page)
   print('Template days:',await page.get_by_test_id('plan-day').count())
   print('Template overflow:',await page.evaluate('document.documentElement.scrollWidth > innerWidth'))
   await page.screenshot(path=str(ROOT/'screenshots'/'template-mobile.png'),full_page=True)

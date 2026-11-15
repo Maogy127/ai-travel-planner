@@ -80,6 +80,8 @@ assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arri
  global.localStorage = {getItem() {return null;}, setItem() {}};
  window.matchMedia = () => ({matches: false});
  const mounted = db.mount(root);
+ assert(content.innerHTML.includes('data-transport-icon="car"'));
+ assert(content.innerHTML.includes('data-transport-icon="shuttle"'));
  assert(content.innerHTML.includes('5:30 PM · Walk ~10 min · arrive 5:40 PM'));
  assert(content.innerHTML.includes('6:40 PM · Walk ~10 min · arrive 6:50 PM'));
  assert(content.innerHTML.includes('6:55 PM · Uber ~20 min · arrive 7:15 PM'));
@@ -87,7 +89,7 @@ assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arri
  const click = (action, id, zone='day') => {
   const row = {dataset: {dbId: id, dbZone: zone}};
   const button = {dataset: {dbAction: action}, closest() {return row;}};
-  listeners.click({target: {closest() {return button;}}});
+  listeners.click({target: {closest(selector) {return selector === '[data-testid=add-flight-time]' ? null : button;}}});
  };
  click('reset');
  click('down', 'photos');

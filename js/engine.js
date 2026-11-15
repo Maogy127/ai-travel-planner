@@ -69,7 +69,7 @@
     }
     function whyFits(a, d, m, w) {
         var styles=a.styles||[], strengths= {
-            relaxing:'Unhurried days and downtime', hotel:'Comfortable hotel stays and pool time', wandering:'Neighborhood walks and local discoveries', scenic:'Scenic viewpoints and photo stops', adventure:'Outdoor activities and adventurous days'
+            hotel:'Comfortable hotel stays and pool time', wandering:'Neighborhood walks and local discoveries', scenic:'Scenic viewpoints and photo stops', food:'Local food and neighborhood cafés', culture:'Museums, history and local stories', nature:'Parks, gardens and shorelines'
         };
         var style=styles[0], group= {
             couple:'a trip for two', solo:'your solo trip', family:'your family trip', friends:'your trip with friends'
@@ -80,9 +80,15 @@
             month:'long'
         })+'.', a.budget?'About $'+cost(a, d).total.toLocaleString('en-US')+' for your '+tripDays(a)+' days'+(cost(a, d).total<=a.budget?' fits your budget.':'; compare this with your budget.'):'Base yourself around '+d.areas+' for '+tripDays(a)+' days of exploring.'];
     }
+    // Neutral interests when skipped; pace alone controls the number of activities.
+    function selectedStyles(a) {
+        var styles=window.GoNowStyles.normalize(a.styles);
+        return styles.length?styles:['scenic','wandering'];
+    }
     function recommend(a) {
+        a=Object.assign({},a,{styles:selectedStyles(a)});
         return window.CATALOG.map(function(d) {
-            var c=cost(a, d), m=month(a), w=d.climate[m-1], styles=a.styles||['relaxing'];
+            var c=cost(a, d), m=month(a), w=d.climate[m-1], styles=selectedStyles(a);
             var score=styles.reduce(function(n, s) {
                 return n+(d.styles[s]||0)*10;
             }, 0)+(d.bestMonths.indexOf(m)>=0?12:0)+(d.goodFor.indexOf(a.who)>=0?6:0)-(a.budget&&c.total>a.budget?Math.min(25, (c.total-a.budget)/200):0);
@@ -94,6 +100,7 @@
         });
     }
     function buildTemplatePlan(a, d) {
+        a=Object.assign({},a,{styles:selectedStyles(a)});
         var n=tripDays(a), people=(a.ages||[25, 25]).length;
         var start=a.flexible?'2027-'+String(month(a)).padStart(2, '0')+'-01':a.start||'2026-11-25';
         var itemsBase=[ {
@@ -120,12 +127,12 @@
             id:'swim', name:'Swimwear and towel', qty:people
         }
         ];
-        var food=(a.food||[]).filter(function(x) {
+        var food=(a.foodLoves||[]).filter(function(x) {
             return x!=='No preference';
         }).join(', ');
         var meal=function(t, label) {
             return {
-                time:t, kind:'meal', title:label+' near your hotel — local café (pick at booking)'+(food?' · '+food:''), desc:a.allergies?'Tell the venue about allergies / things to avoid: '+a.allergies:'Confirm opening hours and dietary needs at booking.', bring:[], prep:[], sources:[]
+                time:t, kind:'meal', title:label+' near your hotel — local café (pick at booking)'+(food?' · '+food:''), desc:'Check the menu and confirm dietary needs before booking.', bring:[], prep:[], sources:[]
             };
         };
         var days=[];
@@ -137,7 +144,7 @@
                 arr=[ {
                     time:'Arrival', 'kind':'travel', title:'Arrive and transfer to your stay', desc:'Match the transfer to your actual flight.'
                 },  {
-                    time:'Afternoon', kind:'stay', title:'Check in and settle in', desc:a.stay||d.areas
+                    time:'Afternoon', kind:'stay', title:'Check in and settle in', desc:a.stayUnsure?(d.center||'city center'):a.stay||d.center||'city center'
                 }, meal('Evening', 'Dinner')];
             } else if(i===n-1) {
                 arr=[ {
@@ -147,11 +154,11 @@
             } else {
                 arr.push(meal('8:00 AM', 'Breakfast'));
                 var count=a.pace==='Easy'?2:a.pace==='Full-on'?4:3;
-                var styles=a.styles&&a.styles.length?a.styles:['relaxing'];
+                var styles=selectedStyles(a);
                 for(var j=0; j<count; j++) {
-                    var style=styles[(i+j)%styles.length], choices=d.activities[style]||d.activities.relaxing;
+                    var style=styles[(i+j)%styles.length], choices=(d.activities[style]||[]).filter(function(title){return !/breakfast/i.test(title);});choices=choices.length?choices:styles.map(function(key){return d.activities[key];}).find(function(list){return list&&list.length;})||d.activities.scenic;
                     arr.push( {
-                        time:['10:00 AM', '1:00 PM', '3:30 PM', '5:00 PM'][j], kind:style==='relaxing'||style==='hotel'?'rest':'activity', title:choices[(i+j)%choices.length], desc:'Template suggestion. Choose an operator or location at booking; confirm accessibility and suitability.', bookable:style==='adventure', bring:['water', 'sun', 'shoes'].concat(style==='adventure'?['swim']:[]), prep:[ {
+                        time:['10:00 AM', '1:00 PM', '3:30 PM', '5:00 PM'][j], kind:style==='hotel'?'rest':'activity', title:choices[(i+j)%choices.length], desc:'Template suggestion. Choose an operator or location at booking; confirm accessibility and suitability.', bookable:style==='nature', bring:['water', 'sun', 'shoes'].concat(style==='nature'?['swim']:[]), prep:[ {
                             type:'book', text:'Book popular tours 1–2 weeks ahead.', sources:[]
                         },  {
                             type:'age', text:'Water activities: check age/weight limits.', sources:[]
@@ -162,6 +169,7 @@
                 }
                 arr.push(meal('7:00 PM', 'Dinner'));
             }
+            var seenTitles=new Set();arr=arr.filter(function(x){var key=x.title.toLowerCase();if(seenTitles.has(key))return false;seenTitles.add(key);return true;});
             arr.forEach(function(x, j) {
                 x.id='d'+i+'i'+j;
                 x.bring=x.bring||[];
@@ -202,7 +210,7 @@
         });
         var w=d.climate[month(a)-1];
         return {
-            id:'template-'+d.id+'-'+start, title:d.name, image:d.image, start:start, end:days[n-1].date, meta:dateRange(start, days[n-1].date)+' · '+n+' days · '+(a.who||'Couple')+' ('+(a.ages||[25, 25]).join(' & ')+')', stay:a.stay||d.areas, banner:'Sample/template plan — live AI generation coming soon', weather: {
+            id:'template-'+d.id+'-'+start, title:d.name, image:d.image, start:start, end:days[n-1].date, meta:dateRange(start, days[n-1].date)+' · '+n+' days · '+((a.who||'Couple').replace(/^./,function(c){return c.toUpperCase();}))+' ('+(a.ages||[25, 25]).join(' & ')+')', stay:a.stayUnsure?(d.center||'city center'):a.stay||d.center||'city center', banner:'Sample/template plan — live AI generation coming soon', weather: {
                 text:(w.hiF===null?'Climate not researched. Check typical local conditions before packing.':'Rough climate estimate: typically '+w.loF+'–'+w.hiF+'°F. '+w.note+'.')+' Typical conditions, not a forecast.', sources:[]
             }, flags:[], days:days, packing:grouped, tips:[ {
                 sourceType:'general travel guidance (template)', text:'Confirm local opening hours, entry rules and transport before setting out.'

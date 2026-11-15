@@ -2,7 +2,7 @@
    Travel, prep, meals and stays never count. Generic tours, vehicle sightseeing,
    shopping, photos and free time count zero. Walk/stroll .5; hike/swim/surf/bike/
    class/yoga/pilates/easy run 1; tempo/interval run, strength and steep hike 1.5.
-   Movement is capped at 90 credited minutes per block; explicit recovery at 60;
+   Walk blocks cap at 60 credited minutes; other movement caps at 90; explicit recovery at 60;
    pool/beach downtime at 30. Sleep ignores implausible ends and caps the last activity at 26:00. */
 (function(root){
   'use strict';
@@ -30,13 +30,15 @@
       if(['travel','prep','meal','stay'].includes(i.kind))return;
       const text=[i.title,i.desc].join(' ').toLowerCase();
       const w=i.wellness;
+      if(!w&&/\b(?:boat|truck|van|shuttle|uber|parasail|parasailing|dive|diving|snorkel|snorkeling)\b/.test(text)&&!/\bswim(?:ming)?\b/.test(text))return;
+      if(!w&&/photos/i.test(i.title||'')&&!/walk|stroll|wander|on foot/i.test(i.title||''))return;
       // Incidental walking in a photo/tour description is not a planned movement block.
-      if(!w && /photos|shopping|safari|truck|tour|free time/i.test(i.title||'') && !/walk|stroll|hik|swim|surf|cycl|bike|yoga|pilates|run|jog/i.test(i.title||'') && !/pool.*downtime|beach.*downtime/.test(text))return;
-      const type=w?w.type:/pool.*downtime|beach.*downtime/.test(text)?'downtime':/\b(?:spa|massage|stretch(?:ing)?|meditation|breathwork|nap|sauna)\b/.test(text)?'recovery':/steep.*hik|tempo.*run|interval.*run|\b(?:strength|gym|weights)\b/.test(text)?'vigorous':/\b(?:walk(?:ing)?|stroll(?:ing)?)\b/.test(text)?'walk':/\b(?:hike|hiking|swim(?:ming)?|surf(?:ing)?|cycle|cycling|bike|biking|class|yoga|pilates|run(?:ning)?|jog(?:ging)?)\b/.test(text)?'movement':null;
+      if(!w && /photos|shopping|safari|truck|tour|free time/i.test(i.title||'') && !/walk|stroll|wander|on foot|hik|swim|surf|cycl|bike|yoga|pilates|run|jog/i.test(text) && !/pool.*downtime|beach.*downtime/.test(text))return;
+      const type=w?w.type:/pool.*downtime|beach.*downtime/.test(text)?'downtime':/\b(?:spa|massage|stretch(?:ing)?|meditation|breathwork|nap|sauna)\b/.test(text)?'recovery':/steep.*hik|tempo.*run|interval.*run|\b(?:strength|gym|weights)\b/.test(text)?'vigorous':/\b(?:walk(?:ing)?|stroll(?:ing)?|wander(?:ing)?|on foot)\b/.test(text)?'walk':/\b(?:hike|hiking|swim(?:ming)?|surf(?:ing)?|cycle|cycling|bike|biking|class|yoga|pilates|run(?:ning)?|jog(?:ging)?)\b/.test(text)?'movement':null;
       if(!type)return;
       const recovery=['downtime','recovery','spa','massage','stretch','meditation','breathwork','nap','sauna'].includes(type);
       const weight=recovery?1:w&&Number.isFinite(w.weight)?w.weight:type==='walk'?.5:type==='vigorous'?1.5:1;
-      const cap=recovery?(type==='downtime'?30:60):90;
+      const cap=recovery?(type==='downtime'?30:60):type==='walk'?60:90;
       const credited=Math.min(cap,duration*weight);
       if(!credited)return;
       if(recovery)rec+=credited;else move+=credited;
@@ -51,22 +53,50 @@
       const end=Math.min(wake,rise===null?1440:rise);
       sleep=Math.max(0,(1440+end-start)/60);
     }
-    return {sleep:clamp(sleep/goals.sleep),move:clamp(move/goals.move),rec:clamp(rec/goals.rec),values:{sleep,move,rec},goals,breakdown};
+    let sleepDetail=null;
+    if(preferences && Array.isArray(preferences.previousItems)){
+      const previous=preferences.previousItems.filter(i=>minutes(i.end)!==null && minutes(i.end)<=1620).sort((a,b)=>minutes(b.end)-minutes(a.end));
+      const first=(dayItems||[]).filter(i=>minutes(i.start)!==null).sort((a,b)=>minutes(a.start)-minutes(b.start))[0];
+      const lastItem=previous[0], returned=lastItem?Math.min(1560,minutes(lastItem.end)):null;
+      const departure=first?minutes(first.start):510;
+      const bed=minutes(preferences.bedtime), rise=minutes(preferences.wake);
+      const start=Math.max(returned===null?(bed===null?1320:bed):returned+45,bed===null?0:bed);
+      const end=Math.min(departure-30,rise===null?1440:rise);
+      sleep=Math.max(0,Math.min(10,(1440+end-start)/60));
+      sleepDetail={returned:returned===null?start:returned,departure,start,end,first,lastItem,stay:preferences.stay||'your stay',bedtime:preferences.usualBedtime,adjusted:preferences.jetlagAdjusted};
+    }
+    return {sleepDetail,level:LEVEL_GOALS[level]?level:'unsure',sleep:clamp(sleep/goals.sleep),move:clamp(move/goals.move),rec:clamp(rec/goals.rec),values:{sleep,move,rec},goals,breakdown};
   }
-  function sleepTime(h){const m=Math.round(h*60);return Math.floor(m/60)+' h '+m%60+' m';}
+  function shortNight(sleep,goal){return sleep<.85*goal || (goal-sleep)*60>60+1e-7;}
+  function clock(n){n=(n%1440+1440)%1440;return (Math.floor(n/60)%12||12)+':'+String(n%60).padStart(2,'0')+(n>=720?' PM':' AM');}
+  function proposal(items,direction){
+    const sorted=(items||[]).filter(i=>Number.isFinite(i.start)&&Number.isFinite(i.end)).sort((a,b)=>a.start-b.start);
+    const item=direction==='earlier'?sorted.at(-1):sorted[0];
+    if(!item||item.locked)return null;
+    const start=item.start+(direction==='earlier'?-30:30),end=item.end+(direction==='earlier'?-30:30);
+    if(start<0||end>1440||sorted.some(i=>i.id!==item.id&&start<i.end&&end>i.start))return null;
+    return {id:item.id,start,end,title:item.title};
+  }
+  function freeGap(items){for(let start=600;start+30<=1200;start+=5)if(!(items||[]).some(i=>Number.isFinite(i.start)&&start<i.end&&start+30>i.start))return start;return null;}
+  function sleepTime(h){const m=Math.round(h*60);return Math.floor(m/60)+' h '+String(m%60).padStart(2,'0')+' m';}
   function sleepGoal(h){return Number.isInteger(h)?h+' h':sleepTime(h);}
   let sequence=0;
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  function summary(v){var m=Math.round(v.sleep*60);return 'Sleep '+Math.floor(m/60)+'h'+String(m%60).padStart(2,'0')+' · Move '+Math.round(v.move)+' min · Recover '+Math.round(v.rec)+' min';}
   function render(result,options){
     options=options||{};
     const id='ring-breakdown-'+(++sequence);
-    const panel='<button type="button" data-testid="ring-breakdown-toggle" aria-label="'+(options.name?'Activity breakdown for '+esc(options.name):'Activity breakdown')+'" aria-expanded="false" aria-controls="'+id+'">'+(options.name?'Details':'Activity breakdown')+'</button><div hidden id="'+id+'" data-testid="ring-breakdown">'+['Movement','Recovery'].map(group=>'<h4>'+group+'</h4><ul>'+result.breakdown.filter(b=>b.group===group).map(b=>'<li>'+esc(b.name)+': '+(b.type==='downtime'?b.minutes+' min downtime → counts '+b.credited+' min':b.minutes+' min × '+b.weight+' = '+b.credited+' min')+(b.capped?' (capped at '+b.cap+')':'')+'</li>').join('')+'</ul>').join('')+'<p>Not counted: travel, meals, prep, tours and general free time.</p></div>';
+    const detail=result.sleepDetail;
+    const sleepText=detail?'From getting back to '+detail.stay+' at '+clock(detail.returned)+' last night until your first departure at '+clock(detail.departure)+' (minus 30 min to get ready). Allowing 45 min to wind down.'+(detail.bedtime?' Using your usual '+clock(minutes(detail.bedtime))+' bedtime'+(detail.adjusted?', adjusted to local time':'')+'.':''): 'Estimated from the evening finish and morning departure, allowing time to wind down and get ready.';
+    const panel='<button type="button" data-testid="ring-breakdown-toggle" aria-label="'+(options.name?'Activity breakdown for '+esc(options.name):'Activity breakdown')+'" aria-expanded="false" aria-controls="'+id+'">'+(options.name?'Details':'Activity breakdown')+'</button><div hidden id="'+id+'" data-testid="ring-breakdown"><h4>Sleep</h4><p>'+esc(sleepText)+'</p><h4>Goals</h4><p>Goals come from your '+esc(({gentle:'Gentle',active:'Active',athlete:'Athlete',unsure:'Not sure'})[result.level]||'Not sure')+' pace'+(options.override?' · '+esc(options.override)+' for this day':'')+(result.eased?' · eased after this morning’s check-in':'')+(detail&&detail.adjusted?' · sleep goal uses tonight’s adjusted window (the target stays unchanged)':'')+'.</p>'+['Movement','Recovery'].map(group=>'<h4>'+group+'</h4><ul>'+result.breakdown.filter(b=>b.group===group).map(b=>'<li>'+esc(b.name)+': '+(b.type==='downtime'?b.minutes+' min downtime → counts '+b.credited+' min':b.minutes+' min × '+b.weight+' = '+b.credited+' min')+(b.capped?' (capped at '+b.cap+')':'')+'</li>').join('')+'</ul>'+(group==='Recovery'&&!result.breakdown.some(b=>b.group===group)?'<p>No recovery block counted today</p>':'')).join('')+(options.compact&&result.values.rec===0?'<p class="ring-encouragement">No recovery block today. Rest is part of the plan — add a pool or stretch break?</p>':'')+'<p>Not counted: travel, meals, tours by vehicle, general free time; prep.</p></div>';
     const labels=['Sleep','Movement','Recovery'], keys=['sleep','move','rec'];
-    const text=keys.map((k,i)=>labels[i]+' '+(k==='sleep'?sleepTime(result.values[k]):Math.round(result.values[k])+' min')+' planned, goal '+(k==='sleep'?sleepGoal(result.goals[k]):result.goals[k]+' min'));
+    const text=keys.map((k,i)=>labels[i]+' '+(k==='sleep'?sleepTime(result.values[k]):Math.round(result.values[k])+' min')+' planned, goal '+(k==='sleep'?sleepGoal(result.goals[k]):result.goals[k]+' min')+(k==='sleep'&&detail?(detail.bedtime?', usual bedtime '+clock(minutes(detail.bedtime)):', itinerary sleep estimate'):''));
     const compact=options.compact;
-    return '<figure class="wellness-rings'+(compact?' compact-rings':'')+'" data-testid="wellness-rings"><svg viewBox="0 0 100 100" role="img" aria-label="'+text.join(', ')+'"><g transform="rotate(-90 50 50)" fill="none" stroke-width="7" stroke-linecap="round">'+keys.map((k,i)=>'<circle cx="50" cy="50" r="'+(44-i*11)+'" stroke="var(--soft)"/><circle class="ring-'+k+'" cx="50" cy="50" r="'+(44-i*11)+'" pathLength="100" stroke="var(--'+k+')" stroke-dasharray="'+(result[k]*100).toFixed(1)+' 100"/>').join('')+'</g></svg>'+(compact?'<span class="compact-values" aria-label="'+text.join(', ')+'">'+sleepTime(result.values.sleep).replace(/ h /,'h').replace(/ m$/,'')+' · '+Math.round(result.values.move)+' · '+Math.round(result.values.rec)+' min</span>':'<div class="ring-values">'+keys.map((k,i)=>'<div class="ring-value ring-value-'+k+'"><strong>'+(k==='sleep'?sleepTime(result.values[k]):Math.round(result.values[k])+' min')+'</strong><span>'+labels[i]+'</span><small>goal '+(k==='sleep'?sleepGoal(result.goals[k]):result.goals[k]+' min')+'</small></div>').join('')+'</div>')+(options.caption===false?'':'<figcaption>Plan estimates, not medical advice</figcaption>')+(!compact&&(result.move<1||result.rec<1)?'<p class="ring-encouragement">Rest is part of the plan</p>':'')+panel+'</figure>';
+    let markup = '<figure class="wellness-rings'+(compact?' compact-rings':'')+'" data-testid="wellness-rings"><svg viewBox="0 0 100 100" role="img" aria-label="'+text.join(', ')+'"><g transform="rotate(-90 50 50)" fill="none" stroke-width="7" stroke-linecap="round">'+keys.map((k,i)=>'<circle cx="50" cy="50" r="'+(44-i*11)+'" stroke="var(--soft)"/><circle class="ring-'+k+'" cx="50" cy="50" r="'+(44-i*11)+'" pathLength="100" stroke="var(--'+k+')" stroke-dasharray="'+(result[k]*100).toFixed(1)+' 100"/>').join('')+'</g></svg>'+(compact?'<span class="compact-values" aria-label="'+text.join(', ')+'">'+summary(result.values)+'</span>':'<div class="ring-values">'+keys.map((k,i)=>'<div class="ring-value ring-value-'+k+'"><strong>'+(k==='sleep'?sleepTime(result.values[k]):Math.round(result.values[k])+' min')+'</strong><span>'+labels[i]+'</span><small>goal '+(k==='sleep'?sleepGoal(result.goals[k]):result.goals[k]+' min')+'</small></div>').join('')+'</div>')+(options.caption===false?'':'<figcaption>Plan estimates, not medical advice</figcaption>')+(!compact&&result.values.rec===0?'<p class="ring-encouragement">No recovery block today. Rest is part of the plan — add a pool or stretch break?</p>':!compact&&result.move<1?'<p class="ring-encouragement">Easy movement day — a short walk is plenty.</p>':'')+panel+'</figure>';
+    if(compact&&!options.name){const start=markup.indexOf('<svg'),end=markup.indexOf('</span>',markup.indexOf('class="compact-values"'))+7;const summary=markup.slice(start,end);markup=markup.slice(0,start)+markup.slice(end);markup=markup.replace('Activity breakdown</button>',summary+'</button>').replace('aria-label="Activity breakdown"','aria-label="'+esc(text.join(', ')+'. Activity breakdown')+'"');}
+    return markup;
   }
   if(root.document)root.document.addEventListener('click',e=>{const b=e.target.closest('[data-testid="ring-breakdown-toggle"]');if(!b)return;const open=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(open));root.document.getElementById(b.getAttribute('aria-controls')).hidden=!open;});
-  root.GoNowRings={LEVEL_GOALS,selectLevel,scoreDay,render};
+  root.GoNowRings={summary,LEVEL_GOALS,selectLevel,scoreDay,render,shortNight,proposal,freeGap,clock};
   if(typeof module!=='undefined')module.exports=root.GoNowRings;
 })(typeof window==='undefined'?globalThis:window);
