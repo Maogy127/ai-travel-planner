@@ -61,15 +61,28 @@ function leg(from, to) {
     else if (routes[from + '|' + to] || routes[to + '|' + from]) label = 'Uber ~' + minutes + ' min';
     return {minutes, label};
 }
+// Reservation windows and booking lead times are not activity durations.
+function parseDuration(text) {
+    text = String(text || '');
+    const pattern = /\b(\d+(?:\.\d+)?)\s*(h(?:ours?|rs?)?|min(?:utes?)?)\b/gi;
+    for (const match of text.matchAll(pattern)) {
+        const before = text.slice(0, match.index);
+        const after = text.slice(match.index + match[0].length);
+        if (/\b(?:within|book|reserve|arrive|leave)\s*(?:about\s*)?$/i.test(before) ||
+            /^\s*(?:in advance|ahead|notice|early|before|after)\b/i.test(after)) continue;
+        if (!/(?:\babout|\ballow|[~≈])\s*$/i.test(before) &&
+            !/(?:^|[.!?]\s*)$/.test(before) &&
+            !/^\s*(?:tour|hike|walk|ride|class|session|open-air)\b/i.test(after)) continue;
+        return +match[1] * (/^h/i.test(match[2]) ? 60 : 1);
+    }
+    return null;
+}
 function duration(item) {
-    const hours = item.desc.match(/(?:About|allow about)?\s*(\d+(?:\.\d+)?) h\b/i);
-    if (hours) return +hours[1] * 60;
-    const minutes = item.desc.match(/about (\d+) min/i);
-    return minutes ? +minutes[1] : 60;
+    return parseDuration(item.desc) ?? 60;
 }
 function convert(item) {
     return {
-        id: item.id, sourceId: item.id, title: clean(item.title), place: place(item.title), preferred: parse(item.time),
+        id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title), place: place(item.title), preferred: parse(item.time),
         duration: duration(item), walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
@@ -145,7 +158,7 @@ function buildSuggested(date) {
     });
     return {date, items, unscheduled: []};
 }
-// Ideas no longer on a day card stay available in the treasure chest.
+// Ideas no longer on a day card stay available in Activity ideas.
 const chestOnly = [{id: 'magic-island', time: '5:15 PM', kind: 'sight', title: 'Magic Island sunset',
     desc: 'Ala Moana Beach Park. Be in place by about 5:30 PM; sunset about 5:48 PM.'}];
 function trayItems() {
@@ -334,6 +347,7 @@ function exportDays(days, flightTime) {
             const original = pool.find(candidate => candidate.id === item.id);
             if (original && !item.manualTime && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
             const entry = {id: item.id, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
+            if (item.checkinSwap) entry.a = item.title;
             if (item.userLocked) Object.assign(entry, {u: 1, bp: item.basePreferred, bd: item.baseDuration});
             return entry;
         });
@@ -366,6 +380,7 @@ function importDays(data) {
             }
             const item = find(entry.id) || pool.find(i => i.sourceId === entry.s) && clone(pool.find(i => i.sourceId === entry.s));
             if (!item) return null;
+            if (['Beach walk','Gentle stretch'].includes(entry.a)) Object.assign(item,{title:entry.a,wellness:{type:entry.a==='Beach walk'?'walk':'recovery'},checkinSwap:true});
             item.id = entry.id; item.manualTime = !!entry.m; if (entry.e !== undefined) item.estimate = entry.e;
             item.locked = !!entry.l;
             if (minutes(entry.p) !== undefined) item.preferred = entry.p;
@@ -433,6 +448,7 @@ function mount(root, ctx = {}) {
 
         let item = base ? clone(base) : {title:String(spec.title || '').trim().slice(0,100), place:spec.place || 'Other', duration:Number(spec.duration) || 60, estimate:true, custom:true};
         if (!item.title) return {ok:false, reason:'Name the activity'};
+        if(spec.wellness)item.wellness=clone(spec.wellness);
         Object.assign(item, {sourceId:identity, preferred:null, locked:false, rules:spec.rules || item.rules || [], tags:spec.tags || item.tags || []});
         delete item.textTime; delete item.flight;
         item.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
@@ -518,7 +534,14 @@ function mount(root, ctx = {}) {
         const moves = tray ? button('handle', title) + '<button type="button" data-testid="schedule-item" data-db-action="schedule">Schedule</button>' : (movable ? button('handle', title) + button('up', title) + button('down', title) + button('remove', title) : '');
         const actions = !tray && !print && i.kind !== 'prep' ? '<div class="db-item-actions"><button type="button" data-db-action="again">Add it again</button><button type="button" data-db-action="move-day">Move to another day</button></div>' : '';
         const lockChip = i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : '';
-        const controls = moves || canLock ? `<div class="db-controls">${canLock ? lockChip : ''}${moves}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
+        const menuLabels = {handle: 'Drag to reorder', up: 'Move up', down: 'Move down', remove: 'Move to chest', delete: 'Delete booking'};
+        const menuMoves = (moves + (i.custom && !print ? button('delete', title) : '')).replace(/(<button[^>]*data-db-action="([^"]+)"[^>]*>)([\s\S]*?)(<\/button>)/g,
+            (_, start, action, icon, end) => start + icon + '<span>' + menuLabels[action] + '</span>' + end);
+        const menuItems = (menuMoves + actions.replace('>Add it again', '><span aria-hidden="true">＋</span> Add it again').replace('>Move to another day', '><span aria-hidden="true">↗</span> Move to another day')).replace(/<button /g, '<button role="menuitem" ');
+        const hasMenu = !tray && !print && (i.custom || i.kind !== 'prep');
+        const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}">⋯ More</button>` : '';
+        const menu = hasMenu ? `<div hidden id="db-more-${uid}" data-testid="db-more-menu" role="menu">${menuItems}</div>` : '';
+        const controls = moves || canLock || hasMenu ? `<div class="db-controls">${canLock ? lockChip : ''}${tray ? moves : menuButton}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
         const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
         const noteId = 'db-note-' + uid;
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
@@ -529,15 +552,17 @@ function mount(root, ctx = {}) {
         const lockedLabel = i.userLocked ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
             ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? flightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight ? esc(flightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
+            ${!tray && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt="">` : ''}
             <div class="db-activity" data-testid="db-activity">
                 ${heading}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
                 ${i.flight && !print ? `<label>Flight time<input type="time" aria-label="Flight time" data-testid="db-flight-time" value="${flightTime ? String(Math.floor(parse(flightTime) / 60)).padStart(2, '0') + ':' + String(parse(flightTime) % 60).padStart(2, '0') : ''}"></label>` : ''}
                 ${!tray && i.detail ? `<small>${esc(i.detail)}</small>` : ''}
                 ${canLock ? '' : lockChip}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
-                ${controls}${actions}${i.custom && !print ? button('delete', title) : ''}
+                ${controls}
                 ${(i.notes || []).map((note, index) => `<p class="db-note" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div>
+            ${menu}
             ${editor}
             ${detail ? `<div class="db-detail" id="db-detail-${uid}" data-testid="db-detail" role="region" aria-labelledby="db-title-${uid}"${open ? '' : ' hidden'}>${detail}</div>` : ''}</div>`;
     }
@@ -643,7 +668,7 @@ function mount(root, ctx = {}) {
             ${ctx.dayExtras ? ctx.dayExtras(date) : ''}
             ${ctx.shared && d.unscheduled.length ? `<section data-testid="unscheduled-section"><h3>Unscheduled</h3><ul>${d.unscheduled.map(i => `<li>${esc(i.title)}</li>`).join('')}</ul></section>` : ''}
             <div class="db-tools">
-            <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Treasure chest <span class="db-count">${availableTray.length}</span></button>
+            <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Activity ideas <span class="db-count">${availableTray.length}</span></button>
             <button type="button" data-testid="db-booking-toggle" data-db-action="booking" aria-expanded="${bookingOpen}" aria-controls="db-booking">+ Add booking</button>
             </div>
             <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}>${availableTray.map(i => pair(i, true)).join('')}</div>
@@ -677,7 +702,9 @@ function mount(root, ctx = {}) {
         if (ctx.afterRender) ctx.afterRender(content, date);
         if (focus) {
             const row = Array.from(root.querySelectorAll('[data-db-id]')).find(e => e.dataset.dbId === focus.id && e.dataset.dbZone === focus.zone);
-            (row?.querySelector(`[data-db-action="${focus.action || 'handle'}"]`) || row)?.focus({preventScroll: true});
+            const target=row?.querySelector(`[data-db-action="${focus.action || 'handle'}"]`);
+            if(target?.closest('[role=menu]')){const panel=target.closest('[role=menu]');panel.hidden=false;const trigger=row.querySelector('[data-testid=db-more]');if(trigger){trigger.setAttribute('aria-expanded','true');positionMenu(trigger,panel);}}
+            (target || row)?.focus({preventScroll: true});
         }
         return result;
     }
@@ -768,6 +795,32 @@ function mount(root, ctx = {}) {
         announce(locked ? `Locked ${item.title} at ${now && now.start != null ? range(now.start, now.end) : 'its time'}.` : `Unlocked ${item.title} — it moves with the day again.`);
     }
 
+    // The popup stays in the card for action lookup and drag delegation, outside the controls row.
+    function positionMenu(trigger, panel) {
+        const card = trigger.closest('[data-db-id]');
+        const box = card.getBoundingClientRect();
+        const anchor = trigger.getBoundingClientRect();
+        const width = panel.getBoundingClientRect().width;
+        const left = Math.max(16, Math.min(anchor.left, document.documentElement.clientWidth - width - 16));
+        panel.style.left = `${left - box.left - card.clientLeft}px`;
+        panel.style.top = `${anchor.bottom - box.top - card.clientTop}px`;
+    }
+    window.addEventListener?.('resize', () => {
+        if (root.isConnected) root.querySelectorAll('[data-testid=db-more][aria-expanded=true]').forEach(b => positionMenu(b, document.getElementById(b.getAttribute('aria-controls'))));
+    });
+    function closeMenus(focus=false){root.querySelectorAll('[data-testid=db-more][aria-expanded=true]').forEach(b=>{b.setAttribute('aria-expanded','false');document.getElementById(b.getAttribute('aria-controls')).hidden=true;if(focus)b.focus();});}
+    const outsideMenuClick = e => {
+        if(root.isConnected === false){document.removeEventListener('click',outsideMenuClick);return;}
+        if(!e.target.closest('[data-testid=db-more], [data-testid=db-more-menu]')&&!drag)closeMenus(true);
+    };
+    document.addEventListener?.('click',outsideMenuClick);
+    root.addEventListener('keydown',e=>{
+        const menu=e.target.closest('[data-testid=db-more-menu]');
+        if(!menu)return;
+        if(e.key==='Tab'){closeMenus();return;}
+        if(e.key==='Escape'&&!picked&&!drag){e.preventDefault();e.stopImmediatePropagation();closeMenus(true);return;}
+        if(['ArrowUp','ArrowDown'].includes(e.key)&&!picked){e.preventDefault();e.stopImmediatePropagation();const items=[...menu.querySelectorAll('button:not(:disabled)')];const n=items.indexOf(document.activeElement);items[(n+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();}
+    });
     root.addEventListener('click', e => {
         if (suppressClick) { suppressClick = false; if (e.target.closest('[data-db-id]')) return; }
         const anchor = e.target.closest('a[href^="#item-"]');
@@ -791,6 +844,8 @@ function mount(root, ctx = {}) {
         }
         const action = b.dataset.dbAction;
         const row = b.closest('[data-db-id]');
+        if(action==='more'){ const panel=document.getElementById(b.getAttribute('aria-controls'));const open=panel.hidden;closeMenus();panel.hidden=!open;b.setAttribute('aria-expanded',String(open));if(open){positionMenu(b,panel);panel.querySelector('button')?.focus();}return;}
+        if(action!=='handle')closeMenus();
         if (['again','move-day','schedule'].includes(action)) { openTransfer(row.dataset.dbId, row.dataset.dbZone, action);
         } else if (action === 'edit-time') {
             openTime(date, row.dataset.dbId);
@@ -1050,9 +1105,15 @@ function mount(root, ctx = {}) {
         if (!target) return;
         change(moving.id, moving.zone, target.zone === moving.zone ? 'position' : target.zone === 'tray' ? 'remove' : 'add', target.at);
     });
+    const escapeDrag = e => {
+        if(!root.isConnected){document.removeEventListener('keydown',escapeDrag,true);return;}
+        if(e.key==='Escape'&&drag){e.preventDefault();e.stopImmediatePropagation();cancelDrag();announce('Move cancelled');}
+    };
+    document.addEventListener?.('keydown',escapeDrag,true);
     root.addEventListener('pointercancel', cancelDrag);
     root.addEventListener('lostpointercapture', () => { if (drag) cancelDrag(); });
     const api = {
+        swapItem: (id, alternative) => { const item=current().items.find(i=>i.id===id); if(!item || item.locked)return false; Object.assign(item, alternative, {id:item.id, preferred:alternative.start ?? item.preferred, manualTime:true, duration:item.duration, checkinSwap:true}); delete item.textTime; save(); render(); return true; },
         render, selectDay, renderPrint, root, openTime, timeInstances, draftItems: () => clone(draftItems()),
         getDay: () => clone(current()),
         date: () => date,
@@ -1066,7 +1127,7 @@ function mount(root, ctx = {}) {
     return api;
 }
 const active = () => (session.active && session.active.root.isConnected ? session.active : null);
-window.DayBuilder = {buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+window.DayBuilder = {parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
     toggleLock, exportDays, importDays, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
     openTime: (date, id) => active()?.openTime(date, id),
@@ -1085,6 +1146,7 @@ window.DayBuilder = {buildSuggested, reflow, commuteMinutes, mount, render: moun
     print: on => active()?.renderPrint(on),
     schedule: () => active()?.schedule() || null,
     draftItems: () => active()?.draftItems() || [],
+    swapItem: (id, alternative) => active()?.swapItem(id, alternative),
     addToDay: (date, spec) => active()?.addToDay(date, spec) || {ok: false, reason: 'Open a draft first'},
     resetSession: () => { session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
 })();

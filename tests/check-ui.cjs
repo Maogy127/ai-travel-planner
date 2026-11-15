@@ -39,12 +39,14 @@ const ctx = {
 ctx.window=ctx;ctx.scrollTo=()=>{};ctx.addEventListener=()=>{};ctx.history={state:null,pushState(s){this.state=s},replaceState(s){this.state=s}};
 vm.createContext(ctx);
 const jsRoot = fs.existsSync(`${__dirname}/../site/js/app.js`) ? `${__dirname}/../site/js/` : `${__dirname}/../js/`;
-for (const f of ['catalog','oahu','engine','ai','credits','localinfo','affiliates','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8'),ctx);
+for (const f of ['catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','checkin','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8'),ctx);
 const api=ctx.__gonow;
 const click=id=>node(`[data-testid="${id}"]`).click();
 (async()=>{
-  assert(node('view').innerHTML.includes('Photo:'));
-  assert(node('view').innerHTML.includes(ctx.PHOTO_CREDITS[0].alt));
+  assert(node('view').innerHTML.includes('Come home better than you left.'));
+  assert(!node('view').innerHTML.includes('sample-rings'));
+assert(!node('view').innerHTML.includes('wellness-rings'));
+assert(!node('view').innerHTML.includes('rank-badge'));
   node('photo-credits').onclick();
   assert.equal((node('view').innerHTML.match(/class="card credit-card"/g)||[]).length, ctx.PHOTO_CREDITS.length);
   assert.ok(ctx.PHOTO_CREDITS.length >= 22);
@@ -58,7 +60,7 @@ const click=id=>node(`[data-testid="${id}"]`).click();
   assert(node('view').innerHTML.includes('Nov 25–29, 2026'));
   assert(node('toast').innerHTML.includes('ready'));
   api.go('recommendations');assert.equal(node('toast').innerHTML,'');
-  Object.assign(api.state.answers,{start:'2027-01-01',end:'2027-01-05',food:['Vegan'],pace:'Easy',stay:'My Hotel',mustdos:'Museum visit'});
+  Object.assign(api.state.answers,{start:'2027-01-01',end:'2027-01-05',food:['Vegan'],level:'gentle',stay:'My Hotel',mustdos:'Museum visit'});
   api.go('fork');click('fork-yes');api.go('musts');click('q-continue');
   await new Promise(r=>setTimeout(r,20));
   assert(node('view').innerHTML.includes('curated-notice'));
@@ -68,6 +70,25 @@ const click=id=>node(`[data-testid="${id}"]`).click();
   for(const text of ['Vegan','Staying: My Hotel','Museum visit','You requested this','Jan 1–5, 2027','Day 1 · Fri, Jan 1','age-rules']) assert(html.includes(text),text);
   assert(!html.includes('banner-photo'));
   assert.equal(api.state.plan.days[1].items.filter(i=>['rest','activity'].includes(i.kind)&&!i.requested).length,2);
+  assert(!html.includes('data-testid="diet-tag"'));
+  api.state.answers.diet=['Vegan'];
+  const meal=api.state.plan.days.flatMap(d=>d.items).find(i=>i.kind==='meal');
+  meal.desc='Vegan options listed';
+  api.go('plan');
+  assert(node('view').innerHTML.includes('data-testid="diet-tag"'));
+  assert(node('view').innerHTML.includes('Vegan options listed'));
+  assert(!node('view').innerHTML.includes('Diet info not confirmed — check the menu'));
   api.go('credits');assert.equal(node('toast').innerHTML,'');
+  for(const [pace,level] of [['Easy','gentle'],['Moderate','active'],['Full-on','athlete']]){
+    memory.set('gonow:answers',JSON.stringify({pace}));
+    vm.runInContext(fs.readFileSync(`${jsRoot}app.js`,'utf8'),ctx);
+    assert.equal(ctx.__gonow.state.answers.level,level);
+    assert.equal(ctx.__gonow.state.answers.pace,pace);
+  }
+  // An existing level takes precedence over an older legacy pace.
+  memory.set('gonow:answers',JSON.stringify({pace:'Full-on',level:'unsure'}));
+  vm.runInContext(fs.readFileSync(`${jsRoot}app.js`,'utf8'),ctx);
+  assert.equal(ctx.__gonow.state.answers.level,'unsure');
+  assert.equal(ctx.__gonow.state.answers.pace,'Moderate');
   console.log('PASS: hero/credits, demo routing, human dates/day chips, navigation toast clearing, mismatch notice, personalized Oahu template and age rules.');
 })().catch(e=>{console.error(e);process.exitCode=1;});
