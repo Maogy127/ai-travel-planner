@@ -558,7 +558,8 @@ function mount(root, ctx = {}) {
         return sourcePlan().days.flatMap(d => visibleItems(days[d.date] || buildSuggested(d.date), d.date));
     }
     function ruleContext(){return {...ctx,flightTime,departureDate:sourcePlan().end};}
-    function block(item,on,applySuggestion){
+    function clearBlocked(){document.querySelectorAll?.('[data-testid=blocked-message]').forEach(node=>node.remove());}
+    function block(item,on,applySuggestion,origin){
         const reason=blockedOn(item,on,ruleContext());
         if(!reason)return null;
         const suggestion=nearestAllowed(item,on,ruleContext());
@@ -566,8 +567,16 @@ function mount(root, ctx = {}) {
         root.querySelector('[data-testid=blocked-message]')?.remove();
         const message=document.createElement('div');
         message.dataset.testid='blocked-message';message.setAttribute('aria-live','polite');message.setAttribute('role','status');
-        message.innerHTML='<p data-testid="blocked-reason">'+esc(reason)+'</p>'+(suggestion?'<button type="button" data-testid="blocked-suggest">Add to '+esc(shortDate(suggestion))+'</button>':'');
-        (root.querySelector('dialog[open]')||root).append(message);
+        const weekday=value=>new Date(value+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',timeZone:'UTC'});
+        const title=String(item.title||'Activity');
+        const place=String(item.place&&item.place!=='Other'?item.place:title.split(/ [—–] /).at(-1)).replace(/(?: (?:Center|Centre|State Monument))+$/i,'').trim();
+        const text=/diving/i.test(reason)?'Dive too close to flight':place+(/closed/i.test(reason)?' closed '+weekday(on):' outside hours');
+        message.innerHTML='<span data-testid="blocked-reason">'+esc(text)+'</span>'+'<span class="db-blocked-actions">'+(suggestion?'<button type="button" data-testid="blocked-suggest">Add to '+weekday(suggestion)+'</button>':'')+'<button type="button" data-testid="blocked-dismiss" aria-label="Dismiss">×</button></span>';
+        const destination=origin||root.querySelector('[data-db-id="'+item.id+'"]')||root.querySelector('[data-testid=db-day-list]');
+        root.querySelector('dialog[open]')?.close();
+        destination.append(message);
+        destination.scrollIntoView?.({block:'nearest',behavior:'auto'});
+        message.querySelector('[data-testid=blocked-dismiss]').onclick=()=>message.remove();
         if(suggestion)message.querySelector('button').onclick=()=>{message.remove();applySuggestion(suggestion);};
         return {ok:false,reason,suggestion};
     }
@@ -586,7 +595,7 @@ function mount(root, ctx = {}) {
         Object.assign(item, {sourceId:identity, preferred:null, locked:false, closed:spec.closed || item.closed,hours:spec.hours || item.hours, rules:spec.rules || item.rules || [], tags:spec.tags || item.tags || []});
         delete item.textTime; delete item.flight;
         item.preferred=spec.time?toTime(spec.time):null;
-        const blocked=block(item,nextDate,on=>addToDay(on,spec));if(blocked)return blocked;
+        const blocked=block(item,nextDate,on=>addToDay(on,spec),spec.origin||root.querySelector('[data-testid=db-day-list]'));if(blocked)return blocked;
         item.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
         selectDay(nextDate, false);
         const d = current();
@@ -602,6 +611,7 @@ function mount(root, ctx = {}) {
         addedConflicts = [];
     }
     function save() {
+        clearBlocked();
         if(ctx.saveDraft&&!ctx.shared)ctx.saveDraft({days,flightTime});
         if (ctx.shared) { saved.flightTime = flightTime; return; }
         try { localStorage.setItem(KEY, JSON.stringify({days, flightTime})); } catch (e) {}

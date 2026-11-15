@@ -64,10 +64,11 @@ for(const name of ['normalizePrep','prepTasks','prepRemaining']){
  vm.runInContext(app.slice(start,end),ctx);
 }
 ctx.state={plan:ctx.OAHU_SAMPLE};
-ctx.packingGroups=()=>ctx.OAHU_SAMPLE.packing;
+ctx.state.packMeta={};
+{const start=app.indexOf('    function packingGroups('),end=app.indexOf('    function packingItem(',start);vm.runInContext(app.slice(start,end),ctx);}
 ctx.prepRecord=()=>({checked:{}});
 const prep=ctx.prepTasks(),notes=prep.filter(t=>t.group==='before'),packs=prep.filter(t=>t.group==='pack');
-assert.equal(notes.length,8);const rides=notes.find(t=>t.id==='book-uber-reserve');assert.equal(rides.legacyIds.length,4);assert.equal(rides.rides.length,4);assert.equal(rides.text,'Book 4 Uber Reserve rides');assert(notes.some(t=>t.date));
+assert.equal(notes.length,7);const rides=notes.find(t=>t.id==='book-uber-reserve');assert.equal(rides.legacyIds.length,4);assert.equal(rides.rides.length,4);assert.equal(rides.text,'Book 4 Uber Reserve rides');assert(notes.some(t=>t.date));
 assert.equal(new Set(notes.map(t=>ctx.normalizePrep(t.text))).size,notes.length);
 assert(notes.every(t=>['book','id','insurance','visa'].includes(t.kind)));
 assert(notes.every(t=>t.text.length<=48&&t.text.split(/\s+/).length<=8));
@@ -104,3 +105,25 @@ for(const done of [4,3,0]){
  assert.equal(ctx.prepRecord().checked[rides.id],done===4);
 }
 console.log('PASS merged ride legacy ticks require every ride');
+
+assert(!notes.some(t=>t.text==='Bring photo ID'));
+assert(notes.some(t=>t.text==='Get travel insurance'));
+assert(app.includes("it.id!=='insurance'"));
+assert(!app.includes('Confirm to start prep.'));
+const paceSource=app.slice(app.indexOf('    function paceDayHTML('),app.indexOf('    function sleepNudgeHTML('));
+assert(!/Sleep timing|Suggestions|day-guidance|wind-down|jetlag-note/.test(paceSource));
+const headSource=app.slice(app.indexOf('    function dayHeadHTML('),app.indexOf('    function dayHeadHTML(')+1700);
+assert(!/Transport &amp; conditions|Typical conditions|Staying at/.test(headSource));
+assert(app.includes('<summary>Getting around</summary>'));
+console.log('PASS minimal day header, Draft hint removal and prep dedupe copy');
+
+assert.equal(packs.length,50);
+assert(!packs.some(t=>/insurance/i.test(t.text)));
+ctx.state.answers={international:true};
+const savedPlan=ctx.state.plan;
+ctx.state.plan={title:'Generic',days:[],packing:[{group:'Documents',items:[{id:'passport',name:'Passport'},{id:'insurance',name:'Travel insurance details'}]}]};
+const generic=ctx.prepTasks();
+assert(generic.some(t=>t.kind==='visa'));assert(!generic.some(t=>t.kind==='id'));
+assert.equal(generic.filter(t=>/insurance/i.test(t.text)).length,1);
+ctx.state.plan=savedPlan;
+console.log('PASS generic packing insurance and international passport dedupe');

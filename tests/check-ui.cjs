@@ -7,7 +7,7 @@ function node(key) {
   if (!nodes.has(key)) {
     const el = {
       innerHTML: '', textContent: '', value: '', isConnected: true, className: '', hidden: false,
-      style: {}, dataset: {}, children: [],
+      style: {setProperty() {}}, dataset: {}, children: [],
       addEventListener(event, fn) { this[event] = fn; },
       querySelectorAll() { return []; },
       querySelector(selector) { return node(String(key) + ' ' + selector); },
@@ -33,7 +33,7 @@ const ctx = {
   document: { addEventListener() {}, removeEventListener() {}, documentElement: { classList: { toggle() {}, add() {}, remove() {}, contains() { return false; } } }, body: node('body'), getElementById: node, querySelector: selector => selector === '[data-testid="tab-content"]' ? null : node(selector), querySelectorAll: () => [], createElement: tag => node('el-' + tag + '-' + Math.random()), createTextNode: text => ({textContent: String(text)}) },
   localStorage: {get length(){return memory.size},key:i=>[...memory.keys()][i],getItem: k => memory.has(k)?memory.get(k):null,setItem: (k,v) => memory.set(k,v),removeItem:k=>memory.delete(k)},
   URL, URLSearchParams, location:{search:'?fast=1', hash:'', href:'http://local/index.html?fast=1'}, navigator:{},
-  setTimeout, clearTimeout, setInterval, clearInterval, console,
+  requestAnimationFrame: fn=>fn(), setTimeout, clearTimeout, setInterval, clearInterval, console,
   matchMedia: () => ({matches: false, addEventListener() {}}),
 };
 ctx.window=ctx;ctx.scrollTo=()=>{};ctx.addEventListener=()=>{};ctx.history={state:null,pushState(s){this.state=s},replaceState(s){this.state=s}};
@@ -112,16 +112,24 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert.equal(api.state.screen,'plan');
   assert(node('view .plan-title').innerHTML.includes('data-testid="confirm-plan"'));
   assert(!JSON.parse(memory.get('gonow:trips'))[0].snapshot);
+  assert(!node('view').innerHTML.includes('YOUR NEXT CHAPTER, ALL PLANNED'));
+  assert(!node('view .plan-title').innerHTML.includes('Confirm to start prep.'));
+  assert(node('view .plan-title').innerHTML.includes('draft-confirm-row'));
   click('confirm-plan');
   assert.equal(api.state.screen,'prep');
   assert.equal((node('view').innerHTML.match(/data-testid="prep-section"/g)||[]).length,3);
   assert(!node('toast').innerHTML.includes('Your plan is ready.'));
-  assert(node('view').innerHTML.includes('Before you go · 8 to do'));
+  assert(node('view').innerHTML.includes('Before you go · 7 to do'));
+  assert.equal(JSON.parse(memory.get('gonow:trips')).find(t=>t.id===api.state.tripId).prepLeft,7);
+  api.go('home');
+  assert(node('view').innerHTML.includes('data-testid="card-trip-prep"'));
+  assert(node('view').innerHTML.includes('Trip prep · 7 left'));
+  api.go('prep');
   assert(!node('view').innerHTML.includes('data-testid="trip-prep-button"'));
   assert(node('view').innerHTML.includes('Book 4 Uber Reserve rides'));
   const assertPacking = n => {
     const html=node('view').innerHTML;
-    assert(html.includes('Packed '+n+' of 51'));
+    assert(html.includes('Packed '+n+' of 50'));
     assert.equal((html.match(/id="packing-status"/g)||[]).length,1);
     assert(!/prep-packing-count|Packing \d+\/\d+/.test(html));
   };
@@ -132,8 +140,8 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   node('view').querySelectorAll=selector=>selector==='[data-prep-id]'?[packCheckbox]:[];
   api.go('prep');
   packCheckbox.onchange();
-  assert.equal(node('packing-status').textContent,'Packed 1 of 51');
-  assert.equal(node('[data-testid="trip-prep-button"]').textContent,'Trip prep · 8 left');
+  assert.equal(node('packing-status').textContent,'Packed 1 of 50');
+  assert.equal(node('[data-testid="trip-prep-button"]').textContent,'Trip prep · 7 left');
   api.go('prep');assertPacking(1);
   click('reset-packing');
   node('sheet [data-testid="modal-0"]').click();

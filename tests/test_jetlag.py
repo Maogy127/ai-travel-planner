@@ -17,11 +17,8 @@ async def checks(browser):
             before = await pg.evaluate('JSON.stringify(window.DayBuilder.schedule().days.flatMap(d=>d.items.filter(i=>i.locked).map(i=>[i.id,i.start,i.end,i.locked])))')
             await show_day(pg, 0)
             await open_guidance(pg)
-            note = await pg.get_by_test_id('jetlag-note').inner_text()
-            assert 'LA' in note and 'sunrise' in note
-            print('PASS test_jetlag.py check line 21')
-            assert not any(w in note.lower() for w in ('fail', 'guilt', 'bad', 'behind'))
-            print('PASS test_jetlag.py check line 23')
+            await expect(pg.get_by_test_id('jetlag-note')).to_have_count(0)
+            assert await pg.locator('.day-guidance').count() == 0
             after = await pg.evaluate('JSON.stringify(window.DayBuilder.schedule().days.flatMap(d=>d.items.filter(i=>i.locked).map(i=>[i.id,i.start,i.end,i.locked])))')
             assert before == after
             print('PASS test_jetlag.py check line 26')

@@ -26,7 +26,7 @@ async def checks(browser):
             await wait_plan(pg)
             await show_day(pg, 1)
             await open_guidance(pg)
-            assert await pg.locator('#day-1').get_by_test_id('wind-down').count() == 1
+            assert await pg.locator('#day-1').get_by_test_id('wind-down').count() == 0
             baseline = await pg.locator('#day-1 .day-head > .wellness-rings svg').get_attribute('aria-label')
             await personalize(pg)
             await expect(pg.get_by_test_id('diet-notes')).to_have_value('')
@@ -59,7 +59,7 @@ async def checks(browser):
             await build(pg)
             await show_day(pg, 1)
             await open_guidance(pg)
-            await expect(pg.locator('#day-1').get_by_test_id('wind-down')).to_contain_text('8:45 PM')
+            await expect(pg.locator('#day-1').get_by_test_id('wind-down')).to_have_count(0)
             planned = await pg.locator('#day-1 .day-head > .wellness-rings svg').get_attribute('aria-label')
             assert planned == baseline
             tags = pg.locator('.db-activity > [data-testid=diet-tag]')
@@ -71,7 +71,7 @@ async def checks(browser):
             await wait_plan(pg)
             await show_day(pg, 1)
             await open_guidance(pg)
-            await expect(pg.locator('#day-1').get_by_test_id('wind-down')).to_contain_text('8:45 PM')
+            await expect(pg.locator('#day-1').get_by_test_id('wind-down')).to_have_count(0)
             assert await pg.locator('#day-1 .day-head > .wellness-rings svg').get_attribute('aria-label') == planned
             await personalize(pg)
             await expect(pg.get_by_test_id('diet-notes')).to_have_value('Please check ingredients')

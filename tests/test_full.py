@@ -23,7 +23,7 @@ async def wait_plan(pg):
   await pg.locator('[data-testid=trip-prep]:visible, [data-testid=db-root]:visible, [data-testid=plan-day]:visible, [data-testid=treasure-map]:visible').first.wait_for(timeout=45000)
   await continue_prep(pg)
 async def open_guidance(pg):
-  await pg.locator('.pace-control,.day-guidance').evaluate_all('items=>items.forEach(e=>e.open=true)')
+  await pg.locator('.pace-control').evaluate_all('items=>items.forEach(e=>e.open=true)')
 
 async def open_trip_prep(pg):
   if not await pg.get_by_test_id('trip-prep').count():

@@ -7,14 +7,14 @@ function node(key) {
   if (!nodes.has(key)) {
     const el = {
       innerHTML: '', textContent: '', value: '', isConnected: true, className: '', hidden: false,
-      style: {}, dataset: {}, children: [],
+      style: {setProperty() {}}, dataset: {}, children: [],
       addEventListener(event, fn) { this[event] = fn; },
       querySelectorAll() { return []; },
       querySelector(selector) { return node(String(key) + ' ' + selector); },
       closest() { return el; },
       focus() {}, blur() {}, click() { if (typeof this.onclick === 'function') this.onclick(); },
       setAttribute() {}, getAttribute() { return ''; }, removeAttribute() {}, hasAttribute() { return false; },
-      showModal() {}, close() {}, remove() {}, append() {}, prepend() {}, after() {}, before() {},
+      showModal() {}, close() {}, remove() { this.removed=true; }, append(child) {child.parentNode=this;}, prepend() {}, after() {}, before() {},
       insertAdjacentElement() { return el; },
       insertAdjacentHTML(position, html) { this.innerHTML = (this.innerHTML || '') + String(html); },
       classList: { toggle() {}, add() {}, remove() {}, contains() { return false; } },
@@ -31,7 +31,7 @@ function node(key) {
 const memory = new Map();
 const mediaListeners=new Map(),windowListeners=new Map();
 const ctx = {
-  document: { addEventListener() {}, removeEventListener() {}, documentElement: { classList: { toggle() {}, add() {}, remove() {}, contains() { return false; } } }, body: node('body'), getElementById: node, querySelector: selector => selector === '[data-testid="tab-content"]' ? null : node(selector), querySelectorAll: () => [], createElement: tag => node('el-' + tag + '-' + Math.random()), createTextNode: text => ({textContent: String(text)}) },
+  document: { addEventListener() {}, removeEventListener() {}, documentElement: { classList: { toggle() {}, add() {}, remove() {}, contains() { return false; } } }, body: node('body'), getElementById: node, querySelector: selector => selector === '[data-testid="tab-content"]' ? null : node(selector), querySelectorAll: selector => selector==='[data-testid=blocked-message]'?[...nodes.values()].filter(n=>n.dataset.testid==='blocked-message'&&!n.removed):[], createElement: tag => node('el-' + tag + '-' + Math.random()), createTextNode: text => ({textContent: String(text)}) },
   localStorage: {get length(){return memory.size},key:i=>[...memory.keys()][i],getItem: k => memory.has(k)?memory.get(k):null,setItem: (k,v) => memory.set(k,v),removeItem:k=>memory.delete(k)},
   TextEncoder, TextDecoder, URL, URLSearchParams, location:{search:'?fast=1', hash:'', href:'http://local/index.html?fast=1'}, navigator:{},
   requestAnimationFrame: fn=>fn(), setTimeout, clearTimeout, setInterval, clearInterval, console,
@@ -60,14 +60,33 @@ assert.equal(B.reflow({date:'2026-11-28',items:[dive]},{flightTime:'8:00 AM'}).i
 assert(B.reflow({date:'2026-11-27',items:[dive]},{flightTime:'8:00 AM'}).items.some(i=>i.tags?.includes('dive')));
 const root=node('rules-root');
 const builder=B.mount(root);
-function suggestion(){const msg=[...nodes.values()].filter(n=>n.dataset.testid==='blocked-message').at(-1);assert(msg.innerHTML.includes('data-testid="blocked-reason"'));assert(msg.innerHTML.includes('data-testid="blocked-suggest"'));return msg.querySelector('button');}
+function suggestion(){const msg=[...nodes.values()].filter(n=>n.dataset.testid==='blocked-message').at(-1);assert(msg.innerHTML.includes('data-testid="blocked-reason"'));assert(msg.innerHTML.includes('data-testid="blocked-suggest"'));assert(msg.innerHTML.includes('data-testid="blocked-dismiss"'));assert(msg.innerHTML.includes('Bishop Museum')||msg.innerHTML.includes('Dive too close to flight')||msg.innerHTML.includes('outside hours'));assert(msg.parentNode!==root);return msg.querySelector('button');}
 let result=builder.addToDay('2026-11-26',{title:'Bishop Museum',time:'12:00'});
 assert.equal(result.ok,false);assert.equal(result.reason,'Closed Thu, Nov 26');assert.equal(result.suggestion,'2026-11-27');
 assert(!builder.schedule().days.flatMap(d=>d.items).some(i=>i.title==='Bishop Museum'));
-suggestion().click();assert(builder.schedule().days.find(d=>d.date==='2026-11-27').items.some(i=>i.title==='Bishop Museum'));
+suggestion().click();assert([...nodes.values()].filter(n=>n.dataset.testid==='blocked-message').at(-1).removed);assert(builder.schedule().days.find(d=>d.date==='2026-11-27').items.some(i=>i.title==='Bishop Museum'));
 result=builder.addToDay('2026-11-28',{...dive,time:'09:00'});
 assert.equal(result.ok,false);assert.equal(result.suggestion,'2026-11-27');suggestion().click();
 assert(builder.schedule().days.find(d=>d.date==='2026-11-27').items.some(i=>i.title==='Scuba dive'));
+// Place and title-suffix fallbacks share short, untruncated venue copy.
+for (const spec of [
+ {title:'Black Friday shopping — Ala Moana Center',place:'Ala Moana Center'},
+ {title:'Black Friday shopping — Ala Moana Centre'},
+ {title:'Black Friday shopping — Ala Moana State Monument'},
+]) {
+ assert.equal(builder.addToDay('2026-11-26',{...spec,time:'12:00'}).reason,'Closed Thu, Nov 26');
+ const msg=[...nodes.values()].filter(n=>n.dataset.testid==='blocked-message').at(-1);
+ assert(msg.innerHTML.includes('data-testid="blocked-reason">Ala Moana closed Thu</span>'));
+ assert(msg.innerHTML.includes('<span class="db-blocked-actions"><button'));
+}
+// Dismiss and a successful add both clear feedback without changing blocked schedules.
+let origin=node('library-entry');
+builder.addToDay('2026-11-26',{title:'Bishop Museum',time:'12:00',origin});
+let message=[...nodes.values()].filter(n=>n.dataset.testid==='blocked-message').at(-1);
+assert.equal(message.parentNode,origin);message.querySelector('[data-testid=blocked-dismiss]').click();assert(message.removed);
+builder.addToDay('2026-11-26',{title:'Bishop Museum',time:'12:00'});
+message=[...nodes.values()].filter(n=>n.dataset.testid==='blocked-message').at(-1);
+assert(message.parentNode!==root);builder.addToDay('2026-11-27',{title:'Walk',time:'16:00'});assert(message.removed);
 // Exercise the actual move dialog handler, preserving the original on rejection.
 function move(id,target){
  const row={dataset:{dbId:id,dbZone:'day'}};
@@ -114,7 +133,7 @@ console.log('PASS engine templates reject closure/diving and time-edit suggestio
  saved.builder={days:Object.fromEntries(api.state.plan.days.map(d=>[d.date,{date:d.date,items:[],unscheduled:[]}]))};
  memory.set('gonow:trips',JSON.stringify(savedTrips));api.state.viewing='finished';
  assert.equal(H.prepRemaining(),tasks.length,'frozen prep ignores later draft removals');
- api.state.viewing='draft';assert.equal(H.prepRemaining(),2,'draft prep honors removed builder bookings');
+ api.state.viewing='draft';assert.equal(H.prepRemaining(),1,'draft prep honors removed builder bookings');
  memory.set('gonow:trips',tripsBefore);api.state.viewing='draft';
  console.log('PASS frozen action count remains isolated from draft builder changes');
  api.state.answers.destination='Lisbon';api.state.answers.origin='Los Angeles';

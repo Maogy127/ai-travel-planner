@@ -37,7 +37,17 @@ async def checks(browser):
             await expect(pg.get_by_test_id('morning-checkin')).to_have_count(0)
             await pg.evaluate("__gonow.go('plan')")
             date = await show_day(pg, 3)
-            assert await pg.locator('#day-3 .day-title').evaluate('(e)=>e.nextElementSibling.matches(".wellness-rings") && e.nextElementSibling.nextElementSibling.matches("[data-testid=day-feel]")')
+            assert await pg.locator('#day-3 .day-head').evaluate("""(head)=>{
+                const children=Array.from(head.children);
+                const expected=['.day-title','.wellness-rings','.pace-control'];
+                if(head.querySelector('[data-testid=sleep-nudge]'))expected.splice(2,0,'[data-testid=sleep-nudge]');
+                if(head.querySelector('[data-testid=day-info]'))expected.push('[data-testid=day-info]');
+                return children.length===expected.length && children.every((e,i)=>e.matches(expected[i])) &&
+                    head.querySelectorAll('.day-title > h2').length===1 &&
+                    head.querySelectorAll('.day-title > p').length===1 &&
+                    head.nextElementSibling.matches('[data-testid=day-feel]');
+            }""")
+            await expect(pg.locator('#day-3 [data-testid=day-feel]')).to_be_visible()
             assert 'Best moment' not in await pg.locator('body').inner_text()
             await expect(pg.get_by_test_id('moments-summary')).to_have_count(0)
             shared = await pg.evaluate('DayBuilder.schedule().days[3].items')

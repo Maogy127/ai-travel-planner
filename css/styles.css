@@ -1520,7 +1520,6 @@ button{overflow-wrap:normal;word-break:normal}
 .day-head>[data-testid="morning-feel"]{order:-1}
 .day-head [data-testid="ring-breakdown-toggle"]{margin:0;min-height:44px;min-width:44px}
 .day-head [data-testid="group-toggle"]{min-height:44px;min-width:44px}
-.day-head .pace-control .day-guidance{margin:6px 0}
 .origin-destination{display:flex;align-items:center;gap:6px;flex-wrap:wrap}.text-button{border:0;background:none;padding:0;text-decoration:underline}
 .covers .checkrow{min-width:0;width:auto;box-sizing:border-box}.covers .checkrow span{min-width:0;overflow-wrap:normal;word-break:normal}
 @media(max-width:480px){.covers .checkrow input{margin:0}.covers .checkrow svg{width:16px;height:16px}.covers .checkrow span{white-space:normal}.covers .checkrow:not(:last-child) span{white-space:nowrap}}
@@ -1576,3 +1575,16 @@ html{scroll-padding-bottom:var(--question-footer-clearance)}
 .plan-title button[data-testid="confirm-plan"]{background:var(--accent-text);color:#fff;border-color:var(--accent-text)}
 .plan-title>.badge{display:inline-block;background:var(--soft);color:var(--ink-2);border:0;border-radius:4px;padding:4px 8px;font-size:12px}
 .track-choice{margin-top:28px;padding-top:12px}.track-choice>legend{font-size:14px}
+
+/* Preview polish 5: reserve the fixed question controls on every step. */
+.question{padding-bottom:calc(var(--qfooter-height, 110px) + 32px)}
+.question .options,.question input,.question textarea,.track-choice{scroll-margin-bottom:calc(var(--qfooter-height, 110px) + 24px)}
+.draft-confirm-row{display:flex;align-items:center;gap:12px}
+.draft-confirm-row .badge,.draft-confirm-row button{margin:0}
+[data-testid=blocked-message]{display:flex;flex-direction:column;align-items:stretch;gap:2px;font-size:12px;white-space:normal;min-width:0;max-width:100%}
+.db-blocked-actions{display:flex;align-items:center;gap:8px}
+[data-testid=blocked-message] button{padding:4px 2px;min-height:32px;font-size:inherit;white-space:nowrap}
+[data-testid=blocked-dismiss]{margin-left:auto}
+[data-testid=blocked-reason]{display:block;min-width:0;white-space:normal;overflow-wrap:anywhere}
+[data-testid=blocked-message] button{flex-shrink:0}
+.db-item [data-testid=blocked-message]{grid-column:1/-1}

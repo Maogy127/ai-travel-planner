@@ -658,3 +658,48 @@ COPY-AUDIT additions:
 | Prep count | Before you go · N to do |
 
 Validation: all 24 Node suites pass; syntax checks pass for 42 JavaScript and 39 Python files; git diff --check passes. No browser tests, network, commit or push. All prior uncommitted polish work retained.
+
+### Preview polish 5
+
+#### Supervisor r21 header fixes
+
+- `test_checkin.py`: assert title with one subtitle, rings, optional short-night line, one pace row and optional Getting around; check-ins remain visible immediately after the header, with the existing interactive checks retained.
+- `test_dayview_simple.py`: `.day-badges` was intentionally replaced. Its hotel and Typical conditions badges were removed; its transport content survives as the paragraph inside Getting around. Assert the removed wrapper/rows are absent and the compact header and transport content remain.
+- Restore the accidentally removed short-night nudge independently of Sleep timing/Suggestions: one compact “Short night · 5h45 sleep” line below rings, existing suggestion/Keep plan controls, hidden proposal until requested, reserved-time protection, Apply/Cancel and persisted dismissal. Normal nights show no nudge. Update only the obsolete time-of-first-activity assertion in `test_rings_card.py`; retain `5h45` and all interaction checks. Node regression checks cover display conditions, reserved protection, suggestion/cancel and dismissal persistence.
+- `test_jetlag.py`: Day-1 `jetlag-note` existed exclusively inside the removed Sleep timing disclosure (confirmed against HEAD), so its absence is intended. Keep its absence assertion; jet-lag calculations and sleep settings remain intact.
+- Validation: all **24 Node suites pass** (23 passed on the full run; the source-range guard was scoped to the pace renderer and passed on rerun). Syntax checked for **42 JavaScript / 40 Python files**; `git diff --check` passes. No Chromium, network, commit or push. Existing uncommitted polish work preserved.
+
+
+- Screenshot follow-up: short venue blocked reasons wrap at full row width above suggestion/dismiss controls across tray, day list and moved cards; no ellipsis. Updated Node and supervisor Python coverage.
+
+- `js/app.js`, `css/styles.css`: remove day Sleep timing, Evening timing and Suggestions disclosures, wind-down/first-activity guidance and their obsolete bindings. Ring calculations, locked itinerary facts, check-ins, each-person tracking and pace editing remain. Check-ins and each-person controls sit after the compact day header; the repeated date label is removed. Day transport is one conditional `day-info` disclosure titled “Getting around”; remove its hotel chip and Typical conditions. Weather remains in the existing plan Travel info disclosure. Draft hides the confirmed kicker and hint; Draft/Confirm plan share a centered flex row.
+- `js/daybuilder.js`, `js/app.js`: blocked feedback lives in the attempted library entry, moved/scheduled item, or dropped-into day list. Programmatic adds without an origin append inside the selected day list near Add. Close the move dialog to expose its originating card. Keep the API's `{ok:false, reason, suggestion}` result. Accessible polite status includes `blocked-message`, `blocked-reason`, `blocked-suggest`, and new `blocked-dismiss` (`aria-label="Dismiss"`). Suggestion use, dismissal and successful saved add/move clear feedback; nothing floats below the card.
+- Prep dedupe applies through the shared packing selector, including generic plans. Photo ID stays in packing; remove domestic Bring photo ID. Passport stays in packing when present; omit duplicate Bring passport while retaining Check visa rules. Remove Travel insurance details from packing and retain one Get travel insurance action. Removed IDs' old checked values do not contribute to remaining counts.
+- Verified sample count: **7 actions** = merged four Uber Reserve rides, Diamond Head, Kualoa Jurassic Adventure, intro dive, Waikiki parasail, Kahala shuttle, Get travel insurance. **50 packing items**. Node assertions cover `prepLeft`, `card-trip-prep`, `trip-prep-button`, Before you go count, ignored old ticks, and generic insurance/passport dedupe.
+- Overlap scan: reef-safe sunscreen, reservation QR screenshots/booking confirmations, and cash for parasail fees remain packing-only; no matching Before-you-go action exists in the action-only selector. Booking an activity and carrying its confirmation are distinct steps. No further duplicate action/packing entries found.
+- All question steps reserve measured footer height plus 32px; fallback clearance applies before measurement. Tracking options reserve matching scroll margin and scroll into view with `block:'nearest'` after Couple/Family/Friends selection, honoring system and app reduced motion. `tests/test_sticky_footer.py` adds supervisor Chromium checks at **390×844 and 1280×900**, port **8854**, with PASS/FAIL output: both tracking options above the footer after auto-scroll, then last visible option/input above the footer on every question step.
+- Updated Node and supervisor Python assertions for removed guidance, short blocked copy, Draft layout, dedupe and counts. Browser tests were **not run**, per supervisor ownership. The known **“snapshot weather is seasonal”** failure/classification is untouched.
+
+#### COPY-AUDIT
+
+| Surface | Final visible copy / disposition | Detail behavior |
+| --- | --- | --- |
+| Day Sleep timing / Suggestions / Evening timing | Removed | No orphan controls or empty disclosure |
+| Day hotel / Transport & conditions / Typical conditions | Getting around | One conditional tap row; transport only |
+| Weather | Existing Travel info | Retained once outside day header |
+| Closure block | Ala Moana closed Thu; Add to Fri; × | Full-width reason above controls, no ellipsis |
+| Hours block | Ala Moana outside hours; Add to Fri; × | Same wrapping layout and short venue |
+| Dive/flight block | Dive too close to flight; Add to Thu; × | Same wrapping layout |
+| Block dismiss | × | Accessible name: Dismiss |
+| Domestic ID | Bring photo ID removed | Photo ID stays in packing |
+| International ID | Bring passport only if unpacked | Packed passport removes duplicate; visa action stays |
+| Insurance | Get travel insurance | Travel insurance details removed from packing |
+| Budget subtitle | Estimates | Costs behind Budget breakdown |
+| Draft | Draft · Confirm plan | One aligned row; hint removed |
+| Confirmed kicker | YOUR NEXT CHAPTER, ALL PLANNED | Hidden until confirmed |
+| Prep counts | Before you go · 7 to do / Trip prep · 7 left | Computed; packing ticks excluded |
+| Tracking | Track together / Track each person | Both scroll above footer |
+
+Changed lines use short one-line copy (about eight words or fewer); long transport/cost information stays behind a tap. Inline feedback uses compact controls and prevents wrapping at mobile width. Pixel geometry remains for supervisor verification.
+
+Validation: **24 Node scripts pass**, `node --check` passes for **42 JS files**, Python syntax parsing passes for **40 Python files**, and `git diff --check` passes. No network, Chromium/Playwright execution, commit or push.

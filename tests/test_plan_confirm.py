@@ -16,6 +16,9 @@ async def checks(browser):
             await expect(pg.get_by_test_id('trip-prep')).to_have_count(0)
             await pg.get_by_test_id('demo-oahu').click()
             await expect(pg.get_by_test_id('confirm-plan')).to_be_visible()
+            assert 'YOUR NEXT CHAPTER, ALL PLANNED' not in await pg.locator('.plan-title').inner_text()
+            assert 'Confirm to start prep.' not in await pg.locator('.plan-title').inner_text()
+            assert await pg.locator('.draft-confirm-row').evaluate('e=>{const [badge,button]=e.children;const a=badge.getBoundingClientRect(),b=button.getBoundingClientRect();return Math.abs((a.top+a.bottom)/2-(b.top+b.bottom)/2)<2}')
             assert await pg.evaluate("window.__gonow.state.screen") == 'plan'
             await expect(pg.get_by_test_id('trip-prep')).to_have_count(0)
             await expect(pg.get_by_test_id('trip-prep-button')).to_have_count(0)
@@ -49,7 +52,7 @@ async def checks(browser):
             assert await pg.evaluate("JSON.parse(localStorage.getItem('gonow.prep.v1'))[window.__gonow.state.tripId].seen")
             await pg.get_by_test_id('prep-continue').click()
             await expect(pg.get_by_test_id('confirm-plan')).to_have_count(0)
-            await expect(pg.get_by_test_id('trip-prep-button')).to_have_text('Trip prep · 8 left')
+            await expect(pg.get_by_test_id('trip-prep-button')).to_have_text('Trip prep · 7 left')
             await pg.locator('.logo').click()
             card = pg.get_by_test_id('trip-card').filter(has=pg.locator('[data-trip="'+saved['id']+'"][data-testid=card-trip-prep]'))
             assert await card.get_by_test_id('trip-status').inner_text() != 'Draft'

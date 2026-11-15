@@ -7,7 +7,7 @@ function node(key) {
   if (!nodes.has(key)) {
     const el = {
       innerHTML: '', textContent: '', value: '', isConnected: true, className: '', hidden: false,
-      style: {}, dataset: {}, children: [],
+      style: {setProperty() {}}, dataset: {}, children: [],
       addEventListener(event, fn) { this[event] = fn; },
       querySelectorAll() { return []; },
       querySelector(selector) { return node(String(key) + ' ' + selector); },
@@ -40,7 +40,7 @@ const ctx = {
 ctx.window=ctx;ctx.scrollTo=()=>{};ctx.addEventListener=(event,fn)=>{if(!windowListeners.has(event))windowListeners.set(event,[]);windowListeners.get(event).push(fn);};ctx.history={state:null,pushState(s){this.state=s},replaceState(s){this.state=s}};
 vm.createContext(ctx);
 const jsRoot = fs.existsSync(`${__dirname}/../site/js/app.js`) ? `${__dirname}/../site/js/` : `${__dirname}/../js/`;
-for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','checkin','jetlag','dashboard','daybuilder','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8').replace('window.__gonow= {','window.__renderHelpers={builderContext,planBanner,dayHeadHTML,dayModel,rememberTrip,openSaved,normalizeAnswers,trackChoice,trackToggle,section,pruneEmptySections,paceDayHTML,bindHotel}; window.__gonow= {'),ctx);
+for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','checkin','jetlag','dashboard','daybuilder','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8').replace('window.__gonow= {','window.__renderHelpers={builderContext,planBanner,dayHeadHTML,dayModel,rememberTrip,openSaved,normalizeAnswers,trackChoice,trackToggle,section,pruneEmptySections,paceDayHTML,sleepNudgeHTML,bindPace,bindHotel}; window.__gonow= {'),ctx);
 const api=ctx.__gonow;
 const click=id=>node(`[data-testid="${id}"]`).click();
 function smoke(label){
@@ -97,6 +97,10 @@ function smoke(label){
    Object.assign(a,{who,track,adults:n,kids:0,travelers:[]});
    for(const [i,day] of api.state.plan.days.entries()){
     const html=h.dayHeadHTML(day,i,h.dayModel(day,i));
+    assert(!/Sleep timing|Suggestions|day-guidance|Transport &amp; conditions|Typical conditions|Staying at/.test(html));
+    assert.equal((html.match(/<summary>Getting around<\/summary>/g)||[]).length,day.car&&(day.car.level||day.car.note)?1:0);
+    const noTransport=h.dayHeadHTML({...day,car:{}},i,h.dayModel(day,i));
+    assert(!noTransport.includes('data-testid="day-info"'));
     for(const id of ['traveler-name','traveler-pace','group-section'])assert.equal(html.includes('data-testid="'+id+'"'),track==='each');
     assert.equal((html.match(/data-testid="traveler-name"/g)||[]).length,track==='each'?n:0);
     assert.equal((html.match(/<summary[^>]*>Pace/g)||[]).length,1);
@@ -107,6 +111,28 @@ function smoke(label){
    console.log('PASS all days',destination,who,track,n);
   }
  }
+ // Short-night header stays conditional, compact, and preserves reserved times.
+ const nudgeDay={date:'2026-11-26'}, reserved=[{id:'early',title:'Reserved tour',start:335,end:400,locked:true}];
+ const nudgeContext={previous:{date:'2026-11-25',items:[]},ringResult:{values:{sleep:5.75},goals:{sleep:8},sleepDetail:{first:reserved[0]}}};
+ const nudge=h.sleepNudgeHTML(nudgeDay,reserved,nudgeContext);
+ assert(nudge.includes('Short night · 5h45 sleep'));
+ assert(nudge.includes('sleep-nudge-keep') && nudge.includes('sleep-nudge-accept'));
+ assert(nudge.includes('reserved times') && !nudge.includes('data-testid="sleep-proposal-apply"'));
+ const proposal={hidden:true}, buttons={};let nudgeRemoved=false;
+ const box={dataset:{date:nudgeDay.date},remove(){nudgeRemoved=true},querySelector(selector){
+  if(selector==='[data-testid=sleep-proposal]')return proposal;
+  if(selector==='[data-testid=sleep-proposal-apply]')return null;
+  return buttons[selector] ||= {};
+ }};
+ h.bindPace({querySelectorAll:selector=>selector==='[data-testid=sleep-nudge]'?[box]:[]});
+ buttons['[data-testid=sleep-nudge-accept]'].onclick();assert.equal(proposal.hidden,false);
+ buttons['[data-testid=sleep-proposal-cancel]'].onclick();assert.equal(proposal.hidden,true);
+ buttons['[data-testid=sleep-nudge-keep]'].onclick();assert(nudgeRemoved);
+ assert.equal(h.sleepNudgeHTML(nudgeDay,reserved,nudgeContext),'');
+ memory.delete('gonow.sleep-nudge.'+nudgeDay.date);
+ nudgeContext.ringResult.values.sleep=7.5;
+ assert.equal(h.sleepNudgeHTML(nudgeDay,reserved,nudgeContext),'');
+ console.log('PASS short-night copy, reserved protection, suggestion/cancel and persisted keep');
  Object.assign(a,{who:'couple',track:'together'});h.bindHotel();click('track-toggle');assert.equal(a.track,'each');
  assert.equal(JSON.parse(memory.get('gonow:answers')).track,'each');
  assert.equal(JSON.parse(memory.get('gonow:trips')).find(t=>t.id===api.state.tripId).answers.track,'each');
