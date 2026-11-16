@@ -1427,3 +1427,51 @@ Tests:
 
 COPY-AUDIT:
 - No production visible or accessibility strings added or changed. Test-entered flight text changes from “hA 11” to “HA 11”; the expected existing flight label becomes “HA 11 · lands 5:30 PM”. No new UI copy or reading burden.
+
+### Item E — Ring trim
+
+Changes:
+- Pace rings show at most one priority suggestion: short sleep, a working rest-break button, or an easy-walk line. Removed duplicate recovery messages and the return-to-stay, pace-goal and exclusions paragraphs.
+- “How we count” preserves the disclosure testids and keyboard behavior. Its panel contains only nonempty Movement/Recovery groups with one credited-minute line per activity and one sleep-estimate sentence.
+- Last-day departure rings show sleep and the existing flight label, with no movement/recovery rings, values, goals or day-pace control. Individual traveler rings follow the same rule.
+- The rest action opens the existing Add booking form, prefills its name and focuses it. Existing short-night adjustment controls remain available without an additional ring suggestion.
+
+Tests:
+- Updated ring/check-in Node assertions and existing breakdown, ring-card and check-in Python assertions with comments explaining the copy trim; retained sleep calculation, goal personalization and nudge coverage.
+- Added Node checks for suggestion priority/count, removed paragraphs, empty-group omission, one disclaimer, and flight-day ring/goal omission.
+- Added `tests/test_ring_trim.py`, using `test_full.new` and `test_wellness_home.serve_checks` on port 8875 at 1280/390: Oahu normal/arrival/fly-home days, unique visible lines, disclosure opening, nonempty groups, removed prose, working prefilled rest form, no fly-home movement/goals, and overflow.
+- All `tests/*.js` and `tests/*.cjs` pass, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. All Python tests compile. Chromium/Playwright and screenshots are reserved for the supervisor; no network used.
+
+COPY-AUDIT — every added/changed visible string:
+- `How we count`: short tap label; replaces “Details”/“Activity breakdown”.
+- `Sleep estimate: {bedtime}–{wake time}, with time to wind down and get ready.` / `Sleep estimate allows time to wind down and get ready.`: one sentence behind the tap; replaces the long return/departure explanation.
+- `{activity} · {credited minutes} min`: one activity per list row; replaces formulas/cap prose. Existing activity names remain source content; Movement/Recovery headings appear only with entries.
+- `Short night · {hours}h{minutes} sleep` / `Short night · {hours}h{minutes} before your flight`: one priority line, with the flight variant using the preceding sleep window.
+- `No rest today · Add a pool break?`: one-line actionable button; opens a prefilled form.
+- `Pool or stretch break`: editable name in that form.
+- `Easy day — a short walk is plenty.`: one-line fallback when recovery exists and movement is low.
+- `Sleep {hours}h{minutes} · {existing flight label}`: fly-home compact value, with the existing estimated departure wording when applicable; `Flight time not set` is the standalone renderer fallback.
+- `Sleep`, `Movement`, `Recovery`, existing normal-day values/goals and `Plan estimates, not medical advice` retain their wording; the disclaimer is rendered once per caption-enabled ring block.
+- Removed entirely: “From getting back to…”, “Goals come from…”, “Not counted:…”, both “No recovery block…” variants and verbose per-activity math. No developer terms added to the UI. The advice and tap labels are sized for one line at 390px; activity/sleep details stay behind the tap.
+
+
+### Item E follow-up — Shared fly-home ring context
+
+Changes:
+- Traced all day-head rings: ordinary day cards, DayBuilder's selected-day card and print cards all use dayHeadHTML → paceDayHTML. Their scheduled items can replace the original airport ride with an untimed flight placeholder.
+- Added dayFlightContext, shared by dayRingContext, the day header and individual traveler rings. Detects the final plan day from its date and both raw/scheduled items, including airport rides, pick-path and any-city flight items. Does not depend on a potentially stale plan.end.
+- Preserve scheduled times and recover omitted raw departure items. For the untouched Oahu demo's relative-time ride, use its explicit “leave 4:55 AM” description when no numeric time exists. Sleep now uses the preceding night (5h55 in the demo), rather than an untimed default of 8h.
+- Fly-home headers omit move/recovery rings, the rest action, day pace and duplicate sleep-adjustment suggestions. Traveler rings share detection and sleep inputs.
+- Updated the pace disclosure assertion and the all-day pace-control assertion with comments explaining Item E. Audited all Python tests for removed copy; remaining matches are negative assertions and are retained.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all Python tests.
+- Added actual-app/DayBuilder Node regression coverage for the original Oahu departure, an omitted raw airport ride, sleep-only rings, flight label, no rest action/day pace and the exact 5h55 preflight sleep line. Existing template/pick and group suites cover other plan paths.
+- Extended supervisor-run test_ring_trim.py (existing shared new/serve_checks helpers, port 8875, 1280/390) to assert the exact short-night message and absent rest button. Browser execution/screenshots remain supervisor-run.
+- No assets added/renamed; cache tags and asset counts unchanged. Existing uncommitted changes retained; no commits, pushes, remote changes or network access.
+
+COPY-AUDIT — every visible string added/changed:
+- No new copy. Correctly displays the existing “Sleep {hours}h{minutes} · {flight label}” and “Short night · 5h55 before your flight” on the demo departure; existing flight labels remain unchanged. Short-night advice stays a single line; calculation details remain behind “How we count”.
+- Removes departure-day movement/recovery values and goals, “No rest today · Add a pool break?”, day pace and sleep-adjustment controls. Other days retain them.
+- The updated test expects the existing Item E label “How we count” instead of “Details”. No testids or accessibility strings renamed; no developer terminology added.

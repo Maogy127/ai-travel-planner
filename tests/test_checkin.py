@@ -1,3 +1,4 @@
+# Ring trim replaces duplicate recovery prose with a working rest action.
 """Supervisor-run optional check-in regressions, desktop/mobile, port 8836."""
 from test_full import reopen_dashboard
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
@@ -114,7 +115,7 @@ async def checks(browser):
             assert (await record(pg,'gonow.checkin.v1',next_date))['skipped']
             assert not await pg.get_by_test_id('morning-checkin').count()
             await pg.locator('.day-head > .wellness-rings [data-testid=ring-breakdown-toggle]').click()
-            await expect(pg.locator('.ring-encouragement').first).to_have_text('No recovery block today. Rest is part of the plan — add a pool or stretch break?')
+            await expect(pg.locator('.ring-encouragement').first).to_have_text('No rest today · Add a pool break?')
             text=await pg.locator('.day-head').inner_text()
             assert not re.search(r'\b(missed|failed|behind|fell short|only|not enough)\b',text,re.I)
             # Check all currently visible new controls, then the expanded optional fields.

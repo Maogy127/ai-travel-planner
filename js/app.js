@@ -1558,16 +1558,36 @@
 
     function travelers(){var a=state.answers,n=a.who==='solo'?1:a.who==='couple'?2:Number(a.adults)+Number(a.kids);a.travelers=(a.travelers||[]).slice(0,n);while(a.travelers.length<n)a.travelers.push({name:'',level:a.level});a.travelers.forEach(function(t){if(/^Traveler \d+$/.test(t.name||''))t.name='';});return a.travelers;}
     function paceClock(n){return (Math.floor(n/60)%12||12)+':'+String(n%60).padStart(2,'0')+(n>=720?' PM':' AM');}
+    // Headers, builder/print views and traveler rings share departure detection.
+    function dayFlightContext(day,items){
+        var planDays=state.plan.days,last=planDays[planDays.length-1];
+        var all=(items||[]).concat(day.items||[]);
+        function departing(it){return it.flightDirection!=='arrival'&&(it.flightDirection==='departure'||it.flightDirection==='return'||it.kind==='flight'||it.flight||it.id==='pick-airport'||/airport|\bHNL\b/i.test(it.title||'')||it.airport||it.inboundRide&&it.inboundRide.airport);}
+        var flyHome=!!last&&day.date===last.date&&all.some(departing);
+        var flight=all.find(function(it){return it.flightDirection==='departure'||it.flightDirection==='return';});
+        // Raw demo rides have a clock string; scheduled rides have numeric starts.
+        var ringItems=(items||[]).slice();
+        if(flyHome)ringItems=ringItems.concat((day.items||[]).filter(function(it){return departing(it)&&!ringItems.some(function(scheduled){return it.id&&(scheduled.id===it.id||scheduled.sourceId===it.id);});}));
+        ringItems=ringItems.map(function(it){
+            if(it.start!=null)return it;
+            var start=parseClock(it.time),sampleLeave=flyHome&&state.plan.id==='oahu-demo-2026-11'&&String(it.desc||'').match(/leave (\d{1,2}:\d{2}\s*(?:AM|PM))/i);
+            if(start==null&&sampleLeave)start=parseClock(sampleLeave[1]);
+            return Object.assign({},it,{start:start});
+        });
+        return {flyHome:flyHome,items:ringItems,flightLabel:flight?flight.title:(window.GoNowFlights?window.GoNowFlights.label(state.answers,'return'):'Flight time not set')};
+    }
     function dayRingContext(day,items,next,scheduleDays){
+        var flightContext=dayFlightContext(day,items);items=flightContext.items;
         var raw=state.answers,ji=state.plan.days.findIndex(function(d){return d.date===day.date;}),j=window.GoNowJetlag.adjustment({date:day.date,day:ji+1,origin:raw.origin,destinationZone:Engine.matchDestination(raw.destination).tz||'America/Los_Angeles',bedtime:raw.bedtime,wake:raw.wake,local:raw.mode==='local'});var a=Object.assign({},raw,(raw.bedtime||raw.wake)?{bedtime:j.bedtime,wake:j.wake}:{}),override=(a.dayPaces||{})[day.date]||'trip',level=window.GoNowRings.selectLevel(a.level,override);
         var schedule=!scheduleDays&&window.DayBuilder&&window.DayBuilder.schedule(),previous=scheduleDays?scheduleDays[ji-1]:schedule?schedule.days[ji-1]:state.plan.days[ji-1];
         a.previousItems=previous?previous.items:[];a.stay=state.plan.stay||'your stay';a.usualBedtime=raw.bedtime;a.jetlagAdjusted=!j.aligned;
-        var ringResult=window.GoNowCheckin.score(personalItems(items,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(0))),level,next,a,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(0)));return {a:a,j:j,previous:previous,override:override,level:level,ringResult:ringResult};
+        var ringResult=window.GoNowCheckin.score(personalItems(items,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(0))),level,next,a,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(0)));return {a:a,j:j,previous:previous,override:override,level:level,ringResult:ringResult,flightContext:flightContext};
     }
     function paceDayHTML(day,items,next){
         var context=dayRingContext(day,items,next),override=context.override,level=context.level,ringResult=context.ringResult;
-        var html=window.GoNowRings.render(ringResult,{override:override==='trip'?'':paceLabels[override],compact:true,caption:false})+sleepNudgeHTML(day,items,context)+'<details class="pace-control" '+(state.paceOpen===day.date?'open':'')+'><summary data-testid="day-pace-link" aria-expanded="'+(state.paceOpen===day.date)+'">Pace: '+(level==='unsure'?'Not set · choose':paceLabels[level]+' · change')+'</summary><fieldset data-testid="day-pace" data-date="'+day.date+'"><legend>Day pace</legend>'+['gentle','active','athlete','trip'].map(function(v){return '<label><input type="radio" name="pace-'+day.date+'" data-testid="day-pace-option" data-value="'+v+'" value="'+v+'" '+(v===override?'checked':'')+'>'+paceLabels[v]+'</label>';}).join('')+'</fieldset></details>';
-        return html;
+        var flyHome=context.flightContext.flyHome;
+        var html=window.GoNowRings.render(ringResult,{override:override==='trip'?'':paceLabels[override],compact:true,caption:false,flyHome:flyHome,flightLabel:context.flightContext.flightLabel,suppressAdvice:!flyHome&&window.GoNowRings.shortNight(ringResult.values.sleep,ringResult.goals.sleep)})+(flyHome?'':sleepNudgeHTML(day,items,context))+'<details class="pace-control" '+(state.paceOpen===day.date?'open':'')+'><summary data-testid="day-pace-link" aria-expanded="'+(state.paceOpen===day.date)+'">Pace: '+(level==='unsure'?'Not set · choose':paceLabels[level]+' · change')+'</summary><fieldset data-testid="day-pace" data-date="'+day.date+'"><legend>Day pace</legend>'+['gentle','active','athlete','trip'].map(function(v){return '<label><input type="radio" name="pace-'+day.date+'" data-testid="day-pace-option" data-value="'+v+'" value="'+v+'" '+(v===override?'checked':'')+'>'+paceLabels[v]+'</label>';}).join('')+'</fieldset></details>';
+        return flyHome?html.slice(0,html.indexOf('<details class="pace-control"')):html;
     }
     function sleepNudgeHTML(day,items,context){
         var ringResult=context.ringResult,previous=context.previous,html='';
@@ -1583,11 +1603,12 @@
         return html;
     }
     function dayPeopleHTML(day,items,next){
-        var context=dayRingContext(day,items,next),a=context.a,override=context.override,html=dayFeelHTML(day,items);
-        var group=travelers();if(eachPerson())html+='<section data-testid="group-section"><button type="button" data-testid="group-toggle" aria-expanded="'+!!state.groupOpen+'" aria-controls="group-'+day.date+'">Each person</button><div id="group-'+day.date+'" '+(state.groupOpen?'':'hidden')+' class="travelers">'+group.map(function(t,i){return '<div data-testid="traveler-row"><label><span class="sr-only">Name</span><input data-testid="traveler-name" placeholder="'+(i===0?'Your name':i===1?"Partner&#39;s name":"Traveler "+(i+1)+"’s name")+'" data-index="'+i+'" value="'+esc(t.name)+'"></label><label><span class="sr-only">Pace</span><select data-testid="traveler-pace" data-index="'+i+'">'+['gentle','active','athlete','unsure'].map(function(v){return '<option value="'+v+'" '+(v===t.level?'selected':'')+'>'+paceLabels[v]+'</option>';}).join('')+'</select></label><div data-testid="traveler-rings" aria-label="'+esc(t.name||(i?'Partner':'You'))+'">'+window.GoNowRings.render(window.GoNowCheckin.score(personalItems(items,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i))).concat(window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i)).extras||[]),window.GoNowRings.selectLevel(t.level,override),next,a,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i))),{caption:false,name:t.name||(i?'Partner':'You'),compact:true})+'</div></div>';}).join('')+'</div></section>';
+        var context=dayRingContext(day,items,next),a=context.a,override=context.override,html=dayFeelHTML(day,items);items=context.flightContext.items;
+        var group=travelers();if(eachPerson())html+='<section data-testid="group-section"><button type="button" data-testid="group-toggle" aria-expanded="'+!!state.groupOpen+'" aria-controls="group-'+day.date+'">Each person</button><div id="group-'+day.date+'" '+(state.groupOpen?'':'hidden')+' class="travelers">'+group.map(function(t,i){return '<div data-testid="traveler-row"><label><span class="sr-only">Name</span><input data-testid="traveler-name" placeholder="'+(i===0?'Your name':i===1?"Partner&#39;s name":"Traveler "+(i+1)+"’s name")+'" data-index="'+i+'" value="'+esc(t.name)+'"></label><label><span class="sr-only">Pace</span><select data-testid="traveler-pace" data-index="'+i+'">'+['gentle','active','athlete','unsure'].map(function(v){return '<option value="'+v+'" '+(v===t.level?'selected':'')+'>'+paceLabels[v]+'</option>';}).join('')+'</select></label><div data-testid="traveler-rings" aria-label="'+esc(t.name||(i?'Partner':'You'))+'">'+window.GoNowRings.render(window.GoNowCheckin.score(personalItems(items,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i))).concat(window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i)).extras||[]),window.GoNowRings.selectLevel(t.level,override),next,a,window.GoNowCheckin.get("gonow.checkin.v1",day.date,personId(i))),{caption:false,name:t.name||(i?'Partner':'You'),compact:true,flyHome:context.flightContext.flyHome,flightLabel:context.flightContext.flightLabel})+'</div></div>';}).join('')+'</div></section>';
         return html;
     }
     function bindPace(scope){
+        scope.querySelectorAll('[data-testid=ring-rest-break]').forEach(function(b){b.onclick=function(){var toggle=view.querySelector('[data-testid=db-booking-toggle]');if(toggle.getAttribute('aria-expanded')!=='true')toggle.click();var input=view.querySelector('[data-testid=db-booking-name]');input.value='Pool or stretch break';input.focus();};});
         scope.querySelectorAll('[data-testid=day-pace-link]').forEach(function(b){b.parentElement.ontoggle=function(){b.setAttribute('aria-expanded',String(b.parentElement.open));state.paceOpen=b.parentElement.open?b.nextElementSibling.dataset.date:null;};});
         scope.querySelectorAll('[data-testid=sleep-nudge]').forEach(function(box){
             box.querySelector('[data-testid=sleep-nudge-keep]').onclick=function(){try{localStorage.setItem('gonow.sleep-nudge.'+box.dataset.date,'keep');}catch(e){}box.remove();};

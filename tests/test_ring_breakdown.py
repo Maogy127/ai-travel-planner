@@ -1,3 +1,4 @@
+# Ring trim shows credited minutes without the verbose formula.
 """Supervisor-run ring breakdown checks; Chromium required."""
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
@@ -28,8 +29,8 @@ async def checks(browser):
                     await toggle.click()
                 await expect(toggle).to_have_attribute('aria-expanded', 'true')
                 await expect(panel).to_be_visible()
-                await expect(panel.locator('li').filter(has_text='Diamond Head')).to_contain_text('90 min × 1 = 90 min')
-                await expect(panel.locator('li').filter(has_text='pool / beach downtime')).to_contain_text('capped at 30')
+                await expect(panel.locator('li').filter(has_text='Diamond Head')).to_contain_text('90 min')
+                await expect(panel.locator('li').filter(has_text='pool / beach downtime')).to_contain_text('30 min')
                 await toggle.click()
                 await expect(toggle).to_have_attribute('aria-expanded', 'false')
                 await expect(panel).to_be_hidden()

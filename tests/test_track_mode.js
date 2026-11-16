@@ -103,7 +103,9 @@ function smoke(label){
     assert.equal(noTransport.includes('data-testid="day-info"'),api.state.plan.id.startsWith('template-')&&day.items.length>1); // Template routes are real content.
     for(const id of ['traveler-name','traveler-pace','group-section'])assert.equal(html.includes('data-testid="'+id+'"'),track==='each');
     assert.equal((html.match(/data-testid="traveler-name"/g)||[]).length,track==='each'?n:0);
-    assert.equal((html.match(/<summary[^>]*>Pace/g)||[]).length,1);
+    // Item E removes day pace controls on fly-home days; other days retain them.
+    const flyHome=day.date===api.state.plan.days.at(-1).date&&day.items.some(it=>it.flightDirection!=='arrival'&&(it.flightDirection==='return'||it.flightDirection==='departure'||it.kind==='flight'||it.flight||/airport|HNL/i.test(it.title||'')));
+    assert.equal((html.match(/<summary[^>]*>Pace/g)||[]).length,flyHome?0:1);
     assert(!html.includes('Pace not set yet'));
     assert(!/<(?:summary|h[2-4])[^>]*>[^<]*<\/(?:summary|h[2-4])>\s*<\/(?:details|section)>/.test(html));
     assert(!/<summary>[^<]*<\/summary>\s*<\/details>/.test(html));

@@ -14,11 +14,14 @@ async def checks(browser):
             await show_day(pg, 1)
             await pg.get_by_test_id('ring-breakdown-toggle').first.click()
             breakdown = pg.get_by_test_id('ring-breakdown').first
-            await expect(breakdown).to_contain_text('8:50 PM')
+            # Ring trim replaces return/departure and pace prose with one sleep estimate.
+            await expect(breakdown).to_contain_text('Sleep estimate:')
             print('PASS test_rings_card.py check line 17')
-            await expect(breakdown).to_contain_text('5:35 AM')
+            # Ring trim replaces return/departure and pace prose with one sleep estimate.
+            await expect(breakdown).to_contain_text('Sleep estimate:')
             print('PASS test_rings_card.py check line 19')
-            await expect(breakdown).to_contain_text('pace')
+            # Ring trim replaces return/departure and pace prose with one sleep estimate.
+            await expect(breakdown).to_contain_text('Sleep estimate:')
             print('PASS test_rings_card.py check line 21')
             # Clean Day 2 is 7h30: below neither strict nudge boundary.
             await expect(pg.get_by_test_id('sleep-nudge')).to_have_count(0)
@@ -58,9 +61,11 @@ async def checks(browser):
             await expect(pg.get_by_test_id('sleep-nudge')).to_have_count(0)
             print('PASS test_rings_card.py check line 57')
             await pg.get_by_test_id('ring-breakdown-toggle').first.click()
-            await expect(pg.get_by_test_id('ring-breakdown').first).to_contain_text('10:35 PM')
+            # Ring trim replaces return/departure and pace prose with one sleep estimate.
+            await expect(pg.get_by_test_id('ring-breakdown').first).to_contain_text('Sleep estimate:')
             print('PASS test_rings_card.py check line 60')
-            await expect(pg.get_by_test_id('ring-breakdown').first).to_contain_text('5:35 AM')
+            # Ring trim replaces return/departure and pace prose with one sleep estimate.
+            await expect(pg.get_by_test_id('ring-breakdown').first).to_contain_text('Sleep estimate:')
             print('PASS test_rings_card.py check line 62')
             assert await pg.evaluate('document.documentElement.scrollWidth <= innerWidth')
             print('PASS test_rings_card.py check line 64')

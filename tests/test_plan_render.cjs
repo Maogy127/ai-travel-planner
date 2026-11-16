@@ -70,6 +70,25 @@ function smoke(label){
  assert.equal(JSON.parse(memory.get('gonow:trips'))[0].confirmed,true);
  click('prep-continue');
  smoke('demo');
+ // Item E: builder headers must detect the raw ride even when scheduling omits it.
+ const lastDay=api.state.plan.days.at(-1);
+ function assertFlyHome(day){
+  const html=ctx.__renderHelpers.dayHeadHTML(day,api.state.plan.days.length-1,ctx.__renderHelpers.dayModel(day,api.state.plan.days.length-1));
+  const header=html.split('</figure>')[0];
+  assert(header.includes('ring-sleep'));
+  assert(!/ring-move|ring-rec|ring-rest-break/.test(header));
+  assert(header.includes('departs'));
+  assert(!html.includes('data-testid="day-pace-link"'));
+  return header;
+ }
+ assert(assertFlyHome(lastDay).includes('Short night · 5h55 before your flight'));
+ const savedItems=lastDay.items;
+ lastDay.items=[{kind:'travel',title:'Uber Reserve to HNL',time:'4:55 AM'}];
+ ctx.DayBuilder.resetSession();
+ // Preceding sleep ends 30 minutes before the 4:55 AM airport ride.
+ assert(assertFlyHome(lastDay).includes('before your flight'));
+ lastDay.items=savedItems;
+
  assert.equal(api.state.plan.id,'oahu-demo-2026-11');
  ctx.DayBuilder.resetSession();
  const defaultRoot=node('default-regression');

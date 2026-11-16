@@ -1673,3 +1673,7 @@ body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;
 .flight-conflict-notice{display:flex;align-items:center;gap:4px;white-space:nowrap;padding:0 4px;min-width:0}
 .flight-conflict-text{overflow:hidden;text-overflow:ellipsis;min-width:0}.flight-conflict-notice svg{display:none}
 .flight-conflict-notice button{flex-shrink:0;min-height:44px;padding:0 4px;font-size:12px}
+/* Ring trim: keep the single suggestion and its disclosure compact on phones. */
+.wellness-rings .ring-encouragement{grid-column:1/-1;flex-basis:100%;white-space:nowrap;font-size:12px}
+.wellness-rings button.ring-encouragement{min-height:44px;width:max-content;max-width:100%;padding:4px 0;background:transparent;border:0;text-align:left;text-decoration:underline;color:var(--ink)}
+.day-head .compact-rings [data-testid=ring-breakdown-toggle]{width:auto;font-size:12px}
