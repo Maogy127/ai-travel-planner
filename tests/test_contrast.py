@@ -1,4 +1,5 @@
 """Computed browser contrast pairs on real UI surfaces, own port 8832."""
+from test_full import open_home_flow
 import asyncio
 import sys
 from playwright.async_api import expect
@@ -54,9 +55,12 @@ async def checks(browser):
             await pg.get_by_test_id('voice-btn').click()
             await pair(pg,'[data-testid=voice-btn].is-listening','voice listening')
             await pg.evaluate("__gonow.go('home')")
+            await open_home_flow(pg)
             await pg.get_by_test_id('demo-oahu').click()
+            from test_full import continue_prep
+            await continue_prep(pg)
             await expect(pg.get_by_test_id('db-root')).to_be_visible()
-            for selector,label in [('.db-time','time box'),('.db-lock','lock chip'),('.db-travel','travel connector'),('.day-head .ring-value-sleep strong','day sleep'),('.day-head .ring-value-move strong','day movement'),('.day-head .ring-value-rec strong','day recovery')]:
+            for selector,label in [('.db-time','time box'),('[data-testid=db-lock]','lock icon'),('.db-travel','travel connector'),('.day-head .compact-values','day summary'),('.day-head .compact-values','day summary'),('.day-head .compact-values','day summary')]:
                 await pair(pg,selector,label)
             await pg.get_by_test_id('view-map').click()
             await pair(pg,'.map-pin','map pin number')

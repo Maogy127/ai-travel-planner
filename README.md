@@ -1,6 +1,6 @@
 # GoNow
 
-Open `index.html` directly, or serve this directory with any static HTTP server. Home lists trips saved on this device. Start a trip, shape it in Draft, then Generate my plan to freeze a finished copy. Draft edits do not change that copy until you generate again. Activity search uses the on-device library only. It is not a live worldwide place search. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Fraunces Variable and Inter Variable are self-hosted in `fonts/` with `font-display: swap`, Georgia/system fallbacks and SIL OFL licenses in each family directory. No font service is contacted. Use `?fast=1` to skip the simulated planning delay.
+Open `index.html` directly, or serve this directory with any static HTTP server. Home lists trips saved on this device. Start a trip and review the plan as a Draft. Confirm plan saves a finished snapshot and opens Trip prep. The draft editor’s Generate my plan also freezes a finished copy. Draft edits do not change that copy until you generate again. Activity search uses the on-device library only. It is not a live worldwide place search. No build, dependencies or API keys are required. Optional weather and exchange-rate calls load when the local info tile opens. Fraunces Variable and Inter Variable are self-hosted in `fonts/` with `font-display: swap`, Georgia/system fallbacks and SIL OFL licenses in each family directory. No font service is contacted. Use `?fast=1` to skip the simulated planning delay.
 
 Files: `index.html`, `css/styles.css`, `js/catalog.js`, `js/oahu.js`, `js/daybuilder.js`, `js/engine.js`, `js/ai.js`, `js/credits.js`, `js/localinfo.js`, `js/affiliates.js`, `js/app.js`, `credits.json` and `images/*.jpg`.
 
@@ -142,8 +142,8 @@ The drag handle retains pointer and Space/arrow/Space reordering. Browser layout
 coarse targets and interactions need supervisor verification; Playwright was not
 run in this sandbox. Existing assertion/interaction edits are listed in TEST-CHANGES.md.
 
-Morning check-ins and sweet moments are optional, device-local records in
-`gonow.checkin.v1` and `gonow.moments.v1`: date → stable traveler index ID → record.
+Morning check-ins are optional, device-local records in
+`gonow.checkin.v1`: date → stable traveler index ID → record.
 Done or skipped check-ins collapse to one line and never prompt again. Voice input
 uses the browser's existing Web Speech service, with English and Chinese parsing;
 recognition availability and microphone permission depend on the browser.
@@ -158,4 +158,184 @@ thanks dismisses them persistently. Locks are always preserved. Solo swaps use
 DayBuilder's persisted update path; group swaps store a personal alternative,
 show it on the card, and score it for that traveler without editing the shared
 schedule. High energy offers a 30-minute optional run if soreness and poor sleep
-are absent. Sweet moments appear by day and in “Your sweet moments.”
+are absent.
+
+## Question flow
+
+Trip mode: Home asks mode, pace, activities and destination. The next screen asks origin and summarizes the destination with an Edit link back to Home; it does not repeat pace or activities. The eight detail pages are: (1) dates, (2) total budget and covers, (3) who, (4) ages, (5) trip styles, then the personalization choice, (6) food, (7) Your days: pace/activity summary with optional inline Edit and sleep times, (8) musts and stay. Skip records the existing defaults; the quick-plan branch can skip the three optional personalization pages. Step/Page counters and passport stamps use this actual eight-page list.
+
+Out in my city: Home asks mode, pace, activities, city and half/full/weekend length. Three remaining pages ask (1) trip styles/interests, (2) food, (3) Your days: summary/Edit and optional sleep, then the local plan. Dates, flights/origin, lodging, hotel budget, who/ages and trip musts/stay are omitted: this mode creates flexible nearby ideas rather than bookings or age-gated travel arrangements. Local Step/Page counters and stamps use these three pages. Pace and activities have one source of truth (`answers.level` and `answers.activities`); editing the summary updates the same Home controls.
+
+Food is one page with exactly two groups: “Any dietary needs?” (`dietNeeds`, `allergens`, conditional `allergyOther`, `dietNotes`) and “What do you love to eat?” (`foodLoves`). Empty selections mean none; no exclusive “none” chip is needed. Current keys are display labels (for example `Vegan`, `Shellfish`, `High protein`).
+
+`GoNowDiet.migrate` in `js/diet.js` runs when loading saved answers, opening saved trips/shared links, saving, and before generation. Legacy `food` Vegetarian/Vegan/Halal/Gluten-free and `diet` Vegetarian/Vegan/Gluten-free/Dairy-free map to `dietNeeds`. Legacy `food` Local classics/Seafood/Street food / casual/Fine dining and `diet` High protein/Low carb map to `foodLoves`; Coffee & bakeries maps to Healthy cafés & bowls. No preference/No restrictions are dropped. English nut/peanut/tree nut and Chinese 坚果/花生 map to allergen Nuts; shellfish/shrimp/crab/lobster and 贝/虾/蟹 map to Shellfish. Remaining allergy text becomes `allergyOther` and selects Other. Arrays dedupe. Existing new-schema arrays are authoritative, so clearing a selection cannot resurrect old answers. Old keys can remain in stored payloads but only the migration helper reads them.
+
+Meal constraints use explicit venue title/description/tags. Explicit conflicts are excluded from suggestion lists or replaced with “A place that fits your needs”; booked, locked and requested meals remain with a menu-check warning. Unknown venues show “Check the menu”; positive dietary tags require evidence for every selected need. Soft food loves boost ordering only. Fine dining stays welcome, with a gentle day-level lunch/stroll note when the day's data identifies a tasting menu, fine dining or La Mer.
+
+Food/flow test hooks: `food-chip` (`data-key`, `data-value`, `aria-pressed`), `allergy-other`, `diet-notes`, `diet-tag`, `dinner-balance`, `pace-summary`, `pace-summary-edit` (`aria-expanded`, `aria-controls="pace-inline"`), existing `pace-option`/`activity-chip` in the editor, and `data-topic` on question groups. Supervisor Chromium suites: `tests/test_food.py` port 8840; `tests/test_question_flow.py` port 8841, both at 1280/390. Node: `node tests/test_food.js`. No additional JS asset was introduced; the existing versioned `diet.js` remains in index.html, so the asset count stays 19.
+
+### Ring estimates: home sleep and local time
+
+The assumed home schedule is 22:30–06:30; users can edit it or clear both
+fields for the original itinerary-only estimates. The shared time picker uses
+visible editable `type=text` HH:MM inputs (the existing testids and names), plus
+a complete 12-hour display button. Every native time input, including dynamic
+booking, flight, schedule, move/copy and activity editors, is enhanced by the
+same observer. Form input/change events and optional empty values are retained.
+Picker choices use full HH:MM values. Date fields are unchanged.
+
+`js/jetlag.js` maps unambiguous LA/LAX, SF/SFO, Seattle/SEA, New York/JFK/EWR/LGA,
+Honolulu/HNL/Oahu, Chicago/ORD, London/LHR, Tokyo/NRT/HND and Shanghai/Beijing
+origins to IANA zones; unknown origins assume America/Los_Angeles. Catalog
+entries have explicit real IANA `tz` and central-area `center` fields.
+Intl supplies each trip date's offset, including DST. LA→Oahu in November is
+−120 minutes: Day 1 **20:30/04:30**, Day 2 **21:30/05:30**, Day 3 onward
+**22:30/06:30**. July starts −180 minutes and aligns on Day 4. Each day moves
+60 minutes toward the home clock schedule expressed in destination local time.
+Eastbound or shifts of at least three hours suggest extra rest on Day 1.
+City mode has no adjustment. All recommendations leave the shared itinerary
+and locks intact; late locked dinners get a nap suggestion.
+
+The day-head sleep ring describes the **preceding night**, not tonight. It uses
+last night's final scheduled end (a proxy for getting back), plus 45 minutes
+of wind-down, or the adjusted usual bedtime, whichever is later. Sleep ends at
+the earlier of adjusted wake time and today's first departure minus 30 minutes
+of preparation. The resulting window is clamped to 0–10 hours. Jet lag shifts
+the preference window once; it is never subtracted again. With no prior day,
+the usual bedtime supplies the estimate. An untimed flight uses the usual wake
+preference (08:00 without preferences). Return times are schedule estimates.
+
+The earlier 8h15 Day 2 value used Day 2's evening and Day 3's morning, without
+sleep preferences. The reported 5h45 is not reproducible in the clean sample;
+saved schedule changes can shorten the window. Corrected Day 2 is **7h30**:
+Nov 25 dinner ends 20:50, wind-down ends 21:35 (later than adjusted bedtime
+21:30), and the 05:35 Uber imposes a 05:05 cutoff (earlier than adjusted 05:30).
+The nudge triggers strictly below 85% of goal **or** more than 60 minutes short.
+Thus 6h50 of 8h triggers by the hour rule, while 7h00 does not. Keep plan is
+saved per date. Suggestions require review; reserved slots remain fixed.
+
+Clearly planned on-foot browsing at Ala Moana and the Royal Hawaiian/International
+Market Place now has explicit walk metadata. Walk/wander/stroll credit is ×0.5,
+capped at **60 credited minutes per block**; other movement caps at 90, recovery
+at 60, pool/beach downtime at 30. Transport, meals, generic free time, vehicle
+tours, parasail and diving/snorkeling without explicit swimming stay excluded.
+Day 2 movement/recovery remain **90/30**.
+
+These are the actual reflowed Oahu DayBuilder results with the assumed home sleep:
+
+| Day | Sleep | Move | Recover |
+| --- | --- | --- | --- |
+| Nov 25 | 8h00 | 0 min | 0 min |
+| Nov 26 | 7h30 | 90 min | 30 min |
+| Nov 27 | 8h00 | 60 min | 0 min |
+| Nov 28 | 6h10 | 142.5 min | 0 min |
+| Nov 29 | 8h00 | 0 min | 0 min |
+
+The earlier Day 2 8h15 statement above describes itinerary-only scoring.
+Hotel uncertainty uses the catalog center (Oahu: Waikiki), never a fabricated
+hotel. Adding/editing a hotel updates stay references and recomputes connectors
+through DayBuilder's travel calculation, preserving locked start/end values.
+
+For screenshots and local testing, `?today=2026-11-26` overrides the destination's
+local date for the morning check-in. This query parameter is read once on page
+load and must be a real ISO calendar date. Without it, `Intl.DateTimeFormat` uses
+the destination catalog's IANA time zone (Oahu: `Pacific/Honolulu`). Check-ins
+appear only in the plan on that date, directly below the day heading.
+
+Changing a scheduled time preserves `originalTitle` for snapshots/export and
+removes trailing time labels: an em/en dash followed by `H[:MM] AM/PM` and its
+suffix, or a trailing `H[:MM] AM/PM [entry] slot`. A trailing dashed `sunrise` or
+`sunset [photos]` label is removed only when the old clock matches that period
+(before 10 AM or after 4 PM). Place names such as Sunset Beach remain intact.
+
+### Simple days and Trip prep (budget-fix)
+
+Questions and the Oahu sample open the **plan first**, marked Draft until confirmed.
+**Confirm plan** saves a finished snapshot and opens **Trip prep**. Its three sections are
+**Budget**, **Before you go**, and **What to bring**; none is rendered below the
+itinerary. Continue focuses the plan heading. The compact header button reopens
+prep and reports unchecked prep items. `gonow.prep.v1` stores each trip's `seen`
+flag and checkbox map. Packing ticks also synchronize with the existing packing
+store and activity checklists. Opening prep marks it seen. Confirmed trips can reopen prep from the plan header
+or dashboard card. Loads always open Home or Your trips, ignoring stale screen/hash
+routes; malformed trip lists are treated as empty and legacy migration is guarded. Drafts retain their existing editing flow.
+
+Each item's home follows its scope:
+
+- **Prep / Budget:** total/cost summary, the five budget buckets, inclusion status,
+  researched cost details and source links.
+- **Prep / Before you go:** trip-wide age rules and notices, hotel/flight booking
+  searches and their disclosure, typical weather and its sources, local time,
+  currency, language, plugs, tipping, weather/FX data and retry controls. Repeated
+  notices are normalized and deduplicated. A flag already attached to a day's
+  notes or activity stays there; a flag naming a trip date goes to that date.
+- **Prep / What to bring:** the full grouped packing checklist, tick status,
+  quantities, custom items, hide-packed and reset controls. Activity packing
+  checklists remain synchronized shortcuts to these same packing items.
+- **Day / collapsed Before you go:** that day's advance reservations, transport
+  notes, booking to-dos and meal-balance suggestion. In the Oahu sample, Nov 25
+  keeps Diamond Head/Kualoa/Uber Reserve bookings and dinner reconfirmation;
+  Nov 26 keeps Thanksgiving closures/hours, the pre-dive reminder and Senia
+  reconfirmation; Nov 27 keeps the next night's shuttle reservation; Nov 28
+  keeps the airport ride reservation; Nov 29 keeps the dive-to-flight interval,
+  online check-in and agricultural inspection. The dive-to-flight warning is
+  removed from trip-wide prep because Nov 29 already owns it.
+- **Day / info disclosure:** accommodation, rental-car status and typical
+  conditions. Detailed transport instructions stay with their activity.
+- **Food tile removed:** its meal stops already exist as chronological cards;
+  the unique dinner-balance suggestion is in the day's notes.
+- **Getting around tile removed:** each day's car/transport note is in that day's
+  notes; route/travel connectors remain between activities.
+
+The day ring is one small clickable summary. `ring-breakdown-toggle` and
+`ring-breakdown` remain the disclosure hooks. `day-pace-link` reveals `day-pace`
+and `day-pace-option`; `group-toggle` reveals group rows; `day-info` reveals
+chips. `day-add` opens the add panel, retaining `db-tray-toggle`, `db-tray`,
+`db-booking-toggle` and the booking form. Relax/rain/custom-item controls remain
+under Day options. Sleep timing and pace suggestions are disclosures; only a
+short-night prompt, a conflict, or today's check-in appears as an actionable
+prompt by default. `?today=YYYY-MM-DD` continues to control test check-in dates.
+
+Supervisor browser suites: `tests/test_dayview_simple.py` (8847) and
+`tests/test_trip_prep.py` (8848), each at 1280 and 390 pixels. This work retains
+`?v=20de649-budgetfix`; no commit or push is required.
+
+Returning visitors with saved trips now land on **Your trips**, including on
+reload of `#plan` / `#prep`. First visits keep the original home screen. `+ New
+trip` opens that flow with a Your trips back button and the Oahu sample.
+
+Dashboard status uses destination-local calendar dates from `Intl` (catalog
+IANA time zone; UTC for unknown destinations). Trips are Draft until `confirmed === true` or a legacy finished snapshot exists. A finished trip whose start is in the future is Upcoming · N days;
+start through end inclusive is In progress; otherwise it is Ready, including
+undated and ended plans. A valid `?today=YYYY-MM-DD` overrides that calendar
+date and treats next-activity selection as midnight; invalid dates are ignored.
+The Today block includes date, theme, ring values and the next scheduled start
+at or after destination-local current time.
+
+`gonow:trips` remains the single trip list. Existing lists are retained; the
+legacy `gonow:answers` / `gonow:lastTrip` pair is migrated only when no list
+exists. An empty list is authoritative, preventing deleted trips from returning.
+The existing `wayfare:` key migration also runs before reading trips. Records
+retain answers, finished snapshot, plan, time zone, prep count and per-trip
+builder/edit/packing archives. The active trip's existing storage keys remain
+compatible; switching restores the selected trip's archive. Prep seen/tick
+state stays in `gonow.prep.v1`, keyed by saved trip ID. Opening a plan always shows the itinerary; Trip prep opens only through an explicit action. Shared links retain their separate view flow.
+
+Dashboard hooks: `dashboard`, `new-trip`, `trip-card`, `trip-status`,
+`today-block`, `back-dashboard`. Card titles open live plans or drafts. The
+More disclosure provides Open (finished snapshot when available), Edit draft,
+and Delete, with `view-finished`, `edit-draft`, `delete-trip` hooks. Delete uses
+a native modal `alertdialog`, focuses Cancel, restores focus on dismissal and
+moves focus to the remaining screen heading after deletion.
+
+Transport/flight cards have compact inline plane/car/bus/shuttle SVGs and no
+photos; activities, meals and sights retain their verified photos. Day 1 and
+Day 5 use `add-flight-time` buttons to open the GoNow time picker. The existing
+`db-flight-time` value hook is retained as a hidden HH:MM input. Arrival time
+is saved on its day item; departure time retains the existing flight-time
+storage and safety checks. Both buttons show a complete selected time and Edit.
+
+Supervisor browser suites: `tests/test_dashboard.py` (8849) and
+`tests/test_transport_cards.py` (8850), at 1280 and 390 pixels. Pure dashboard
+status/date tests run with `node tests/test_dashboard.js`. Assets retain
+`?v=20de649-budgetfix`.

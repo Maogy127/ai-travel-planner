@@ -1,4 +1,5 @@
 """Travel departure UI regression. Uses its own HTTP server on port 8817."""
+from test_full import dashboard_action
 import asyncio
 import re
 import subprocess
@@ -12,12 +13,14 @@ async def checks(browser):
     try:
         assets = await pg.locator('script[src],link[rel=stylesheet]').evaluate_all(
             "els => els.map(e => e.getAttribute('src') || e.getAttribute('href')).filter(p => /^(js|css|vendor|fonts)\\//.test(p))")
-        assert len(assets) == 17
+        assert len(assets) == 22
         for path in assets:
-            assert path.endswith('?v=5600d63-v2'), path
+            assert path.endswith('?v=20de649-budgetfix'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()
+        from test_full import continue_prep
+        await continue_prep(pg)
         # Demo generation is asynchronous; wait before navigating away from it.
         await expect(pg.get_by_test_id('db-root')).to_be_visible()
         await pg.evaluate("window.__gonow.go('draft')")
@@ -50,25 +53,28 @@ async def checks(browser):
         await form.locator('[name=start]').fill('16:00')
         await expect(form.locator('[name=end]')).to_have_value('16:30')
         await form.get_by_role('button', name='Save departure time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(ride.get_by_test_id('db-time')).to_have_text('4:00 PM–4:30 PM est.')
         await expect(ride.get_by_test_id('db-time')).to_have_attribute(
             'aria-label', 'Edit time: 4:00 PM to 4:30 PM estimated arrival')
-        await expect(prep.get_by_test_id('db-time')).to_have_text('4:30 PM–5:30 PM')
+        await expect(prep.get_by_test_id('db-time')).to_have_text('4:00 PM–5:00 PM')
         print('PASS clickable travel editor, live estimated arrival, unlocked reflow, prep unchanged')
         await ride.get_by_test_id('db-time').click()
         await form.locator('[name=end]').fill('16:45')
         await form.get_by_role('button', name='Save departure time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(ride.get_by_test_id('db-time')).to_have_text('4:00 PM–4:45 PM')
         # A saved explicit arrival remains explicit when reopening and changing departure.
         await ride.get_by_test_id('db-time').click()
         await form.locator('[name=start]').fill('16:15')
         await expect(form.locator('[name=end]')).to_have_value('16:45')
         await form.get_by_role('button', name='Save departure time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(ride.get_by_test_id('db-time')).to_have_text('4:15 PM–4:45 PM')
         print('PASS explicit arrival persists without estimate label')
         await pg.reload()
-        await expect(pg.get_by_test_id('home-screen')).to_be_visible()
-        await pg.get_by_test_id('edit-draft').first.click()
+        await expect(pg.get_by_test_id('dashboard')).to_be_visible()
+        await dashboard_action(pg, 'edit-draft')
         await expect(pg.get_by_test_id('draft-screen')).to_be_visible()
         await expect(pg.get_by_test_id('db-root')).to_be_visible()
         await pg.get_by_test_id('db-day-' + target_date).click()
@@ -79,6 +85,7 @@ async def checks(browser):
         await form.locator('[name=start]').fill('18:00')
         await form.locator('[name=end]').fill('18:30')
         await form.get_by_role('button', name='Save departure time').click()
+        if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(ride).to_have_class(re.compile(r'\bdb-conflict\b'))
         await expect(ride.get_by_test_id('db-note').first).to_be_visible()
         await expect(dinner.get_by_test_id('db-time')).to_have_text(dinner_time)

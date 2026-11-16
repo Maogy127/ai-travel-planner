@@ -1,9 +1,11 @@
-from test_full import card_action
 """Draft coverage for the unmocked GitHub Pages site.
 
 Run python3 tests/verify_live.py for existing and draft live checks together.
 Running this file directly runs that same complete suite.
 """
+from test_full import dashboard_action
+from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
+from test_full import card_action
 import asyncio
 
 
@@ -14,9 +16,11 @@ async def verify_draft(browser, url, ok):
     try:
         await pg.goto(url, wait_until='networkidle')
         await pg.get_by_test_id('demo-oahu').click()
+        from test_full import continue_prep
+        await continue_prep(pg)
         await pg.get_by_test_id('db-root').wait_for()
         await pg.get_by_test_id('logo').click()
-        await pg.get_by_test_id('edit-draft').first.click()
+        await dashboard_action(pg, 'edit-draft')
         await pg.get_by_test_id('draft-screen').wait_for()
         tray = pg.get_by_test_id('activity-tray')
         cards = tray.get_by_test_id('activity-result')
@@ -28,6 +32,7 @@ async def verify_draft(browser, url, ok):
         async def chest_open():
             chest = pg.get_by_test_id('db-tray')
             if not await chest.is_visible():
+                await open_add_menu(pg)
                 await pg.get_by_test_id('db-tray-toggle').click()
             return chest
 
@@ -114,6 +119,7 @@ async def verify_draft(browser, url, ok):
         await form.locator('button').click()
         ok('draft palms manual end range', await photos.get_by_test_id('db-time').text_content() == '4:00 PM–5:30 PM')
         # Reset restores the original 60-minute default before exercising that duration.
+        await open_add_menu(pg)
         await pg.get_by_test_id('db-reset').click()
         if not await form.is_visible():
             await photos.get_by_test_id('db-expand').click()
@@ -144,6 +150,7 @@ async def verify_draft(browser, url, ok):
         await select('2026-11-27')
         ok('draft Senia remains 6:00 PM–8:00 PM locked', await locked('senia', '6:00 PM–8:00 PM'))
         await select('2026-11-26')
+        await open_add_menu(pg)
         await pg.get_by_test_id('db-reset').click()
         ok('draft reset restores default La Mer time and lock', await locked('lamer', '7:30 PM–9:30 PM'))
         await pg.get_by_test_id('generate-plan').click()
@@ -151,7 +158,7 @@ async def verify_draft(browser, url, ok):
         baseline = await pg.evaluate('window.__gonow.buildICS()')
         ok('draft generated snapshot has default palms ICS time', '20261126T174000' in baseline and '20261126T220000' not in baseline)
         await pg.get_by_test_id('logo').click()
-        await pg.get_by_test_id('edit-draft').first.click()
+        await dashboard_action(pg, 'edit-draft')
         await select('2026-11-26')
         for _ in range(8):
             order = await day.locator('[data-db-id]').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
@@ -161,12 +168,12 @@ async def verify_draft(browser, url, ok):
         draft_ics = await pg.evaluate('window.__gonow.buildICS()')
         ok('draft changed export follows reorder', '20261126T220000' in draft_ics and '20261126T174000' not in draft_ics)
         await pg.get_by_test_id('logo').click()
-        await pg.get_by_test_id('view-finished').first.click()
+        await dashboard_action(pg, 'view-finished')
         await pg.get_by_test_id('finished-banner').wait_for()
         frozen = await pg.evaluate('window.__gonow.buildICS()')
         ok('draft edits leave finished snapshot unchanged', frozen == baseline and await photos.get_by_test_id('db-time').text_content() == '5:40 PM–6:40 PM')
         await pg.get_by_test_id('logo').click()
-        await pg.get_by_test_id('edit-draft').first.click()
+        await dashboard_action(pg, 'edit-draft')
         await pg.get_by_test_id('generate-plan').click()
         await pg.get_by_test_id('finished-banner').wait_for()
         regenerated = await pg.evaluate('window.__gonow.buildICS()')

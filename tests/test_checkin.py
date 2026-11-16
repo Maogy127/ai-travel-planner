@@ -1,4 +1,6 @@
 """Supervisor-run optional check-in regressions, desktop/mobile, port 8836."""
+from test_full import reopen_dashboard
+from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
 import re
 from playwright.async_api import expect
@@ -9,8 +11,9 @@ BASE = 'http://127.0.0.1:8836/index.html'
 
 async def reopen(pg, day=3):
     await pg.reload()
-    await pg.get_by_test_id('continue-saved').click()
-    await pg.get_by_test_id('day-pace').wait_for()
+    await reopen_dashboard(pg)
+    await wait_plan(pg)
+    await wait_plan(pg)
     await show_day(pg, day)
 
 async def record(pg, key, date, person=0):
@@ -18,14 +21,37 @@ async def record(pg, key, date, person=0):
 
 async def checks(browser):
     for width in (1280, 390):
-        ctx, pg = await new(browser, BASE, width)
+        ctx, pg = await new(browser, BASE+'?today=2026-11-28&', width)
         try:
             await pg.add_init_script(MOCK)
             await pg.reload()
             await pg.get_by_test_id('demo-oahu').click()
-            await pg.get_by_test_id('day-pace').wait_for(timeout=45000)
+            from test_full import continue_prep
+            await continue_prep(pg)
+            await wait_plan(pg)
+            await pg.get_by_test_id('track-toggle').click()
+            await expect(pg.get_by_test_id('morning-checkin')).to_have_count(0)
+            await pg.evaluate("__gonow.go('food')")
+            await expect(pg.get_by_test_id('morning-checkin')).to_have_count(0)
+            await pg.evaluate("__gonow.go('draft')")
+            await expect(pg.get_by_test_id('morning-checkin')).to_have_count(0)
+            await pg.evaluate("__gonow.go('plan')")
             date = await show_day(pg, 3)
+            assert await pg.locator('#day-3 .day-head').evaluate("""(head)=>{
+                const children=Array.from(head.children);
+                const expected=['.day-title','.wellness-rings','.pace-control'];
+                if(head.querySelector('[data-testid=sleep-nudge]'))expected.splice(2,0,'[data-testid=sleep-nudge]');
+                if(head.querySelector('[data-testid=day-info]'))expected.push('[data-testid=day-info]');
+                return children.length===expected.length && children.every((e,i)=>e.matches(expected[i])) &&
+                    head.querySelectorAll('.day-title > h2').length===1 &&
+                    head.querySelectorAll('.day-title > p').length===1 &&
+                    head.nextElementSibling.matches('[data-testid=day-feel]');
+            }""")
+            await expect(pg.locator('#day-3 [data-testid=day-feel]')).to_be_visible()
+            assert 'Best moment' not in await pg.locator('body').inner_text()
+            await expect(pg.get_by_test_id('moments-summary')).to_have_count(0)
             shared = await pg.evaluate('DayBuilder.schedule().days[3].items')
+            await open_day_pace(pg)
             await pg.locator('[data-testid=day-pace-option][data-value=athlete]').check()
             await pg.get_by_test_id('morning-checkin').locator('summary').click()
             mic = pg.get_by_test_id('checkin-mic')
@@ -58,10 +84,6 @@ async def checks(browser):
             c=await record(pg,'gonow.checkin.v1',date)
             assert item_id in c['alternatives']
             assert all(not i.get('locked') for i in shared if i['id'] in c['alternatives'])
-            await pg.get_by_test_id('sweet-moment').locator('summary').click()
-            await pg.get_by_test_id('moment-text').fill('Sunset by the water')
-            await pg.get_by_test_id('moment-save').click()
-            await expect(pg.get_by_test_id('moments-summary')).to_contain_text('Sunset by the water')
             await pg.get_by_test_id('checkin-traveler').nth(1).click()
             await pg.get_by_test_id('morning-checkin').locator('summary').click()
             await pg.get_by_test_id('checkin-lang').select_option('zh-CN')
@@ -75,20 +97,15 @@ async def checks(browser):
             dismiss=pg.get_by_test_id('checkin-dismiss').first
             dismissed_id=await dismiss.get_attribute('data-id')
             await dismiss.click()
-            await pg.get_by_test_id('sweet-moment').locator('summary').click()
-            await pg.get_by_test_id('moment-lang').select_option('zh-CN')
-            await pg.get_by_test_id('moment-mic').click()
-            await pg.evaluate("voiceResult('一起看海',true)")
-            await pg.get_by_test_id('moment-mic').click()
-            await pg.get_by_test_id('moment-save').click()
             await reopen(pg)
             assert (await record(pg,'gonow.checkin.v1',date))['soreness']=='some'
             assert (await record(pg,'gonow.checkin.v1',date,1))['soreness']=='a lot'
             assert dismissed_id in (await record(pg,'gonow.checkin.v1',date,1))['dismissed']
-            assert (await record(pg,'gonow.moments.v1',date))['text']=='Sunset by the water'
-            assert (await record(pg,'gonow.moments.v1',date,1))['text']=='一起看海'
             await pg.get_by_test_id('checkin-traveler').nth(1).click()
             assert not await pg.locator('[data-testid=checkin-dismiss][data-id="'+dismissed_id+'"]').count()
+            await pg.goto(BASE+'?today=2026-11-27')
+            await reopen_dashboard(pg)
+            await wait_plan(pg)
             next_date=await show_day(pg,2)
             await pg.get_by_test_id('morning-checkin').locator('summary').click()
             await pg.get_by_test_id('checkin-skip').click()
@@ -96,29 +113,33 @@ async def checks(browser):
             await expect(pg.get_by_test_id('checkin-complete')).to_contain_text('skipped')
             assert (await record(pg,'gonow.checkin.v1',next_date))['skipped']
             assert not await pg.get_by_test_id('morning-checkin').count()
-            await expect(pg.locator('.ring-encouragement').first).to_have_text('Rest is part of the plan')
+            await pg.locator('.day-head > .wellness-rings [data-testid=ring-breakdown-toggle]').click()
+            await expect(pg.locator('.ring-encouragement').first).to_have_text('No recovery block today. Rest is part of the plan — add a pool or stretch break?')
             text=await pg.locator('.day-head').inner_text()
-            text+=' '+await pg.get_by_test_id('moments-summary').inner_text()
             assert not re.search(r'\b(missed|failed|behind|fell short|only|not enough)\b',text,re.I)
             # Check all currently visible new controls, then the expanded optional fields.
+            await pg.goto(BASE+'?today=2026-11-25')
+            await reopen_dashboard(pg)
+            await wait_plan(pg)
             await show_day(pg,0)
             await pg.get_by_test_id('morning-checkin').locator('summary').click()
-            await pg.get_by_test_id('sweet-moment').locator('summary').click()
             for button in await pg.locator('.day-feel button,.day-feel select,.day-feel summary').all():
                 if await button.is_visible():
                     box=await button.bounding_box()
                     assert box['width']>=44 and box['height']>=44, (await button.inner_text(),box)
             assert not await pg.evaluate('document.documentElement.scrollWidth>innerWidth')
-            print('PASS check-in, voice, per-traveler goals/swaps, persistence, skip, moments, copy and targets',width)
+            print('PASS check-in, voice, per-traveler goals/swaps, persistence, skip, copy and targets',width)
         finally:
             await ctx.close()
         await solo_checks(browser,width)
 
 async def solo_checks(browser,width):
-    ctx,pg=await new(browser,BASE,width)
+    ctx,pg=await new(browser,BASE+'?today=2026-11-28&',width)
     try:
         await pg.get_by_test_id('demo-oahu').click()
-        await pg.get_by_test_id('day-pace').wait_for(timeout=45000)
+        from test_full import continue_prep
+        await continue_prep(pg)
+        await wait_plan(pg)
         await pg.evaluate("__gonow.state.answers.who='solo'; __gonow.go('plan')")
         date=await show_day(pg,3)
         original=await pg.evaluate('DayBuilder.schedule().days[3].items')
@@ -141,6 +162,9 @@ async def solo_checks(browser,width):
         assert [i for i in updated if i.get('locked')]==[i for i in original if i.get('locked')]
         await reopen(pg)
         assert await pg.evaluate("DayBuilder.schedule().days[3].items.find(i=>i.id==="+repr(item_id)+").title")=='Beach walk'
+        await pg.goto(BASE+'?today=2026-11-25')
+        await reopen_dashboard(pg)
+        await wait_plan(pg)
         await show_day(pg,0)
         await pg.get_by_test_id('morning-checkin').locator('summary').click()
         await pg.locator('[data-testid=checkin-energy][data-value=high]').click()

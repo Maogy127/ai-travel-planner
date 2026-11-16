@@ -1,4 +1,5 @@
 """Supervisor-run ring breakdown checks; Chromium required."""
+from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
 from playwright.async_api import expect
 from test_full import new, show_day
@@ -10,11 +11,13 @@ async def checks(browser):
         ctx, pg = await new(browser, BASE, width)
         try:
             await pg.get_by_test_id('demo-oahu').click()
-            await pg.get_by_test_id('day-pace').wait_for(timeout=45000)
+            from test_full import continue_prep
+            await continue_prep(pg)
+            await wait_plan(pg)
             await show_day(pg, 1)
             rings = pg.locator('.day-head > .wellness-rings')
-            await expect(rings.locator('.ring-value-move strong')).to_have_text('90 min')
-            await expect(rings.locator('.ring-value-rec strong')).to_have_text('30 min')
+            await expect(rings.locator('.compact-values')).to_contain_text('Move 90 min')
+            await expect(rings.locator('.compact-values')).to_contain_text('Recover 30 min')
             toggle = rings.get_by_test_id('ring-breakdown-toggle')
             panel = rings.get_by_test_id('ring-breakdown')
             for keyboard in (False, True):

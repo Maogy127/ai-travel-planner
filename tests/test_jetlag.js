@@ -1,0 +1,14 @@
+const assert=require('assert'),J=require('../js/jetlag');
+const options={date:'2026-11-25',origin:'Los Angeles (LAX)'};
+assert.deepEqual([1,2,3].map(day=>{const a=J.adjustment({...options,day});assert.equal(a.offsetMinutes,-120);return [a.bedtime,a.wake];}),[['20:30','04:30'],['21:30','05:30'],['22:30','06:30']]);
+assert.equal(J.adjustment({...options,date:'2026-07-25'}).offsetMinutes,-180);
+assert.equal(J.adjustment({...options,destinationZone:'America/New_York'}).offsetMinutes,180);
+assert(J.adjustment({...options,destinationZone:'America/New_York'}).lighter);
+assert(J.adjustment({...options,date:'2026-07-25'}).lighter);
+assert.equal(J.home('Unknown').tz,'America/Los_Angeles');assert.equal(J.adjustment({...options,local:true}).note,'');
+assert.equal(J.adjustment({...options,day:3}).note,'');
+global.window={};require('../js/oahu');require('../js/daybuilder');const R=require('../js/rings');
+const days=window.OAHU_SAMPLE.days.map(d=>window.DayBuilder.reflow(window.DayBuilder.buildSuggested(d.date)).items);
+assert.equal(R.scoreDay(days[0],'unsure',days[1],J.adjustment(options)).values.sleep,415/60);
+assert.equal(R.scoreDay(days[1],'unsure',days[2],J.adjustment({...options,date:'2026-11-26',day:2})).values.sleep,7.25);
+require('../js/catalog');assert(window.CATALOG.every(d=>d.center&&new Intl.DateTimeFormat('en',{timeZone:d.tz})));assert.equal(J.center(window.CATALOG[0]),'Waikiki');assert.equal(J.center(null),'city center');console.log('PASS DST, shift, eastbound rest, local mode, adjusted sleep and centers');

@@ -7,6 +7,8 @@
        makes no network requests and claims no live inventory.
     */
     function matchesCuratedDemo(answers) {
+        // Both new demo interests and migrated legacy demo interests match.
+        var styles = JSON.stringify(window.GoNowStyles.normalize(answers.styles).sort());
         var expected = {
             origin: 'Los Angeles (LAX)',
             start: '2026-11-25',
@@ -17,19 +19,20 @@
             budget: 6000,
             mustdos: 'Diamond Head, Kualoa Ranch, intro dive, parasailing, birthday dinner 11/26 7:30 PM, Black Friday shopping'
         };
-        var ages = (answers.ages || []).map(Number).sort(function (a, b) {
+        var ages = (Array.isArray(answers.ages)?answers.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number).sort(function (a, b) {
             return a - b;
         });
         return Object.keys(expected).every(function (key) {
             return answers[key] === expected[key];
         }) && !answers.flexible && answers.personal && answers.includeFlights !== false
             && JSON.stringify(ages) === '[18,19]'
-            && JSON.stringify((answers.styles || []).slice().sort()) === '["relaxing","scenic"]'
-            && !(answers.food || []).length && !answers.allergies;
+            && (styles === '["hotel","scenic"]' || styles === '["scenic"]')
+            && !(answers.foodLoves || []).length; // Dietary checks adapt cards without replacing the curated itinerary.
     }
 
     window.AI = {
         generatePlan: function (answers, opts) {
+            answers = Object.assign({}, answers, {styles: window.GoNowStyles.normalize(answers.styles)});
             return new Promise(function (resolve) {
                 setTimeout(function () {
                     var destination = Engine.matchDestination(answers.destination);
@@ -43,7 +46,7 @@
                         plan.end || plan.days[plan.days.length - 1].date
                     ) + ' · ' + plan.days.length + ' days · ' + (curated
                         ? 'Couple · Ages 18 & 19'
-                        : (answers.who || 'Travelers') + ' · Ages ' + (answers.ages || []).join(' & '));
+                        : (answers.who || 'Travelers').replace(/^./,function(c){return c.toUpperCase();}) + ' · Ages ' + (answers.ages || []).join(' & '));
                     // Safety guidance for the fixed demo must reflect its fixed travelers.
                     resolve(Engine.applyAgeRules(plan, curated
                         ? Object.assign({}, answers, { ages: [18, 19] })

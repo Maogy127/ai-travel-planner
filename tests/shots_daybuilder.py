@@ -1,5 +1,6 @@
-from test_full import card_action
 """Deterministic Day Builder screenshots; run with python3 tests/shots_daybuilder.py."""
+from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
+from test_full import card_action
 import asyncio
 import socket
 import subprocess
@@ -61,7 +62,9 @@ async def main():
                 await shot('daycard-1126', card)
                 await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
                 await shot('afterdark', day.locator('[data-db-id=photos]'), True)
+                await open_add_menu(pg)
                 await pg.get_by_test_id('db-reset').click()
+                await open_add_menu(pg)
                 await pg.get_by_test_id('db-tray-toggle').click()
                 await shot('tray', pg.get_by_test_id('db-tray'), include_header=True)
                 await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-1]').get_by_test_id('db-add').click()
@@ -69,6 +72,7 @@ async def main():
                 await (await card_action(pg, day.locator('[data-db-id=chest-1]'), 'db-remove')).click()
                 await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-0]').get_by_test_id('db-add').click()
                 await shot('conflict', day.locator('.db-conflict').first, True)
+                await open_add_menu(pg)
                 await pg.get_by_test_id('db-booking-toggle').click()
                 await pg.get_by_test_id('db-booking-name').fill('Birthday reservation')
                 await pg.get_by_test_id('db-booking-start').fill('22:00')

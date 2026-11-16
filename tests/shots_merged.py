@@ -9,6 +9,8 @@ async def open_demo(b,w):
   await ctx.route('https://fonts.gstatic.com/**', lambda r: r.fulfill(status=200, body=''))
   pg=await ctx.new_page(); await pg.goto(f'http://127.0.0.1:{PORT}/index.html?fast=1')
   await pg.get_by_test_id('demo-oahu').click(); await pg.get_by_test_id('db-root').wait_for(); await pg.wait_for_timeout(3600)
+  from test_full import continue_prep
+  await continue_prep(pg)
   return ctx,pg
 async def shot_card(pg,path):
   # Whole day card on a full-page capture so the sticky top bar doesn't cover it.

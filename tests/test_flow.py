@@ -1,5 +1,6 @@
-from test_full import card_action
 """Home, draft tray, on-device search, restrictions, and finished-plan isolation."""
+from test_full import dashboard_action
+from test_full import card_action
 import asyncio, sys
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -9,22 +10,25 @@ import test_full as t
 async def flow(b, base):
   ctx, pg = await t.new(b, base, 1280, 900)
   ok = t.ok
-  ok('home first visit', await pg.get_by_test_id('home-screen').is_visible() and await pg.get_by_test_id('saved-trip').count()==0 and 'on this device' in (await pg.get_by_test_id('storage-note').inner_text()).lower())
+  ok('home first visit', await pg.get_by_test_id('home-screen').is_visible() and await pg.get_by_test_id('trip-card').count()==0 and 'on this device' in (await pg.get_by_test_id('storage-note').inner_text()).lower())
   ok('home start and sample', await pg.get_by_test_id('start-new-trip').is_visible() and await pg.get_by_test_id('demo-oahu').is_visible())
   await pg.get_by_test_id('demo-oahu').click()
+  from test_full import continue_prep
+  await continue_prep(pg)
   await pg.get_by_test_id('db-root').wait_for()
   ok('sample keeps La Mer lock', await pg.get_by_test_id('db-day-list').locator('[data-db-id=lamer]').get_by_test_id('db-time').evaluate('e=>e.textContent')=='7:30 PM–9:30 PM')
   await pg.get_by_test_id('logo').click()
-  card = pg.get_by_test_id('saved-trip').first
+  card = pg.get_by_test_id('trip-card').first
   ok('returning card', await card.is_visible() and 'Oahu' in await card.inner_text() and '2026' in await card.inner_text())
+  await card.locator('[data-trip-more]').click()
   ok('card actions', await card.get_by_test_id('edit-draft').is_visible() and await card.get_by_test_id('view-finished').is_enabled())
-  await card.get_by_test_id('edit-draft').click()
+  await dashboard_action(pg, 'edit-draft')
   await pg.get_by_test_id('draft-screen').wait_for()
   tray = pg.get_by_test_id('activity-tray')
   ok('desktop tray visible', await tray.is_visible())
   sticky = await tray.evaluate('e=>getComputedStyle(e).position')
   ok('desktop tray sticky', sticky=='sticky', sticky)
-  ok('search is on-device', 'not a live worldwide' in (await pg.get_by_test_id('search-honesty').inner_text()).lower())
+  ok('search is on-device', await pg.get_by_test_id('search-honesty').inner_text() == 'Sample places for now')
   ok('initial library empty', await tray.get_by_test_id('activity-result').count()==0)
   await pg.get_by_test_id('activity-search').fill('zzzz-not-a-place')
   ok('no results stays honest', await pg.get_by_test_id('activity-no-results').is_visible())
@@ -59,14 +63,14 @@ async def flow(b, base):
   draft_ics = await pg.evaluate("window.__gonow.buildICS()")
   ok('draft export follows reorder', '20261126T220000' in draft_ics and '20261126T174000' not in draft_ics)
   await pg.get_by_test_id('logo').click()
-  await pg.get_by_test_id('view-finished').first.click()
+  await dashboard_action(pg, 'view-finished')
   await pg.get_by_test_id('finished-banner').wait_for()
   finished_ics = await pg.evaluate("window.__gonow.buildICS()")
   photo = await pg.get_by_test_id('db-day-list').locator('[data-db-id=photos]').get_by_test_id('db-time').evaluate('e=>e.textContent')
   ok('finished snapshot keeps original photo time', photo=='5:40 PM–6:40 PM' and '20261126T220000' not in finished_ics and '20261126T174000' in finished_ics, photo)
   ok('snapshot weather is seasonal', 'not a forecast' in (await pg.get_by_test_id('snapshot-weather').inner_text()+await pg.get_by_test_id('finished-banner').inner_text()).lower())
   await pg.get_by_test_id('logo').click()
-  await pg.get_by_test_id('edit-draft').first.click()
+  await dashboard_action(pg, 'edit-draft')
   await pg.get_by_test_id('draft-screen').wait_for()
   await pg.get_by_test_id('generate-plan').click()
   await pg.get_by_test_id('finished-banner').wait_for()
@@ -77,9 +81,11 @@ async def flow(b, base):
   # Mobile tray
   ctx, pg = await t.new(b, base, 390, 844, has_touch=True)
   await pg.get_by_test_id('demo-oahu').click()
+  from test_full import continue_prep
+  await continue_prep(pg)
   await pg.get_by_test_id('db-root').wait_for()
   await pg.get_by_test_id('logo').click()
-  await pg.get_by_test_id('edit-draft').first.click()
+  await dashboard_action(pg, 'edit-draft')
   await pg.get_by_test_id('draft-screen').wait_for()
   ok('mobile no overflow', not await t.overflow(pg))
   toggle = pg.get_by_test_id('tray-toggle')
@@ -89,6 +95,16 @@ async def flow(b, base):
   await pg.get_by_test_id('db-day-2026-11-27').click()
   senia = await pg.get_by_test_id('db-day-list').locator('[data-db-id=senia]').get_by_test_id('db-time').evaluate('e=>e.textContent')
   ok('mobile Senia lock unchanged', senia=='6:00 PM–8:00 PM', senia)
+  await pg.get_by_test_id('logo').click()
+  await dashboard_action(pg, 'delete-trip')
+  confirm = pg.get_by_role('alertdialog')
+  ok('Delete requires confirmation', await confirm.is_visible() and await pg.get_by_test_id('trip-card').count()==1)
+  await confirm.locator('[data-cancel]').click()
+  ok('Cancel keeps trip', await pg.get_by_test_id('trip-card').count()==1)
+  await dashboard_action(pg, 'delete-trip')
+  await pg.get_by_role('alertdialog').locator('[data-delete]').click()
+  ok('confirmed Delete removes trip', await pg.get_by_test_id('trip-card').count()==0)
+
   await ctx.close()
 
 async def main():

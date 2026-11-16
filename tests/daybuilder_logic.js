@@ -40,7 +40,7 @@ for (const [anchor,expected] of [[660,30],[645,15],[644,null]]) {
  assert.equal(fit.items.find(i=>i.flex)?.duration??null,expected);
 }
 const dive=db.trayItems()[0];
-assert(db.reflow({date:'2026-11-28',items:[dive]}).conflicts.some(c=>c.source===OAHU_SOURCES.dan));
+assert(db.reflow({date:'2026-11-28',items:[dive]}).unscheduled.some(c=>c.blockedReason==='No diving within 24h of your flight'));
 assert(db.reflow({date:'2026-11-27',items:[dive]}).items.some(i=>i.kind==='prep'));
 assert(db.reflow({date:'2026-11-26',items:[db.trayItems().at(-1)]},{ages:[18,19]}).conflicts.some(c=>c.note.includes('21+')));
 assert.equal(db.reflow({date:'2026-11-26',items:[db.trayItems().at(-1)]},{ages:[25]}).conflicts.length,0);
@@ -58,7 +58,7 @@ for (const minutes of [1080,1098,1099]) {
 }
 for (const [time, warned] of [['8:00 AM', true],['11:00 PM',false]]) {
  const r=db.reflow({date:'2026-11-28',items:[{...dive,preferred:540}]},{flightTime:time});
- assert.equal(r.conflicts.some(c=>c.note.includes('24 hrs')),warned);
+ assert.equal(r.unscheduled.some(c=>c.blockedReason.includes('24h')),warned);
 }
 assert.equal(db.buildSuggested('2026-11-29').items[0].title,'Flight (add your time)');
 assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arrive:1130});
@@ -80,6 +80,8 @@ assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arri
  global.localStorage = {getItem() {return null;}, setItem() {}};
  window.matchMedia = () => ({matches: false});
  const mounted = db.mount(root);
+ assert(content.innerHTML.includes('data-transport-icon="car"'));
+ assert(content.innerHTML.includes('data-transport-icon="shuttle"'));
  assert(content.innerHTML.includes('5:30 PM · Walk ~10 min · arrive 5:40 PM'));
  assert(content.innerHTML.includes('6:40 PM · Walk ~10 min · arrive 6:50 PM'));
  assert(content.innerHTML.includes('6:55 PM · Uber ~20 min · arrive 7:15 PM'));
@@ -87,7 +89,7 @@ assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arri
  const click = (action, id, zone='day') => {
   const row = {dataset: {dbId: id, dbZone: zone}};
   const button = {dataset: {dbAction: action}, closest() {return row;}};
-  listeners.click({target: {closest() {return button;}}});
+  listeners.click({target: {closest(selector) {return selector === '[data-testid=add-flight-time]' ? null : button;}}});
  };
  click('reset');
  click('down', 'photos');
@@ -181,3 +183,5 @@ assert(sunsetResult.items.some(i=>i.travel || i.kind==='prep'));
  assert.deepEqual(db.reflow(restored.days['2026-11-27']).items.map(i=>[i.start,i.end]),result.items.map(i=>[i.start,i.end]));
  console.log('Travel departure reflow and persistence passed.');
 }
+
+for(const ages of [['',30],[],[null,'bad',30]])assert(!db.reflow({date:'2026-11-26',items:[db.trayItems().at(-1)]},{ages}).conflicts.some(c=>c.note.includes('21+')));

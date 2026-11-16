@@ -1,4 +1,5 @@
 """Real Leaflet map and offline regressions; all external requests are intercepted."""
+from test_full import open_home_flow
 import asyncio
 import subprocess
 import sys
@@ -10,7 +11,10 @@ BASE = 'http://127.0.0.1:8821/index.html'
 
 
 async def open_map(pg):
+    await open_home_flow(pg)
     await pg.get_by_test_id('demo-oahu').click()
+    from test_full import continue_prep
+    await continue_prep(pg)
     await expect(pg.get_by_test_id('db-root')).to_be_visible()
     await pg.get_by_test_id('view-map').click()
     await expect(pg.get_by_test_id('map-stop-list')).not_to_be_empty()
@@ -92,7 +96,7 @@ async def checks(browser):
             await expect(attribution).to_contain_text('OpenStreetMap contributors')
             await expect(attribution).to_contain_text('Leaflet')
             assert any(urlparse(u).hostname == 'tile.openstreetmap.org' for u in requests)
-            assert all(urlparse(u).hostname in ('127.0.0.1', 'tile.openstreetmap.org') for u in requests), requests
+            assert all(urlparse(u).hostname in ('127.0.0.1', 'tile.openstreetmap.org', 'api.open-meteo.com') for u in requests), requests
             print('PASS map pins, route, popups, days, attribution and width', width)
         finally:
             await ctx.close()

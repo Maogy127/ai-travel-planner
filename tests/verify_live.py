@@ -1,3 +1,4 @@
+from test_full import open_add_menu
 from test_full import card_action
 # Unmocked live verification of the day builder on GitHub Pages + screenshots.
 import asyncio, json, time, sys
@@ -24,6 +25,8 @@ async def one(b,w,name):
     live=await pg.evaluate("f=>fetch(f+'?cb='+Date.now(),{cache:'no-store'}).then(r=>r.arrayBuffer()).then(b=>Array.from(new Uint8Array(b)))",f)
     ok(f'{name} deployed {f} matches local byte for byte',bytes(live)==(SITE/f).read_bytes())
   await pg.get_by_test_id('demo-oahu').click()
+  from test_full import continue_prep
+  await continue_prep(pg)
   root=pg.get_by_test_id('db-root');await root.wait_for()
   ok(f'{name} Oahu sample + day builder render',await root.is_visible())
   await pg.get_by_test_id('db-day-2026-11-26').click()
@@ -54,6 +57,7 @@ async def one(b,w,name):
   await free.focus();await pg.keyboard.press('Space');await pg.keyboard.press('ArrowDown');await pg.keyboard.press('Space')
   after=await ids()
   ok(f'{name} keyboard move',after and after.index('free')==after.index('return-hotel')+1 or (after and after.index('free')>before.index('free')),str(after))
+  await open_add_menu(pg)
   await pg.get_by_test_id('db-reset').click()
   await pg.wait_for_timeout(300)
   ok(f'{name} reset restores',await vis()==before)
@@ -66,11 +70,13 @@ async def one(b,w,name):
   await pg.mouse.move(d['x']+d['width']/2,d['y']+d['height']*.2,steps=18);await pg.mouse.up()
   dragged=await ids();shown=await vis()
   ok(f'{name} pointer drag move',dragged and dragged.index('photos')<dragged.index('free'),str((dragged,shown)))
+  await open_add_menu(pg)
   await pg.get_by_test_id('db-reset').click();await pg.wait_for_timeout(300)
   # conflict: move photos down past La Mer -> after dark / miss
   for _ in range(2): await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
   c=await day.locator('.db-conflict').count()
   ok(f'{name} conflict shows',c>0 and 'After dark' in await day.inner_text(),str(c))
+  await open_add_menu(pg)
   await pg.get_by_test_id('db-reset').click()
   # 11/27: Senia locked 6:00–8:00 PM after prep and the 5:10 PM Uber.
   await pg.get_by_test_id('db-day-2026-11-27').click()
@@ -84,6 +90,7 @@ async def one(b,w,name):
   await (await card_action(pg, day.locator('[data-db-id=uber-kahala]'), 'db-up')).click()
   notes=await day.get_by_test_id('db-note').all_text_contents()
   ok(f'{name} 11/27 reorder warns, lock holds',any(n.endswith("you'd miss Senia") for n in notes) and await senia.get_by_test_id('db-time').text_content()=='6:00 PM–8:00 PM',str(notes))
+  await open_add_menu(pg)
   await pg.get_by_test_id('db-reset').click();await pg.wait_for_timeout(300)
   print('RENDERED 11/27',name);[print('  ',t[0],t[1],'[locked]' if t[2] else '') for t in await day.get_by_test_id('db-pair').evaluate_all("es=>es.map(e=>[e.querySelector('[data-testid=db-time]').textContent,e.querySelector('strong').textContent,e.classList.contains('db-locked')])")]
   for t in await day.get_by_test_id('db-travel').all_inner_texts(): print('   connector:',t)
@@ -95,6 +102,7 @@ async def one(b,w,name):
   await day.locator('[data-db-id=dive-1127]').get_by_test_id('db-lock').click()
   await day.locator('[data-db-id=dive-1127]').evaluate("e=>e.scrollIntoView({block:'center'})")
   await pg.screenshot(path=str(OUT/f'live-userlock-{name}.png'))
+  await open_add_menu(pg)
   await pg.get_by_test_id('db-reset').click()
   await pg.get_by_test_id('db-day-2026-11-26').click()
   ok(f'{name} one day shown', await pg.get_by_test_id('plan-day').count()==1)

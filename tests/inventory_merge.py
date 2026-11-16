@@ -3,6 +3,7 @@ Serves site-v-before-merge/ and site/ side by side, opens the Oahu demo in each,
 every piece of day-card content from the old static cards is still reachable in the merged builder:
 day titles + summaries, notes, activity titles/descriptions, tips, bring checklist items (by pack id),
 photos, and every link (Book this, sources, maps). Times are excluded because the builder reflows them."""
+from test_full import wait_plan
 import asyncio, subprocess, sys, time, json, re
 from pathlib import Path
 from playwright.async_api import async_playwright
@@ -27,7 +28,9 @@ async def open_demo(b,port):
   await ctx.route('https://fonts.googleapis.com/**', lambda r: r.fulfill(status=200, content_type='text/css', body=''))
   await ctx.route('https://fonts.gstatic.com/**', lambda r: r.fulfill(status=200, body=''))
   pg=await ctx.new_page(); await pg.goto(f'http://127.0.0.1:{port}/index.html?fast=1')
-  await pg.get_by_test_id('demo-oahu').click(); await pg.get_by_test_id('age-rules').wait_for(state='attached'); await pg.wait_for_timeout(500)
+  await pg.get_by_test_id('demo-oahu').click(); await wait_plan(pg); await pg.wait_for_timeout(500)
+  from test_full import continue_prep
+  await continue_prep(pg)
   return ctx,pg
 async def main():
   servers=[subprocess.Popen([sys.executable,'-m','http.server',str(p),'-d',str(d)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL) for p,d in ((OLD,OLD_DIR),(NEW,NEW_DIR))]
