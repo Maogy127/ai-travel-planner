@@ -263,7 +263,7 @@ function buildSuggested(date) {
     });
     return {date, items, unscheduled: clone(day.unscheduled||[])};
 }
-// Ideas no longer on a day card stay available in Activity ideas.
+// Source ideas remain available for Swap and the draft activity library.
 const chestOnly = [{id: 'magic-island', time: '5:15 PM', kind: 'sight', title: 'Magic Island sunset',
     desc: 'Ala Moana Beach Park. Be in place by about 5:30 PM; sunset about 5:48 PM.'}];
 function trayItems() {
@@ -413,7 +413,7 @@ function reflow(day, ctx = {}) {
                 warn(item, 'Ends ' + clock(item.end) + " — you'd miss " + venue(booking), undefined, 0);
             }
             if ((!item.locked || item.custom) && item.start < booking.preferred + booking.duration && item.end > booking.preferred) {
-                warn(item, 'Overlaps ' + booking.title, undefined, 1);
+                warn(item, 'Overlaps ' + venue(booking), undefined, 1);
             }
         }
         const sunset = String(sourcePlan().weather.text || '').match(/sunset approx\. (\d{1,2}:\d{2} PM)/i);
@@ -443,7 +443,7 @@ const icons = {
     unlock: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 017.6-1.7M12 15v2"/>'),
     add: '+ Add', delete: svg('<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>')
 };
-const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'To ideas', add: 'Add to day', delete: 'Delete booking'};
+const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'Remove from day', add: 'Add to day', delete: 'Delete booking'};
 function button(action, title, disabled = false) {
     const label = esc(labels[action] + ' ' + title);
     return `<button type="button" data-testid="db-${action}" data-db-action="${action}"${disabled ? ' disabled aria-disabled="true"' : ''} aria-label="${label}" title="${label}">${icons[action]}</button>`;
@@ -460,7 +460,7 @@ function sourceOf(item, date) {
     if (!sourceCache[date]) sourceCache[date] = new Map(buildSuggested(date).items.map(i => [i.id, i.sourceId]));
     return sourceCache[date].get(item.id) || item.id;
 }
-const fixedBooking = item => !!(item.booked || item.custom || item.flight || item.kind === 'flight' || item.fixedBooking);
+const fixedBooking = item => !!(item.booked || (item.custom && item.booked !== false) || item.flight || item.kind === 'flight' || item.fixedBooking);
 const lockable = item => !item.textTime && item.kind !== 'prep';
 const uidFor = (date, id) => (date + '-' + id).replace(/[^\w-]/g, '_');
 // Locking pins the shown start and end; unlocking restores the item's own preference.
@@ -493,7 +493,7 @@ function exportDays(days, flightTime) {
         const base = buildSuggested(date).items;
         const pool = base.concat(tray);
         const items = day.items.map(item => {
-            if (item.custom) return {c: 1, cl:item.closed, hr:item.hours, tg:item.tags, ru:item.rules, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
+            if (item.custom) return {c: 1, b:item.booked, cl:item.closed, hr:item.hours, tg:item.tags, ru:item.rules, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
             const original = pool.find(candidate => candidate.id === item.id);
             if (original && !item.routeReview && !item.originalTitle && !item.manualTime && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
             const entry = {id: item.id, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
@@ -529,7 +529,7 @@ function importDays(data) {
                 const start = minutes(entry.p), length = minutes(entry.d);
                 if (typeof entry.t !== 'string' || !entry.t.trim() || (start === undefined) || !length) return null;
                 return {closed:entry.cl,hours:entry.hr,tags:entry.tg,rules:entry.ru,originalTitle:entry.ot, id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
-                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false};
+                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, booked:entry.b, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false};
             }
             const item = find(entry.id) || pool.find(i => i.sourceId === entry.s) && clone(pool.find(i => i.sourceId === entry.s));
             if (!item) return null;
@@ -612,10 +612,8 @@ function mount(root, ctx = {}) {
     const live = root.querySelector('[data-testid=db-live]');
     let previousConflicts = new Map();
     let addedConflicts = [];
-    let formStatus = '';
     let date = session.date;
-    let expanded = false;
-    let bookingOpen = false;
+    let resetOpen = false;
     let editingTime = null;
     let picked = null;
     let drag = null;
@@ -797,7 +795,7 @@ function mount(root, ctx = {}) {
         const moves = tray ? button('handle', title) + `<button type="button" data-testid="schedule-item" data-db-action="schedule">${i.needsTime ? 'Pick a time' : 'Schedule'}</button>${i.needsTime ? '<small>Needs a time</small>' : ''}` : (movable ? button('handle', title) + button('up', title) + button('down', title) + button('remove', title) : '');
         const actions = !tray && !print && i.kind !== 'prep' ? '<div class="db-item-actions"><button type="button" data-db-action="again">Add it again</button><button type="button" data-db-action="move-day">Move to another day</button></div>' : '';
         const lockChip = i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : '';
-        const menuLabels = {handle: 'Drag to reorder', up: 'Move up', down: 'Move down', remove: 'Move to ideas', delete: 'Delete booking'};
+        const menuLabels = {handle: 'Drag to reorder', up: 'Move up', down: 'Move down', remove: 'Remove from day', delete: 'Delete booking'};
         const menuMoves = (moves + (i.custom && !print ? button('delete', title) : '')).replace(/(<button[^>]*data-db-action="([^"]+)"[^>]*>)([\s\S]*?)(<\/button>)/g,
             (_, start, action, icon, end) => start + icon + '<span>' + menuLabels[action] + '</span>' + end);
         const swapAction = !tray && !print && !i.locked && !i.booked && !['prep','flight','travel'].includes(i.kind) && ctx.swapCatalog ? '<button data-testid="db-swap" data-db-action="swap">Swap</button>' : '';
@@ -825,7 +823,7 @@ function mount(root, ctx = {}) {
                 ${canLock ? '' : lockChip}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
                 ${controls}
-                ${i.overlapNote ? `<p class="db-note">${esc(i.overlapNote)}</p>` : ''}${(i.notes || []).map((note, index) => `<p class="db-note ${/conflicts with your flight/.test(note)?'flight-conflict-notice':''}" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>${/conflicts with your flight/.test(note)?'<span class="flight-conflict-text" title="'+esc(note)+'">'+esc(note)+'</span> · <button data-flight-conflict-edit>Edit</button>':'Heads-up: '+esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
+                ${i.overlapNote && !(i.notes || []).includes(i.overlapNote) ? `<p class="db-note">${esc(i.overlapNote)}</p>` : ''}${(i.notes || []).map((note, index) => `<p class="db-note ${/conflicts with your flight/.test(note)?'flight-conflict-notice':''}" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>${/conflicts with your flight/.test(note)?'<span class="flight-conflict-text" title="'+esc(note)+'">'+esc(note)+'</span> · <button data-flight-conflict-edit>Edit</button>':'Heads-up: '+esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div>
             ${menu}
             ${editor}
@@ -965,6 +963,32 @@ function mount(root, ctx = {}) {
             else resolveTime(target, copy, start, end === null ? copy.duration : end-start, apply);
         };
     }
+    function openOwn(name = '', focusStart = false) {
+        if(root.querySelector('[data-testid=add-own-sheet]'))return;
+        const dialog=document.createElement('dialog');dialog.className='add-own-sheet';dialog.dataset.testid='add-own-sheet';
+        dialog.setAttribute('aria-labelledby','add-own-title');
+        dialog.innerHTML=`<h2 id="add-own-title">Add my own</h2><form novalidate><label>Name<input name="name" data-testid="add-own-name" required maxlength="100"></label><label>Start<input name="start" data-testid="add-own-start" type="time" required></label><label>End <small>(optional)</small><input name="end" data-testid="add-own-end" type="time"></label><label>Place <small>(optional)</small><input name="place" data-testid="add-own-place" maxlength="100"></label><label class="row"><input name="booked" type="checkbox" data-testid="add-own-booked">Booked</label><p role="alert" data-testid="add-own-note"></p><div class="row"><button data-testid="add-own-submit">Add</button><button type="button" data-own-cancel>Cancel</button></div></form>`;
+        root.append(dialog);
+        const close=()=>{dialog.close();dialog.remove();root.querySelector('[data-testid=day-add-own]')?.focus();};
+        dialog.oncancel=e=>{e.preventDefault();close();};dialog.querySelector('[data-own-cancel]').onclick=close;
+        const form=dialog.querySelector('form');form.elements.name.value=name;
+        form.onsubmit=e=>{
+            e.preventDefault();const title=form.elements.name.value.trim(),start=toTime(form.elements.start.value),end=form.elements.end.value?toTime(form.elements.end.value):null;
+            const note=dialog.querySelector('[role=alert]');
+            if(!title || start===null){note.textContent='Add a name and start time';return;}
+            if(end!==null && end<=start){note.textContent='End must be after start';return;}
+            const item={id:'custom-'+Date.now(),title,preferred:start,duration:end===null?60:end-start,estimate:end===null,place:form.elements.place.value.trim()||'Other',locked:form.elements.booked.checked,booked:form.elements.booked.checked,custom:true,manualTime:true};
+            if(block(item,date,on=>addToDay(on,{...item,time:clock(start)}),dialog))return;
+            const d=current(),at=d.items.findIndex(i=>(i.preferred ?? 1440)>start);
+            d.items.splice(at<0?d.items.length:at,0,item);
+            // Use displayed intervals, including bookings with derived times.
+            const overlap=overlaps(lastResult.items,start,item.duration,item.id).find(i=>i.locked);
+            if(overlap)item.overlapNote='Overlaps '+venue(overlap);
+            close();save();render({id:item.id,zone:'day'});announce('Item added.'+(overlap?' Overlaps '+venue(overlap):''));
+        };
+        dialog.showModal();form.elements[focusStart?'start':'name'].focus();
+    }
+    root.addEventListener('add-own',e=>openOwn(e.detail?.name || '',!!e.detail?.focusStart));
     function closeTime() {
         const id = editingTime?.slice(editingTime.indexOf('|') + 1);
         editingTime = null;
@@ -997,7 +1021,6 @@ function mount(root, ctx = {}) {
         lastResult = result;
         addedConflicts = result.conflicts.filter(c => !previousConflicts.has(c.id + '|' + c.note)).map(c => result.items.find(i => i.id === c.id).title + ' — ' + c.note);
         previousConflicts = new Map(result.conflicts.map(c => [c.id + '|' + c.note, true]));
-        const availableTray = ctx.shared ? [] : [...d.unscheduled,...result.unscheduled];
         const summary = result.conflicts.length ? `${result.conflicts.length} heads-up` : 'All clear';
         const chips = sourcePlan().days.map((day, index) => {
             const weekday = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', timeZone: 'UTC'});
@@ -1010,21 +1033,12 @@ function mount(root, ctx = {}) {
             : inner;
         content.innerHTML = `<div class="db-heading"><h2>${ctx.dayHead ? 'Your days' : 'Build your day'}</h2><span class="db-summary" data-testid="db-summary">${summary}</span></div>
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
-            ${card(`<div class="db-day" data-testid="db-day-list">${timelineHTML(result)}</div>
+            ${card(`<div class="day-primary-actions"><button type="button" data-testid="day-reset" data-db-action="reset">Reset to suggested</button><button type="button" data-testid="day-add-own" data-db-action="add-own">+ Add my own</button></div>
+            ${resetOpen ? '<div class="day-reset-prompt"><span>Reset this day? Locked and booked items stay.</span><div><button type="button" data-db-action="reset-confirm" data-testid="day-reset-confirm">Reset</button><button type="button" data-db-action="reset-cancel" data-testid="day-reset-cancel">Cancel</button></div></div>' : ''}
+            <div class="db-day" data-testid="db-day-list">${timelineHTML(result)}</div>
             ${ctx.dayExtras ? ctx.dayExtras(date) : ''}
             ${ctx.shared && d.unscheduled.length ? `<section data-testid="unscheduled-section"><h3>Unscheduled</h3><ul>${d.unscheduled.map(i => `<li>${esc(i.title)}</li>`).join('')}</ul></section>` : ''}
-            <details class="day-add-panel" ${expanded || bookingOpen ? 'open' : ''}><summary data-testid="day-add">+ Add</summary><button type="button" data-testid="db-reset" data-db-action="reset">Reset to suggested</button><div class="db-tools">
-            <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Activity ideas <span class="db-count">${availableTray.length}</span></button>
-            <button type="button" data-testid="db-booking-toggle" data-db-action="booking" aria-expanded="${bookingOpen}" aria-controls="db-booking">+ Add booking</button>
-            </div>
-            <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}>${availableTray.map(i => pair(i, true)).join('')}</div>
-            <form id="db-booking" class="db-form" data-testid="db-booking-form" ${bookingOpen ? '' : 'hidden'}>
-                <label>Name<input name="name" data-testid="db-booking-name" required maxlength="100"></label>
-                <label>Start<input name="start" data-testid="db-booking-start" type="time" required></label>
-                <label>End<input name="end" data-testid="db-booking-end" type="time" required></label>
-                <label>Place<select name="place" data-testid="db-booking-place">${[HOTEL, WAIKIKI, 'Kewalo Basin', 'Kualoa Ranch', 'Diamond Head', 'Ala Moana', 'Kailua', 'Makapuu', 'HNL', 'Other'].map(p => `<option>${p}</option>`).join('')}</select></label>
-                <button data-testid="db-booking-add">Anchor it</button><p data-testid="db-form-note" role="status">${esc(formStatus)}</p>
-            </form></details>`)}`;
+`)}`;
         if (!reducedMotion()) {
             root.querySelectorAll('.db-conflict').forEach(element => {
                 element.classList.add('db-shake');
@@ -1032,26 +1046,12 @@ function mount(root, ctx = {}) {
             });
         }
         root.querySelectorAll('[aria-describedby]').forEach(row => row.matches('[data-db-id]') && row.querySelector('[data-db-action=handle]')?.setAttribute('aria-describedby', row.getAttribute('aria-describedby')));
-        if (ctx.dock) {
-            const aside = root.querySelector('.db-dock-tray');
-            if (aside) {
-                aside.querySelectorAll('.db-tray,.db-tools,.db-form').forEach(node => node.remove());
-                const tools = content.querySelector('.db-tools');
-                const tray = content.querySelector('.db-tray');
-                const form = content.querySelector('.db-form');
-                if (tools) aside.append(tools);
-                if (tray) { tray.hidden = false; aside.append(tray); }
-                if (tools) tools.hidden = true;
-                if (form) aside.append(form);
-            }
-        }
         if (ctx.afterRender) ctx.afterRender(content, date);
-        const pending=d.unscheduled.filter(i=>i.needsTime);
-        if(pending.length && !ctx.shared) {
+        const pending=d.unscheduled;
+        if(pending.length && !ctx.shared && typeof content.querySelector === 'function') {
             content.querySelector('[data-testid=db-day-list]').insertAdjacentHTML('afterend','<section data-testid="needs-time"><h3>Needs a time</h3></section>');
-            // Relocate the real tray, preserving unique IDs, controls and drag/drop.
-            const tray=root.querySelector('[data-testid=db-tray]');
-            tray.hidden=false;
+            // Only untimed items get scheduling controls; the day has no ideas chest.
+            const tray=document.createElement('div');tray.className='db-tray';tray.dataset.testid='db-tray';tray.innerHTML=pending.map(i=>pair(i,true)).join('');
             content.querySelector('[data-testid=needs-time]').append(tray);
         }
         if (focus) {
@@ -1105,7 +1105,7 @@ function mount(root, ctx = {}) {
         if (!sourcePlan().days.some(day => day.date === next)) return;
         date = next;
         session.date = next;
-        formStatus = '';
+        resetOpen = false;
         picked = null;
         render();
         if (focusChip) root.querySelector(`[data-testid="db-day-${date}"]`).focus({preventScroll: true});
@@ -1235,31 +1235,27 @@ function mount(root, ctx = {}) {
             setExpanded(row);
         } else if (action === 'lock') {
             lock(row.dataset.dbId);
-        } else if (action === 'toggle') {
-            expanded = !expanded;
-            render();
-            root.querySelector('[data-testid="db-tray-toggle"]').focus();
-        } else if (action === 'booking') {
-            bookingOpen = !bookingOpen;
-            render();
-            root.querySelector('[data-testid="db-booking-toggle"]').focus();
-        } else if (action === 'reset') {
-            picked = null;
-            formStatus = '';
-            days[date] = buildSuggested(date);
-            save();
-            render();
-            root.querySelector('[data-testid=db-reset]').focus();
-            announce('Reset to suggested. Fair winds!');
+        } else if (action === 'add-own') {
+            openOwn();
+        } else if (action === 'reset' || action === 'reset-cancel') {
+            resetOpen = action === 'reset'; render();
+            root.querySelector('[data-testid='+(resetOpen ? 'day-reset-confirm' : 'day-reset')+']').focus();
+        } else if (action === 'reset-confirm') {
+            const kept=current().items.filter(i=>i.locked || i.booked || i.fixedBooking);
+            const suggested=buildSuggested(date);
+            const ids=new Set(kept.map(i=>i.id));
+            suggested.items=suggested.items.filter(i=>!ids.has(i.id));
+            kept.forEach(i=>{const at=suggested.items.findIndex(v=>(v.preferred ?? 1440)>(i.preferred ?? 1440));suggested.items.splice(at<0?suggested.items.length:at,0,i);});
+            days[date]=suggested; picked=null; resetOpen=false; save(); render();
+            root.querySelector('[data-testid=day-reset]').focus(); announce('Reset to suggested.');
         } else if (action === 'delete') {
             let nextRow = row.nextElementSibling;
             while (nextRow && !nextRow.dataset.dbId) nextRow = nextRow.nextElementSibling;
             const next = nextRow?.dataset.dbId;
-            formStatus = '';
             current().items = current().items.filter(i => i.id !== row.dataset.dbId);
             save();
             render();
-            (root.querySelector(`[data-db-id="${next}"] button`) || root.querySelector(`[data-db-id="${next}"][tabindex]`) || root.querySelector('[data-testid=db-booking-toggle]')).focus();
+            (root.querySelector(`[data-db-id="${next}"] button`) || root.querySelector(`[data-db-id="${next}"][tabindex]`) || root.querySelector('[data-testid=day-add-own]')).focus();
             announce('Booking deleted');
         } else if (action !== 'handle') {
             change(row.dataset.dbId, row.dataset.dbZone, action);
@@ -1355,35 +1351,7 @@ function mount(root, ctx = {}) {
             });
             return;
         }
-        if (!e.target.matches('.db-form')) return;
-        e.preventDefault();
-        const values = new FormData(e.target);
-        const toMinutes = s => {
-            const [h, m] = s.split(':').map(Number);
-            return h * 60 + m;
-        };
-        const start = toMinutes(values.get('start'));
-        const end = toMinutes(values.get('end'));
-        if (end <= start) {
-            root.querySelector('[data-testid="db-form-note"]').textContent = 'End must be after start';
-            return;
-        }
-        const item = {id: 'custom-' + Date.now(), title: values.get('name').trim(), preferred: start,
-            duration: end - start, place: values.get('place'), locked: true, custom: true};
-        if (!item.title) return;
-        if(block(item,date,on=>addToDay(on,{...item,time:clock(start)})))return;
-        const d = current();
-        const at = d.items.findIndex(i => (i.preferred ?? 1440) > start);
-        d.items.splice(at < 0 ? d.items.length : at, 0, item);
-        const overlap = d.items.find(i => i.id !== item.id && i.locked && i.preferred < end && i.preferred + i.duration > start);
-        formStatus = overlap ? 'Overlaps ' + (overlap.venue || (overlap.dressy ? 'La Mer at Halekulani' : overlap.title)) : '';
-        save();
-        const result = render({id: item.id, zone: 'day'});
-        if (!formStatus && result.conflicts.length) {
-            formStatus = result.conflicts[0].note;
-            root.querySelector('[data-testid=db-form-note]').textContent = formStatus;
-        }
-        announce('Locked booking added. ' + formStatus);
+
     });
     root.addEventListener('keydown', e => {
         if (e.key === 'Escape' && drag) {
@@ -1452,7 +1420,7 @@ function mount(root, ctx = {}) {
     }
     function dropTarget(x, y) {
         const hit = document.elementFromPoint(x, y);
-        const tray = hit?.closest('[data-testid="db-tray"], [data-testid="db-tray-toggle"]');
+        const tray = hit?.closest('[data-testid="db-tray"]');
         const day = hit?.closest('[data-testid="db-day-list"]');
         if (!tray && !day) return null;
         const zone = tray ? 'tray' : 'day';

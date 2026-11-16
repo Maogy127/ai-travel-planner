@@ -1,3 +1,4 @@
+# Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 """Day-local unscheduled and time entry regressions, in isolated contexts.
 All 18:00 values below are test-only.
 """
@@ -222,14 +223,29 @@ async def checks(browser, base, width):
         await form.get_by_role('button', name='Save activity time').click()
         if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(lamer.get_by_test_id('db-time')).to_have_text('6:00 PM–8:00 PM')
+        # Item F: edited bookings stay; removed non-booked suggestions return.
+        # Use plain breakfast: generated return transport re-derives with a changed title.
+        # Removal keeps the item in Needs a time; only the day row disappears.
+        suggestion = day.locator('[data-db-zone=day][data-db-id="2026-11-26-4"]')
+        suggestion_title = await suggestion.get_by_test_id('db-activity').locator('strong').first.inner_text()
+        await (await card_action(pg, suggestion, 'db-remove')).click()
+        await expect(suggestion).to_have_count(0)
+        # Needs a time is outside db-day-list, so locate its tray from the page.
+        pending = pg.get_by_test_id('needs-time').locator('[data-db-zone=tray][data-db-id="2026-11-26-4"]')
+        await expect(pending).to_be_visible()
         await open_add_menu(pg)
-        await pg.get_by_test_id('db-reset').click()
-        await expect(lamer.get_by_test_id('db-time')).to_have_text('7:30 PM–9:30 PM')
+        await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
+        await expect(lamer.get_by_test_id('db-time')).to_have_text('6:00 PM–8:00 PM')
+        # Reset restores the day row and removes its untimed tray copy.
+        await expect(suggestion).to_have_count(1)
+        await expect(pending).to_have_count(0)
+        await expect(suggestion.get_by_test_id('db-activity').locator('strong').first).to_have_text(suggestion_title)
         await expect(tray.locator('[data-db-id]')).to_have_count(0)
         await pg.evaluate("DayBuilder.addToDay('2026-11-26',{title:'Reset sentinel'})")
+        # Item F: untimed items retain their separate Needs a time controls, with no ideas chest.
         assert await tray.locator('[data-db-id]').count() == 1
         await open_add_menu(pg)
-        await pg.get_by_test_id('db-reset').click()
+        await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
         await expect(tray.locator('[data-db-id]')).to_have_count(0)
         assert await pg.evaluate("!(DayBuilder.exportState()?.d?.['2026-11-26']?.u?.length)")
         # A generated snapshot includes unscheduled intent but ICS excludes it.

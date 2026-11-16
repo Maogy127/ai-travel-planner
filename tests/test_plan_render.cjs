@@ -175,6 +175,38 @@ function smoke(label){
  assert(Object.values(JSON.parse(memory.get('gonow.prep.v1'))).some(r=>r.seen),'adoption marks prep seen');
  console.log('PASS shared copy opens list builder with banner and remains shared after Trip prep Continue');
  api.state.answers.who=travelerBeforeSwap;
+ // Item F: exercise protected reset through the real event handler, plus compact custom-item sharing.
+ const resetRoot=node('reset-simplify');
+ const resetDate='2026-11-26',suggested=ctx.DayBuilder.buildSuggested(resetDate);
+ const protectedItem={id:'own-booked',title:'My booking',preferred:1380,duration:30,custom:true,booked:true,locked:true,manualTime:true,place:'Beach'};
+ const ownFlexible={...protectedItem,id:'own-flexible',title:'My walk',preferred:1320,locked:false,booked:false};
+ const userLock={...suggested.items.find(i=>i.id==='photos'),locked:true,userLocked:true,preferred:1050,duration:40};
+ memory.set('gonow:daybuilder:'+api.state.plan.id,JSON.stringify({days:{[resetDate]:{...suggested,items:[ownFlexible,protectedItem,userLock],unscheduled:[]}}}));
+ const resetBuilder=ctx.DayBuilder.mount(resetRoot,{plan:api.state.plan});
+ resetBuilder.selectDay(resetDate,false);
+ const resetContent=()=>node('reset-simplify .db-content').innerHTML;
+ assert(resetContent().includes('data-testid="day-reset"')&&resetContent().includes('data-testid="day-add-own"'));
+ assert(!/data-testid="(?:day-add|db-reset|db-tray-toggle|db-booking-toggle|db-booking-form)"|id="db-chest"|Anchor it/.test(resetContent()));
+ // Item F: removal goes to Needs a time; visible and accessible labels must agree.
+ assert(resetContent().includes('aria-label="Remove from day My walk"'));
+ assert(resetContent().includes('<span>Remove from day</span>'));
+ assert(!/To ideas|Move to ideas|Activity ideas/.test(resetContent()));
+ assert(!resetContent().split('data-db-id="own-flexible"')[1].split('data-testid="db-pair"')[0].includes('db-locked-tag'),'unbooked custom item has no static Locked tag');
+ const sharedOwn=ctx.DayBuilder.importDays(resetBuilder.exportState()).days[resetDate].items;
+ assert.strictEqual(sharedOwn.find(i=>i.id==='own-flexible').booked,false,'sharing preserves unbooked choice');
+ assert.strictEqual(sharedOwn.find(i=>i.id==='own-booked').booked,true,'sharing preserves booked choice');
+ function resetAction(name){const button={dataset:{dbAction:name},closest:()=>null};resetRoot.click({target:{closest:s=>s==='[data-db-action]'?button:null},stopPropagation(){}});}
+ resetAction('reset');assert(resetContent().includes('Reset this day? Locked and booked items stay.'));
+ assert(resetBuilder.getDay().items.some(i=>i.id==='own-flexible'),'opening confirmation leaves the day alone');
+ resetAction('reset-cancel');assert(resetBuilder.getDay().items.some(i=>i.id==='own-flexible'));
+ resetAction('reset');resetAction('reset-confirm');
+ const resetItems=resetBuilder.getDay().items;
+ assert(!resetItems.some(i=>i.id==='own-flexible'));
+ assert(resetItems.some(i=>i.id==='own-booked'&&i.preferred===1380&&i.locked));
+ assert(resetItems.some(i=>i.id==='photos'&&i.preferred===1050&&i.duration===40&&i.userLocked));
+ assert.equal(resetItems.filter(i=>i.id==='photos').length,1,'protected suggestion is not duplicated');
+ assert(suggested.items.every(i=>resetItems.some(r=>r.id===i.id)),'missing suggestions restored');
+ console.log('PASS direct day actions, reset confirmation/cancel/protected items, unbooked tag and sharing');
  // Drive the actual delegated transfer controls, including an untimed move.
  const transferRoot=node('transfer-regression');
  memory.delete('gonow:daybuilder:oahu-demo-2026-11');

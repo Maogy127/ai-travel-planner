@@ -1677,3 +1677,21 @@ body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;
 .wellness-rings .ring-encouragement{grid-column:1/-1;flex-basis:100%;white-space:nowrap;font-size:12px}
 .wellness-rings button.ring-encouragement{min-height:44px;width:max-content;max-width:100%;padding:4px 0;background:transparent;border:0;text-align:left;text-decoration:underline;color:var(--ink)}
 .day-head .compact-rings [data-testid=ring-breakdown-toggle]{width:auto;font-size:12px}
+
+/* The two day actions stay on one row on a phone. */
+.day-primary-actions{display:flex;gap:8px;margin:12px 0;align-items:center}
+.day-primary-actions button{min-width:0;min-height:44px;padding:8px 10px;font-size:14px;white-space:nowrap}
+.day-reset-prompt{margin:8px 0;font-size:12px;line-height:1.5}
+.day-reset-prompt>span{white-space:nowrap}
+.day-reset-prompt button{min-height:44px;margin-right:8px}
+.add-own-sheet{box-sizing:border-box;width:min(360px,calc(100vw - 24px));max-height:calc(100dvh - 24px);overflow:auto}
+.add-own-sheet form{display:grid;gap:10px}
+.add-own-sheet label{display:grid;gap:4px;min-width:0}
+.add-own-sheet input{box-sizing:border-box;width:100%;min-width:0;min-height:44px}
+.add-own-sheet label.row{display:flex;align-items:center}
+.add-own-sheet input[type=checkbox]{width:24px;min-height:24px}
+.add-own-sheet [role=alert]{font-size:14px;margin:0}
+.add-own-sheet button{min-height:44px}
+.add-own-sheet [data-testid=add-own-submit]{flex:1}
+@media print{.day-primary-actions,.day-reset-prompt,.add-own-sheet{display:none!important}}
+.add-own-sheet label.row{min-height:44px}

@@ -1475,3 +1475,96 @@ COPY-AUDIT — every visible string added/changed:
 - No new copy. Correctly displays the existing “Sleep {hours}h{minutes} · {flight label}” and “Short night · 5h55 before your flight” on the demo departure; existing flight labels remain unchanged. Short-night advice stays a single line; calculation details remain behind “How we count”.
 - Removes departure-day movement/recovery values and goals, “No rest today · Add a pool break?”, day pace and sleep-adjustment controls. Other days retain them.
 - The updated test expects the existing Item E label “How we count” instead of “Details”. No testids or accessibility strings renamed; no developer terminology added.
+
+### Item F — Simplify day actions
+
+Changes:
+- Replaced the day Add disclosure, ideas chest and inline booking form with one row under the day header: Reset to suggested / + Add my own. Shared DayBuilder rendering covers curated demo, legacy merged plans, pick-path, any-city and draft days. Kept Day options only when rain/relax controls exist; removed the duplicate legacy custom-item form and handler.
+- Reset uses inline Reset/Cancel confirmation, restores suggestions, preserves locked/booked items and their stored times, and avoids duplicating protected suggestions.
+- Added a compact modal sheet with required Name/Start, optional End/free-text Place, Booked, Add and Cancel. No place search. Missing fields show one validation line; invalid end times keep the existing validation. Optional end estimates one hour. Items use the existing custom-item insertion, blocking, conflict and reflow paths. Booked items have a static Locked tag; unbooked choices survive compact export/import.
+- Escape/Cancel closes the sheet and restores focus. Opening focuses Name; the pool-break shortcut prefills Pool or stretch break and focuses Start. Preserved the separate draft Activities library and untimed-item scheduling controls.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all Python tests.
+- Extended test_plan_render.cjs to drive real reset confirmation/cancel, check protected booked/user-locked items, restore missing suggestions without duplicates, verify old controls absent and preserve booked/unbooked sharing and tags.
+- Added supervisor-run tests/test_add_simplify.py using test_full.new and test_wellness_home.serve_checks, port 8876, at 1280 and 390: removed controls, action row, validation, optional fields, timed items with/without Booked, static Locked tag, protected reset, persistence, focus, Escape/Cancel and overflow.
+- Ported legacy reset/booking/tray flows and screenshot targets with Item F comments. Reflow/drag fixtures remain; removed day-chest checks now assert its absence or exercise Swap/the separate draft activity library. Ring test now expects the prefilled sheet and Start focus.
+- Chromium/Playwright and screenshots remain supervisor-run; none executed in this sandbox. No network, commits, pushes or remote changes. No assets added/renamed; existing cache tags and asset count unchanged.
+
+COPY-AUDIT — every visible string added/changed:
+- `Reset to suggested`, `+ Add my own`: the only two day action labels, on one row at 390px.
+- `Reset this day? Locked and booked items stay.`: one inline confirmation line; `Reset` / `Cancel` are explicit actions. `Reset to suggested.` replaces the longer reset announcement.
+- `Add my own`: sheet title. `Name`, `Start`, `End`, `Place`, `(optional)`, `Booked`: short field labels; End and Place show the optional hint. Place is plain free text.
+- `Add` / `Cancel`: sheet actions. `Add a name and start time`: one-line required-field validation. `End must be after start`: existing validation retained in the sheet.
+- `Item added.`: short live announcement; an overlap appends the existing `Overlaps {item title}` feedback. Existing day conflict notices remain available after the sheet closes.
+- `Locked`: existing static booking tag, now only for Booked custom items; unbooked custom items can use the normal lock control.
+- `Pool or stretch break`: existing editable prefill, now in the sheet with Start focused.
+- `Day options`, `Make this day more relaxing`, `Rain backup`: retained only where those options exist; no empty heading or duplicate add action.
+- Removed day copy: `+ Add`, `Activity ideas {N}`, `+ Add booking`, `Anchor it`, `+ Add your own item`, and the legacy `Add your own item` form. No developer terminology or place-search hints added. Details stay in the modal; no duplicate day instructions.
+
+### Item F follow-up — Supervisor failures
+
+Changes:
+- Feature-detect content.querySelector before mounting untimed scheduling controls; retain the minimal Node stub unchanged.
+- Keep the four-child day header assertion and verify the separate action row is visible immediately below it. Scope the builder-level add-own modal to the page.
+- Reset regression now preserves La Mer's edited 6:00 PM–8:00 PM booking and explicitly removes/restores a non-booked suggestion.
+- Add-own detects locked overlaps from displayed schedule intervals, announces the short venue name, and retains one visible conflict notice without repeating the same rendered note.
+- Custom-item browser locators target the item title, with explicit count-one assertions to catch duplicate rendering rather than matching neighboring text in a pair.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all Python tests, including the updated dayview, time-entry, full-suite overlap and add-simplify checks (existing new/serve_checks helpers, port 8876).
+- Browser execution and screenshots remain supervisor-run. No assets added/renamed; cache tags and asset counts unchanged. Existing uncommitted changes retained; no commits, pushes, remote changes or network access.
+
+COPY-AUDIT — every visible string added/changed:
+- `Overlaps {short venue name}`: uses the existing short venue helper, yielding `Overlaps La Mer` instead of its long activity title. One conflict notice remains visible on the custom item; duplicate matching notes are suppressed.
+- `Item added. Overlaps {short venue name}`: existing live feedback now uses the same short venue name and displayed booking interval. No other labels, headings, instructions or validation strings changed; no developer terminology added.
+
+### Item F follow-up 2 — Plain suggestion reset checks
+
+Changes:
+- Updated test_add_simplify.py and test_time_entry.py to remove the plain Grab-and-go breakfast suggestion (`2026-11-26-4`). Comments explain that generated return transport re-derives after removal and can change title.
+- Both checks capture the strong activity title before removal, assert absence after removal, and assert exactly one restored item with that same title after Reset. Retained reset-cancel and protected-item assertions.
+- Tests and this log only; existing uncommitted app changes retained. No assets or testids changed.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 53 Python test files.
+- Playwright execution remains supervisor-run; existing shared helpers and ports unchanged. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Only test locators, assertions, explanatory comments and this log changed; no UI copy added or changed.
+
+### Item F follow-up 3 — Removal destination and reset zones
+
+Changes:
+- Scope breakfast day-list assertions in test_add_simplify.py and test_time_entry.py to data-db-zone=day. Assert the removed item is visible in the Needs a time tray; after Reset assert one restored day row, its original title, and no tray copy. Comments explain the destination and reset behavior; existing cancel/protection checks remain.
+- Replace both removal action labels (visible menu text and accessible label/title) with Remove from day. Preserve existing testids and scheduling actions.
+- Case-insensitive audit of js/ for ideas/Activity ideas found no remaining removed-tray UI references. Remaining matches are internal comments, local-plan catalog guidance and the working recommendation refresh button; these describe their actual content/actions.
+- Added Node render assertions and supervisor browser assertions for the new removal label. No assets added/renamed; cache tags and asset counts unchanged. Existing uncommitted changes retained; no network, commits, pushes or remote changes.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 53 Python test files.
+- Playwright and screenshots remain supervisor-run; updated browser tests retain shared helpers and existing ports.
+
+COPY-AUDIT — every visible string added/changed:
+- `Remove from day`: replaces `Move to ideas` in the tapped action menu; short enough for one line at 390px, with no duplicate destination instructions.
+- `Remove from day {activity title}`: replaces `To ideas {activity title}` in the action's aria-label and title. Identifies the same action and item for assistive technology.
+- No other UI strings changed. Removed items appear under the existing `Needs a time` heading with existing scheduling actions; no dead ideas-tray control or developer terminology added.
+
+### Item F follow-up 4 — Time whitespace and tray scope
+
+Changes:
+- Compare the locked photo time using text_content() with all whitespace removed on both sides, avoiding inner_text layout line breaks. Added an explanatory comment; the reset-preservation assertion remains.
+- Locate the pending breakfast from the page's Needs a time section because it sits outside db-day-list. Added an explanatory comment; removal and reset assertions remain.
+- Tests and this log only; existing uncommitted changes retained. No assets, testids or application code changed.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 53 Python tests using python3.
+- Playwright remains supervisor-run. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- None. No UI strings added or changed.

@@ -1,3 +1,4 @@
+# Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 import base64
 import asyncio, sys, subprocess, time, json, re
 from pathlib import Path
@@ -59,9 +60,8 @@ async def open_day_pace(pg):
   link=pg.get_by_test_id('day-pace-link').first
   if await link.get_attribute('aria-expanded')!='true': await link.click()
 async def open_add_menu(pg):
-  panel=pg.locator('.day-add-panel').first
-  if await panel.count() and not await panel.evaluate('e=>e.open'):
-    await panel.locator('summary').click()
+  # Item F: actions are directly available, with no Add disclosure.
+  await pg.get_by_test_id('day-add-own').wait_for()
 async def open_group(pg):
   if await pg.get_by_test_id('track-toggle').get_attribute('aria-pressed')!='true': await pg.get_by_test_id('track-toggle').click()
   button=pg.get_by_test_id('group-toggle').first
@@ -740,15 +740,9 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db locked stays anchored',(await timeline())[-1]==list(expected[-1]) and 'Locked booking' in await pg.get_by_test_id('db-live').inner_text())
   if await locked.get_by_test_id('db-expand').get_attribute('aria-expanded')=='true': await locked.get_by_test_id('db-expand').click()
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
-  ok(label+' db tray expanded',await pg.get_by_test_id('db-tray-toggle').get_attribute('aria-expanded')=='true')
-  await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
-  ok(label+' db tray collapsed',await pg.get_by_test_id('db-tray-toggle').get_attribute('aria-expanded')=='false')
-  await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
-  tray=pg.get_by_test_id('db-tray')
-  ok(label+' db initial tray empty',await tray.locator('[data-db-id]').count()==0)
+  assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
+  # Item F: replace chest disclosure assertions with its removal; reflow fixtures below remain.
+  ok(label+' old day tray absent',await pg.get_by_test_id('db-tray').count()==0)
   await pg.evaluate("""() => {
     window.dbSawShake = false;
     window.dbShakeObserver = new MutationObserver(records => {
@@ -794,7 +788,7 @@ async def daybuilder_checks(b,base,label,shots):
   await pg.keyboard.press('Escape');await pg.mouse.up()
   ok(label+' db pointer cancel',await raw_ids()==before and await pg.locator('.db-ghost,.db-drop-indicator').count()==0)
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   await add_reflow_fixture(pg, 'chest-0')
   notes=await day.get_by_test_id('db-note').all_text_contents()
   visible_notes=await day.locator('[data-testid=db-note]:visible').all_text_contents()
@@ -806,45 +800,47 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db late connector',await day.locator('.db-travel-late').inner_text()=='Uber ~20 min · leave by 6:55 PM')
   # Start from suggested order so photos is directly before the locked dinner.
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
   ok(label+' db move past locked',(await raw_ids()).index('photos')>(await raw_ids()).index('lamer') and await day.locator('[data-db-id=photos]').get_by_test_id('db-time').text_content()=='10:00 PM–11:00 PM' and await locked.get_by_test_id('db-time').text_content()=='7:30 PM–9:30 PM')
   ok(label+' db afterdark button','After dark — sunset ~5:48 PM' in await day.locator('[data-db-id=photos]').inner_text())
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   handle=(await card_action(pg, day.locator('[data-db-id=photos]'), 'db-handle'))
   await handle.focus();await pg.keyboard.press('Space');await pg.keyboard.press('ArrowDown');await pg.keyboard.press('Space')
   ok(label+' db afterdark keyboard','After dark — sunset ~5:48 PM' in await day.locator('[data-db-id=photos]').inner_text())
   edited=await timeline();await pg.reload(); await reopen(pg); await pg.get_by_test_id('db-root').wait_for()
   ok(label+' db persistence',await timeline()==edited)
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-booking-toggle').click()
-  await pg.get_by_test_id('db-booking-name').fill('Harbor reservation')
-  await pg.get_by_test_id('db-booking-start').fill('22:00');await pg.get_by_test_id('db-booking-end').fill('23:00')
-  await pg.get_by_test_id('db-booking-end').fill('21:00')
-  await pg.get_by_test_id('db-booking-add').click()
-  ok(label+' db invalid booking','after start' in await pg.get_by_test_id('db-form-note').inner_text())
-  await pg.get_by_test_id('db-booking-end').fill('23:00')
-  await pg.get_by_test_id('db-booking-add').click()
+  await pg.get_by_test_id('day-add-own').click();await pg.get_by_test_id('add-own-booked').check()
+  await pg.get_by_test_id('add-own-name').fill('Harbor reservation')
+  await pg.get_by_test_id('add-own-start').fill('22:00');await pg.get_by_test_id('add-own-end').fill('23:00')
+  await pg.get_by_test_id('add-own-end').fill('21:00')
+  await pg.get_by_test_id('add-own-submit').click()
+  ok(label+' db invalid booking','after start' in await pg.get_by_test_id('add-own-note').inner_text())
+  await pg.get_by_test_id('add-own-end').fill('23:00')
+  await pg.get_by_test_id('add-own-submit').click()
   booking=day.locator('.db-locked[data-db-id^=custom-]').filter(has_text='Harbor reservation')
   ok(label+' db custom booking','10:00 PM–11:00 PM' in await booking.text_content() and 'Locked' in await booking.inner_text())
   ok(label+' db booking focus',await booking.evaluate('e=>e.contains(document.activeElement)'))
   await (await card_action(pg, booking, 'db-delete')).click()
-  ok(label+' db delete focus',await pg.evaluate("document.activeElement.matches('[data-testid=db-booking-toggle], [data-db-id], [data-db-id] button')"))
+  ok(label+' db delete focus',await pg.evaluate("document.activeElement.matches('[data-testid=day-add-own], [data-db-id], [data-db-id] button')"))
   ok(label+' db delete booking',await booking.count()==0)
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
-  ok(label+' db reset focus',await pg.get_by_test_id('db-reset').evaluate('e=>e===document.activeElement'))
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
+  ok(label+' db reset focus',await pg.get_by_test_id('day-reset').evaluate('e=>e===document.activeElement'))
   ok(label+' db reset',await timeline()==[list(x) for x in expected])
   await pg.set_viewport_size({'width':390,'height':844})
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
+  assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
   await add_reflow_fixture(pg, 'chest-1')
   await (await card_action(pg, day.locator('[data-db-id^=instance-]').last, 'db-up')).tap()
   await open_add_menu(pg)
-  if not await pg.get_by_test_id('db-booking-form').is_visible(): await pg.get_by_test_id('db-booking-toggle').click()
-  ok(label+' db mobile booking button',await pg.get_by_test_id('db-booking-add').evaluate('e=>{const r=e.getBoundingClientRect();return r.height>=40&&r.height<=48&&Math.abs(r.width-e.parentElement.clientWidth)<2}'))
+  if not await pg.get_by_test_id('add-own-sheet').is_visible(): await pg.get_by_test_id('day-add-own').click();await pg.get_by_test_id('add-own-booked').check()
+  # Item F: sheet actions share a row; verify a usable target within the viewport.
+  ok(label+' db mobile booking button',await pg.get_by_test_id('add-own-submit').evaluate('e=>{const r=e.getBoundingClientRect();return r.height>=44&&r.width>=44&&r.right<=innerWidth}'))
   ok(label+' db mobile usable',not await overflow(pg))
+  await pg.keyboard.press('Escape')  # Item F: dismiss the modal before switching days.
   ok(label+' db mobile tap targets',await day.locator('.db-controls button').evaluate_all('es=>es.every(e=>e.getBoundingClientRect().width>=40&&e.getBoundingClientRect().height>=40)'))
   await pg.get_by_test_id('db-day-2026-11-28').click()
   await add_reflow_fixture(pg, 'chest-0')
@@ -855,7 +851,7 @@ async def daybuilder_checks(b,base,label,shots):
   await ctx.close()
   ctx,pg=await db_open(b,base,reduced_motion='reduce')
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
+  assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
   await add_reflow_fixture(pg, 'chest-1')
   conflict=pg.locator('.db-conflict').first
   ok(label+' db reduced motion',await conflict.count()>0 and await conflict.evaluate("e=>getComputedStyle(e).animationName==='none'&&!e.classList.contains('db-shake')"))
@@ -907,7 +903,7 @@ async def merged_checks(b,base,label,shots):
   await (await card_action(pg, photos, 'db-up')).click(); await (await card_action(pg, photos, 'db-down')).click()
   ok(label+' up/down do not toggle',await photos.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false')
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   await photos.get_by_test_id('db-expand').click()
   ok(label+' open before drag',await photos.get_by_test_id('db-expand').get_attribute('aria-expanded')=='true')
   await db_pointer(pg,(await card_action(pg, photos, 'db-handle')),day.locator('[data-db-id=return-hotel]'))
@@ -915,7 +911,7 @@ async def merged_checks(b,base,label,shots):
   moved=day.locator('[data-db-id=photos]')
   ok(label+' drag does not leave box expanded',order.index('photos')<order.index('return-hotel') and await moved.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false' and not await moved.get_by_test_id('db-detail').is_visible(),str(order))
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   # Confirmed bookings use static tags to avoid dead unlock toggles.
   rows=day.locator('[data-testid=db-pair]:not(.db-prep)')
   n=await rows.count(); locks=day.locator('button[data-testid=db-lock]')  # Static indicators are not 44px toggle targets.
@@ -973,7 +969,7 @@ async def merged_checks(b,base,label,shots):
   senia=day.locator('[data-db-id=senia]')
   ok(label+' booking stays locked',await senia.locator('button[data-testid=db-lock]').count()==0 and await senia.get_by_test_id('db-locked-tag').count()==1 and await senia.get_by_test_id('db-up').count()==0)
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   ok(label+' reset restores default locks',await day.locator('[data-db-id=senia]').get_by_test_id('db-locked-tag').count()==1 and await day.locator('[data-db-id=dive-1127]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await t('senia')=='6:00 PM–8:00 PM' and await t('dive-1127')==before)
   # Print: every day, every box open, no controls
   await pg.evaluate("window.dispatchEvent(new Event('beforeprint'))"); await pg.emulate_media(media='print')
@@ -1005,16 +1001,22 @@ async def daybuilder_round5_checks(b,base,label):
     contrast=await readable(pg,selector)
     ok(label+' db contrast '+selector,contrast['ratio']>=4.5 and contrast['size']>=12,str(contrast))
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
+  assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-booking-toggle').click()
+  await pg.get_by_test_id('day-add-own').click();await pg.get_by_test_id('add-own-booked').check()
   ok(label+' db coarse pointer',await pg.evaluate("matchMedia('(pointer:coarse)').matches"))
   ok(label+' db all coarse targets',await root.locator('button:visible,input:visible,select:visible').evaluate_all('es=>es.every(e=>{const t=(e.type==="checkbox"&&e.closest("label"))||e,r=t.getBoundingClientRect();return r.width>=44&&r.height>=44})'))
-  await pg.get_by_test_id('db-booking-name').fill('Overlapping booking')
-  await pg.get_by_test_id('db-booking-start').fill('20:00');await pg.get_by_test_id('db-booking-end').fill('21:00')
-  await pg.get_by_test_id('db-booking-add').click()
-  ok(label+' db booking overlap','Overlaps La Mer' in await pg.get_by_test_id('db-form-note').inner_text())
+  await pg.get_by_test_id('add-own-name').fill('Overlapping booking')
+  await pg.get_by_test_id('add-own-start').fill('20:00');await pg.get_by_test_id('add-own-end').fill('21:00')
+  await pg.get_by_test_id('add-own-submit').click()
+  ok(label+' db booking overlap','Overlaps La Mer' in await pg.get_by_test_id('db-live').inner_text())  # Item F: sheet closes after adding; conflict is announced.
   ok(label+' db booking overlap announced','Overlaps' in await pg.get_by_test_id('db-live').inner_text())
+  # Item F: the sheet closes, but its single conflict line stays on the new item.
+  own=day.locator('[data-db-id]').filter(has=pg.get_by_test_id('db-activity').locator('strong').filter(has_text='Overlapping booking'))
+  await expect(own).to_have_count(1)
+  conflict=own.locator('.db-note').filter(has_text='Overlaps La Mer')
+  await expect(conflict).to_have_count(1)
+  await expect(conflict).to_be_visible()
   await pg.get_by_test_id('db-day-2026-11-28').click()
   await add_reflow_fixture(pg, 'chest-0')
   ok(label+' db flight unset blocks dive', await blocked_dive_is_unscheduled(pg))
@@ -1023,7 +1025,7 @@ async def daybuilder_round5_checks(b,base,label):
   await pg.get_by_test_id('db-day-2026-11-28').click()
   # Put a dive early in the day so a late next-day flight leaves more than 24h.
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   await pg.evaluate("""() => {
     const key='gonow:daybuilder:oahu-demo-2026-11',saved=JSON.parse(localStorage.getItem(key));
     saved.days['2026-11-28'].items=[{...DayBuilder.trayItems()[0],preferred:540}];
@@ -1073,11 +1075,11 @@ async def daybuilder_senia_checks(b,base,label):
     ok(tag+' reorder lock stays',await senia_time()=='6:00 PM–8:00 PM' and await senia.get_by_test_id('db-note').count()==0)
     ok(tag+' reorder announced',"you'd miss Senia" in await pg.get_by_test_id('db-live').inner_text())
     await open_add_menu(pg)
-    await pg.get_by_test_id('db-reset').click()
+    await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
     ok(tag+' reset clear',await timeline()==[list(x) for x in SENIA_DAY] and await day.locator('.db-conflict').count()==0)
     # Add the parasail (lands after dinner, still clear), then drag it in front of the hotel Uber.
     await open_add_menu(pg)
-    await pg.get_by_test_id('db-tray-toggle').click()
+    assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
     await add_reflow_fixture(pg, 'chest-1')
     ok(tag+' add after dinner clear',await day.locator('.db-conflict').count()==0 and await senia_time()=='6:00 PM–8:00 PM')
     instance=await day.locator('[data-db-id^=instance-]').last.get_attribute('data-db-id')
@@ -1117,7 +1119,7 @@ async def daybuilder_senia_checks(b,base,label):
     ok(tag+' drag lock stays',await senia_time()=='6:00 PM–8:00 PM' and await senia.get_by_test_id('db-note').count()==0)
     ok(tag+' drag late connector','leave by 5:10 PM' in await day.locator('.db-travel-late').inner_text())
     await open_add_menu(pg)
-    await pg.get_by_test_id('db-reset').click()
+    await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
     await pg.get_by_test_id('db-day-2026-11-26').click()
     ok(tag+' 11/26 La Mer intact',await day.locator('[data-db-id=lamer]').get_by_test_id('db-time').text_content()=='7:30 PM–9:30 PM' and await day.locator('.db-conflict').count()==0)
     ok(tag+' no overflow',not await overflow(pg))
@@ -1161,7 +1163,7 @@ async def regression_checks(b,base,label):
   ok(label+' print shows reflowed details without controls', '10:00 PM' in printed and '7:30 PM' in printed and details_ok and controls==0)
   await pg.emulate_media(media='screen'); await pg.evaluate("window.dispatchEvent(new Event('afterprint'))")
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   ok(label+' reset restores 5:40 photos', await clock('photos')=='5:40 PM–6:40 PM', await clock('photos'))
   # 11/28 Relax changes the builder clock and keeps locks plus reorder.
   await pg.get_by_test_id('db-day-2026-11-28').click()

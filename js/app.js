@@ -638,11 +638,6 @@
             aside.insertAdjacentHTML('afterbegin','<div class="library-search"><p data-testid="search-honesty">Sample places for now</p><label>Search activities<input data-testid="activity-search" type="search" placeholder="Try dive, sunset, walk"></label><div data-testid="activity-results"></div></div>');
             bindLibrary(aside);
         }
-        // The builder replaces the day's tray on every render. Keep its Schedule
-        // controls ahead of search results so they remain reachable in the sheet.
-        var tray=aside.querySelector('[data-testid=db-tray]');
-        var results=aside.querySelector('[data-testid=activity-results]');
-        if(tray)results.before(tray);
         renderLibraryResults(aside, aside.querySelector('[data-testid=activity-search]').value);
 
     }
@@ -1608,7 +1603,7 @@
         return html;
     }
     function bindPace(scope){
-        scope.querySelectorAll('[data-testid=ring-rest-break]').forEach(function(b){b.onclick=function(){var toggle=view.querySelector('[data-testid=db-booking-toggle]');if(toggle.getAttribute('aria-expanded')!=='true')toggle.click();var input=view.querySelector('[data-testid=db-booking-name]');input.value='Pool or stretch break';input.focus();};});
+        scope.querySelectorAll('[data-testid=ring-rest-break]').forEach(function(b){b.onclick=function(){var button=view.querySelector('[data-testid=day-add-own]');button.dispatchEvent(new CustomEvent('add-own',{bubbles:true,detail:{name:'Pool or stretch break',focusStart:true}}));};});
         scope.querySelectorAll('[data-testid=day-pace-link]').forEach(function(b){b.parentElement.ontoggle=function(){b.setAttribute('aria-expanded',String(b.parentElement.open));state.paceOpen=b.parentElement.open?b.nextElementSibling.dataset.date:null;};});
         scope.querySelectorAll('[data-testid=sleep-nudge]').forEach(function(box){
             box.querySelector('[data-testid=sleep-nudge-keep]').onclick=function(){try{localStorage.setItem('gonow.sleep-nudge.'+box.dataset.date,'keep');}catch(e){}box.remove();};
@@ -1636,7 +1631,8 @@
         return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+info+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
     }
     function dayFooterHTML(d, i, m) {
-        return '<details class="day-options"><summary '+(mergedPlan()?'':'data-testid="day-add"')+'>'+(mergedPlan()?'Day options':'+ Add')+'</summary><div class="day-footer row">'+(d.relax?'<label><input type="checkbox" data-testid="relax-toggle" data-relax="'+i+'" '+(m.relaxed?'checked':'')+'>Make this day more relaxing</label>':'')+(d.rain?'<label><input type="checkbox" data-testid="rain-toggle" data-rain="'+i+'" '+(m.rain?'checked':'')+'>Rain backup</label>':'')+btn('+ Add your own item', 'day-custom-add', '', 'data-add-day="'+i+'"')+'</div></details>';
+        if(!d.relax&&!d.rain)return '';
+        return '<details class="day-options"><summary>Day options</summary><div class="day-footer row">'+(d.relax?'<label><input type="checkbox" data-testid="relax-toggle" data-relax="'+i+'" '+(m.relaxed?'checked':'')+'>Make this day more relaxing</label>':'')+(d.rain?'<label><input type="checkbox" data-testid="rain-toggle" data-rain="'+i+'" '+(m.rain?'checked':'')+'>Rain backup</label>':'')+'</div></details>';
     }
     function dayHTML(d, i) {
         var m=dayModel(d, i), items=m.items;
@@ -1878,11 +1874,7 @@
                 ]);
             };
         });
-        scope.querySelectorAll('[data-add-day]').forEach(function(el) {
-            el.onclick=function() {
-                addItem(Number(el.dataset.addDay));
-            };
-        });
+
     }
     function editItem(id) {
         var it=state.plan.days.flatMap(function(d) {
@@ -1910,17 +1902,6 @@
         div.querySelector('[data-testid=edit-cancel]').onclick=function() {
             div.innerHTML='';
         };
-    }
-    function addItem(day) {
-        showForm('Add your own item', '<label>Item name<input name="title" required data-testid="add-title"></label><label>Time<input data-testid="add-time" name="time" placeholder="e.g., 3:00 PM"></label><label>Note<textarea name="note" data-testid="add-note"></textarea></label>', function(f) {
-            state.edits.added=state.edits.added|| {};
-            state.edits.added[day]=state.edits.added[day]||[];
-            state.edits.added[day].push( {
-                id:'custom-'+Date.now(), time:f.time.value||'Your time', kind:'activity', title:f.title.value, desc:f.note.value, bring:[], prep:[], sources:[]
-            });
-            persistEdits();
-            planRender(false);
-        });
     }
     function showForm(title, body, submit) {
         var previous=document.activeElement;

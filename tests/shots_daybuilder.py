@@ -1,3 +1,4 @@
+# Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 """Deterministic Day Builder screenshots; run with python3 tests/shots_daybuilder.py."""
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 from test_full import card_action
@@ -45,7 +46,7 @@ async def main():
                     bounds = await element.bounding_box()
                     dimensions = await pg.evaluate('({w:document.documentElement.scrollWidth,h:document.documentElement.scrollHeight,x:scrollX,y:scrollY})')
                     if include_header:
-                        header = await pg.get_by_test_id('db-tray-toggle').bounding_box()
+                        header = await pg.get_by_test_id('day-add-own').bounding_box()
                         header_top = header['y'] + dimensions['y']
                     else:
                         header_top = dimensions['h']
@@ -63,21 +64,25 @@ async def main():
                 await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
                 await shot('afterdark', day.locator('[data-db-id=photos]'), True)
                 await open_add_menu(pg)
-                await pg.get_by_test_id('db-reset').click()
+                await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
                 await open_add_menu(pg)
-                await pg.get_by_test_id('db-tray-toggle').click()
-                await shot('tray', pg.get_by_test_id('db-tray'), include_header=True)
-                await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-1]').get_by_test_id('db-add').click()
+                assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
+                # Item F: capture Swap choices and retain reflow/conflict screenshots via existing fixture insertion.
+                await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-swap')).click()
+                await shot('ideas', pg.get_by_test_id('swap-sheet'), include_header=True)
+                await pg.keyboard.press('Escape')
+                from test_full import add_reflow_fixture
+                await add_reflow_fixture(pg, 'chest-1')
                 await shot('parasail', day.locator('[data-db-id=photos]'), True)
-                await (await card_action(pg, day.locator('[data-db-id=chest-1]'), 'db-remove')).click()
-                await pg.get_by_test_id('db-tray').locator('[data-db-id=chest-0]').get_by_test_id('db-add').click()
+                await add_reflow_fixture(pg, 'chest-0')
                 await shot('conflict', day.locator('.db-conflict').first, True)
                 await open_add_menu(pg)
-                await pg.get_by_test_id('db-booking-toggle').click()
-                await pg.get_by_test_id('db-booking-name').fill('Birthday reservation')
-                await pg.get_by_test_id('db-booking-start').fill('22:00')
-                await pg.get_by_test_id('db-booking-end').fill('23:00')
-                await shot('addbooking', pg.get_by_test_id('db-booking-form'), True)
+                await pg.get_by_test_id('day-add-own').click();await pg.get_by_test_id('add-own-booked').check()
+                await pg.get_by_test_id('add-own-name').fill('Birthday reservation')
+                await pg.get_by_test_id('add-own-start').fill('22:00')
+                await pg.get_by_test_id('add-own-end').fill('23:00')
+                await shot('addbooking', pg.get_by_test_id('add-own-sheet'), True)
+                await pg.keyboard.press('Escape')  # Item F: close the add sheet before the drag capture.
                 await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-handle')).focus()
                 await pg.keyboard.press('Space')
                 await shot('focus', day.locator('.db-picked'), True)

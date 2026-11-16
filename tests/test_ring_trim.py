@@ -1,3 +1,4 @@
+# Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 """Supervisor Chromium ring trim checks; unique port 8875."""
 import asyncio
 from playwright.async_api import expect
@@ -28,14 +29,15 @@ async def checks(browser):
             rings = pg.locator('.day-head > .wellness-rings')
             await audit(rings)
             await expect(rings.get_by_test_id('ring-breakdown').locator('li').first).to_contain_text('90 min')
-            # Arrival day has no counted rest and opens the existing add form.
+            # Item F: the rest shortcut opens the custom-item sheet and focuses Start.
             await show_day(pg, 0)
             rings = pg.locator('.day-head > .wellness-rings')
             await audit(rings)
             await rings.get_by_test_id('ring-rest-break').click()
-            await expect(pg.get_by_test_id('db-booking-form')).to_be_visible()
-            await expect(pg.get_by_test_id('db-booking-name')).to_have_value('Pool or stretch break')
-            await expect(pg.get_by_test_id('db-booking-name')).to_be_focused()
+            await expect(pg.get_by_test_id('add-own-sheet')).to_be_visible()
+            await expect(pg.get_by_test_id('add-own-name')).to_have_value('Pool or stretch break')
+            await expect(pg.get_by_test_id('add-own-start')).to_be_focused()
+            await pg.keyboard.press('Escape')
             await show_day(pg, 4)
             rings = pg.locator('.day-head > .wellness-rings')
             await audit(rings)

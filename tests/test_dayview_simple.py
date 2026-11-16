@@ -1,3 +1,4 @@
+# Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 """Supervisor Chromium checks for the quiet day view; port 8847."""
 import asyncio
 from playwright.async_api import expect
@@ -29,7 +30,7 @@ async def checks(browser):
             await pg.keyboard.press('Enter')
             await expect(rings.get_by_test_id('ring-breakdown')).to_be_visible()
             print('PASS test_dayview_simple.py check line 30')
-            for selector in ('[data-testid=day-pace]', '[data-testid=traveler-row]', '[data-testid=db-booking-form]', '[data-testid=db-tray]', '.day-badges'):
+            for selector in ('[data-testid=day-pace]', '[data-testid=traveler-row]', '[data-testid=add-own-sheet]', '[data-testid=db-tray]', '.day-badges'):
                 for item in await day.locator(selector).all():
                     await expect(item).to_be_hidden()
                     print('PASS test_dayview_simple.py check line 34')
@@ -73,16 +74,22 @@ async def checks(browser):
             await expect(day.locator('.day-title > h2')).to_have_count(1)
             await expect(day.locator('.day-title > p')).to_have_count(1)
             assert await day.locator('.day-head').evaluate('(e)=>e.children[0].matches(".day-title") && e.children[1].matches(".wellness-rings") && e.children[2].matches(".pace-control") && e.children[3].matches("[data-testid=day-info]") && e.children.length===4')
+            # Item F: the action row follows the unchanged four-child header.
+            actions = day.locator('.day-primary-actions')
+            await expect(actions).to_be_visible()
+            assert await actions.evaluate('(e)=>{const h=e.parentElement.querySelector(".day-head"),gap=e.getBoundingClientRect().top-h.getBoundingClientRect().bottom;return gap>=0&&gap<200}')
             print('PASS test_dayview_simple.py check line 62')
             await open_group(pg)
             await expect(day.get_by_test_id('traveler-row').first).to_be_visible()
             print('PASS test_dayview_simple.py check line 65')
             await open_add_menu(pg)
-            await day.get_by_test_id('db-booking-toggle').click()
-            await expect(day.get_by_test_id('db-booking-form')).to_be_visible()
+            await day.get_by_test_id('day-add-own').click()
+            # Item F: the builder-level modal is outside the day card.
+            await expect(pg.get_by_test_id('add-own-sheet')).to_be_visible()
             print('PASS test_dayview_simple.py check line 69')
-            await day.get_by_test_id('db-tray-toggle').click()
-            await expect(day.get_by_test_id('db-tray')).to_be_visible()
+            await pg.keyboard.press('Escape')
+            await expect(day.get_by_test_id('db-tray-toggle')).to_have_count(0)
+            await expect(day.get_by_test_id('db-tray')).to_have_count(0)  # Item F: no day chest; Swap supplies ideas.
             print('PASS test_dayview_simple.py check line 72')
             await expect(day.get_by_test_id('before-you-go')).to_have_count(0)
             print('PASS test_dayview_simple.py check line 75')
