@@ -1369,3 +1369,61 @@ COPY-AUDIT (every visible/accessibility string added or changed):
 - Restored “Move to another day” in the existing tapped more menu and “Edit time: {time range}” on the existing time button. The menu action is unchanged and short; the time label is accessible copy.
 - Existing confirmation copy is reachable again for booking edits: “Unlock this item’s reserved time before changing it?”, “Unlock this item”, “Keep reserved time”. Details remain behind an explicit action.
 - Existing move dialog and time-editor copy is reused unchanged after confirmation, including “Target date”, “Time on new day — optional”, “Move”, “Cancel”, “Edit scheduled time”, “Activity time”, “Start”, “End”, “Duration (minutes)”, “Save activity time”, and “Close time editor”. No duplicate card copy, new headings or technical terminology added.
+
+### Item D — Optional flights step and travel-day windows
+
+Changes:
+- Inserted Flights immediately after Dates, with two compact rows, optional verbatim flight numbers, destination-local arrival/return clock fields, the shared time picker, and Skip. Trip progress is now nine steps; local-day flow stays at three. A hidden `data-flight-booking-hook` reserves the later booking-link integration; no booking link or lookup was added.
+- Added local route estimates using the existing origin regions, destination catalog and jet-lag city/time-zone tables, including date-specific offsets. Estimates assume a morning outbound departure and an early-evening arrival home for the return calculation; these are approximate planning assumptions, never looked-up flights. Unknown routes use regional fallbacks. Flight numbers retain their case and spacing.
+- Canonical answers are `arrivalFlight`, `arrivalTime`, `returnFlight`, `returnTime`; normalization migrates saved `answers.flightTime` into `returnTime` without replacing an existing new value. The builder's existing serialized `flightTime` remains a compatibility field; supplied return answers take precedence when mounting.
+- Day 1 starts no earlier than landing + 75 minutes and stays light. Late landings do not create after-midnight same-day stops. Departure cutoffs reserve two hours domestically or three internationally, plus the shared road estimate. The airport ride uses that road duration. An 8 AM return leaves no unlocked activities on the last day.
+- Pick plans for Oahu and any city display explicit arrival/return anchors, with “Est.” when the corresponding clock was skipped. The legacy template generator also honors both windows.
+- Each flight anchor has one visible Edit flight action. Its small sheet reuses the question's fields and picker; save reflows the two travel days. Locked stops retain their exact times and get one compact conflict notice with a working Edit action. Long notice text truncates on one line; the full text remains in its title and accessible text. Stops that no longer fit remain available in ideas.
+- Untouched curated-demo schedules remain unchanged. The sample arrival is labeled as a sample, and the unspecified departure gets no invented flight time. Editing separates its formerly combined departure/airport card into an airport ride and a flight. Flight anchors reconstruct before saved/shared builder imports and survive remounts. Existing `add-flight-time` and `db-flight-time` test IDs are retained alongside `edit-flight`.
+- No assets added or renamed; all index.html cache-bust references and the 26-asset assertion remain unchanged. No network, browser execution, commits, pushes or remote changes.
+
+Tests:
+- `tests/test_flights.js`: route and time-zone estimates; route-derived return estimate; invalid clock parsing; domestic/international cutoff math; saved-answer migration and precedence; verbatim flight number; Oahu/generic and legacy cutoffs; late landing; locked conflict; middle-day stability; actual demo sheet save; separate airport ride; persistence/remount, shared builder import, and migration of a saved demo combined airport/flight card.
+- `tests/test_flights_step.py`: supervisor-only Playwright at port **8874**, using `test_full.new` and `test_wellness_home.serve_checks`. Covers 1280/390, Dates → Flights progress/order, shared picker to 5:30 PM, Skip/Est. arrival and departure, Oahu and mocked Seattle picks, 6:45 PM minimum day-1 activity start, one-line locked conflict and its Edit action, 8 AM return with only airport/flight items, unchanged middle days, verbatim flight number, overflow, demo editing, and screenshots under `/tmp/flights-*.png`.
+- Updated existing answer helpers, question-topic/progress audits, copy/wrapping audits, six-step core loops and transport editing/persistence assertions with comments explaining the changed flight flow. The default demo render assertion now checks its sample departure label and one shared editor instead of the removed old prompt.
+- PASS all **32** top-level Node suites (`tests/*.js` and `tests/*.cjs`), including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. PASS `py_compile` for all **51** Python test files. Chromium/Playwright and screenshot inspection remain supervisor-run.
+
+COPY-AUDIT (every added/changed visible or accessibility string):
+- Question: “Add your flights?”, “Optional · skip if you’re still deciding.”, “Keep your first evening easy.”, and “Times at your destination”. Each is a short standalone line at 390px; the flights question has no redundant fieldset heading.
+- Rows/fields: “Arrival”, “Return”, “Flight number (optional)”, example “HA 11”, return placeholder “Flight number”, “Lands · day 1”, and “Departs · last day”. Times use the existing picker and its unchanged “Choose time”/clock controls. No lookup claim or technical terminology is shown.
+- Progress: “Step {N} of 9” and matching accessible progress labels replace the trip flow's eight-step count. Existing “Skip”, “Continue →”, and “← Back” are reused.
+- Plan labels: “{typed number} · lands {time}”, “{typed number} · departs {time}”, “Est. lands ~{time}”, and “Est. departs ~{time}”; an entered number with an estimated clock keeps both the typed number and “Est.”. The clock column uses “Arrival” or “Return” to avoid repeating the time. Untouched demo labels are “Sample lands ~5:30 PM” and “Sample departure”; old “Add flight time”/“Flight (add your time)” prompts are replaced in the visible flight controls.
+- Sheet/actions: “Edit flight”, “Edit flights”, “Save flights”, “Cancel”, and live announcement “Flights updated”. Existing accessible “Flight time” is retained on the compatibility value. All details remain behind a tap.
+- Conflict: “{stop} conflicts with your flight · Edit”. One line with the action kept visible; full stop text remains available to assistive technology and in the text title. No silent move of a lock.
+- Travel-day fallback copy reuses existing “Check in and settle in”, “Evening meal near hotel”, “Leave for the airport”, “About 30 min. Settle in.”, and “About 60 min. Choose nearby.” New road-duration detail is “About {minutes} min.” and appears in the existing tapped card detail. No empty headings or visible booking-link placeholder.
+
+### Item D follow-up — Flight browser helper fixes
+
+Changes:
+- Changed the flight-step day selector to JavaScript `.at(i)` so `-1` selects the return day. Audited the remaining suite: its other negative indexes operate on Python lists, and Playwright `.first` is a valid Python property.
+- Fixed the shared flight-time helper's picker arithmetic to step the total minute difference. Previously, changing the sample arrival from 17:30 to 18:00 added an hour and then another 30 minutes, producing 19:00.
+- Verified the helper chooses arrival on day 1 and return on the last day. Added assertions for the chosen sheet field, completed save/sheet removal, exactly one retained hidden `db-flight-time` value, and canonical saved answer. Transport checks retain reload coverage and now also assert visible flight labels and canonical answers after reload.
+- App sheet save/reflect behavior is covered by the existing actual-builder Node regression; no production code, assets, test IDs, or existing uncommitted work were replaced. No network, browser execution, commits, pushes or remote changes.
+
+Tests:
+- PASS all 32 top-level `tests/*.js` and `tests/*.cjs` Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS `py_compile` for all 51 Python test files after the final test edits.
+- PASS all 9,216 quarter-hour start/target picker calculations, including 17:30 → 18:00 and noon → 09:00.
+- Existing browser suites retain shared `test_full.new` / `test_wellness_home.serve_checks` helpers and their existing ports (8874 flights, 8850 transport). Chromium and reload execution remain supervisor-run.
+
+COPY-AUDIT:
+- No visible or accessibility strings added or changed. New assertions verify existing “lands 6:00 PM” and “departs 9:00 AM” labels. No production copy or assets changed.
+
+### Item D follow-up 2 — Open flight demo from home
+
+Changes:
+- Fixed the curated-demo setup in `tests/test_flights_step.py` to use `open_home_flow` before clicking `demo-oahu`; the start form has no demo button. Added a comment explaining the corrected setup.
+- Changed the entered flight number and its visible-label/storage assertions to realistic `HA 11`. Retained all assertions; a comment points to the Node suite's existing verbatim-casing coverage.
+- Preserved existing uncommitted work. No production code, assets, test IDs, ports, commits, pushes or git remotes changed.
+
+Tests:
+- PASS all 32 top-level `tests/*.js` and `tests/*.cjs` Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS `python3` py_compile for all 51 Python test files. Browser execution/screenshots remain supervisor-run; flight checks retain shared helpers and port 8874.
+
+COPY-AUDIT:
+- No production visible or accessibility strings added or changed. Test-entered flight text changes from “hA 11” to “HA 11”; the expected existing flight label becomes “HA 11 · lands 5:30 PM”. No new UI copy or reading burden.

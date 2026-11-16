@@ -38,6 +38,7 @@
     };
     function normalizeAnswers(a){
         a=a&&typeof a==='object'&&!Array.isArray(a)?a:{};
+        if(window.GoNowFlights)window.GoNowFlights.migrate(a);
         Object.keys(a).forEach(function(k){if(/^ages?(?:band|range|choice)/i.test(k))delete a[k];});
         a.ages=Array.isArray(a.ages)?a.ages.map(function(x){
             return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110?Number(x):'';
@@ -60,7 +61,7 @@
         screen:'start', answers:Object.assign({}, defaults, normalizeAnswers(read(KEY+'answers',{}))), plan:null, tab:'plan', recOffset:0, excluded:[], edits: {}, packed: {}, packMeta: {}, hidePacked:false
     };
     if(!read(KEY+'answers',{}).covers&&state.answers.includeFlights===false)state.answers.covers=defaults.covers.filter(function(k){return k!=='flights';});
-    var steps=['dates', 'budget', 'who', 'ages', 'style'], extra=['food', 'pace', 'musts'];
+    var steps=['dates', 'flights', 'budget', 'who', 'ages', 'style'], extra=['food', 'pace', 'musts'];
     function questionPages(){return state.answers.mode==='local'?['style','food','pace']:steps.concat(extra);}
     var reduceMotion=matchMedia('(prefers-reduced-motion: reduce)');
     document.documentElement.classList.toggle('reduce-motion', reduceMotion.matches);
@@ -787,7 +788,7 @@
     function question() {
         var a=state.answers, s=state.screen, index=steps.indexOf(s), isExtra=extra.indexOf(s)>=0, idx=questionPages().indexOf(s), total=questionPages().length;
         var copy= {
-            dates:['When are you going?', 'Pick your travel dates. Weather and prices depend on them.'], budget:["What’s your budget?", 'Total for everyone traveling.'], who:["Who’s coming?", 'This shapes pace, rooms and activities.'], ages:[state.answers.who==='solo'?'How old are you?':'How old is everyone?', 'We check activity age limits.'], style:['What kind of trip do you want?', 'Pick up to two. A third pick swaps out your first.'], food:['Food that fits your day', "Pick any. We’ll plan meals near where you’re staying."], pace:[state.answers.mode==='local'?'Your day':'Your days', 'Make room for movement, rest and sleep.'], musts:['Anything we must include?', "Bookings, birthdays, places, or things to skip. We’ll fit them in."]
+            flights:['Add your flights?', 'Optional · skip if you’re still deciding.'], dates:['When are you going?', 'Pick your travel dates. Weather and prices depend on them.'], budget:["What’s your budget?", 'Total for everyone traveling.'], who:["Who’s coming?", 'This shapes pace, rooms and activities.'], ages:[state.answers.who==='solo'?'How old are you?':'How old is everyone?', 'We check activity age limits.'], style:['What kind of trip do you want?', 'Pick up to two. A third pick swaps out your first.'], food:['Food that fits your day', "Pick any. We’ll plan meals near where you’re staying."], pace:[state.answers.mode==='local'?'Your day':'Your days', 'Make room for movement, rest and sleep.'], musts:['Anything we must include?', "Bookings, birthdays, places, or things to skip. We’ll fit them in."]
         }
         [s];
         var content='';
@@ -802,6 +803,8 @@
                     })+'</option>';
                 }).join('')+'</select></label><label>Trip length: '+(a.length||5)+' days<input data-testid="length" type="number" min="2" max="10" value="'+(a.length||5)+'"></label>';
             } else content+='<div class="two"><label>Start date<input data-testid="date-start" type="date" value="'+esc(a.start)+'"></label><label>End date<input data-testid="date-end" type="date" value="'+esc(a.end)+'"></label></div><p id="date-summary">'+(a.start&&a.end&&a.end>a.start?Engine.tripDays(a)+' days · '+(Engine.tripDays(a)-1)+' nights':'Pick your dates to see trip length.')+'</p><p class="error" id="date-error" role="alert"></p>';
+        } else if(s==='flights') {
+            a.flightsStep=true;content=window.GoNowFlights.fields(a,esc);
         } else if(s==='budget') {
             content='<div class="options">'+[['1500', 'Under $1,500', 1400], ['3000', '$1,500–$3,000', 3000], ['5000', '$3,000–$5,000', 5000], ['5000+', '$5,000+', 6000], ['custom', "I’ll type a number", 0]].map(function(r) {
                 return option(r[0], r[1], '', 'budgetChoice', false);
@@ -835,10 +838,10 @@
         }
         if(s==='pace')content+=sleepQuestion();
         if(a.mode==='local'){if(s==='style')copy[0]='What kind of day do you want?';if(s==='food')copy[1]="Pick any. We’ll suggest places that fit.";}
-        view.innerHTML='<section class="question" data-topic="'+({style:'styles',pace:'sleep'}[s]||s)+'"><p>Step '+(idx+1)+' of '+total+'</p><div class="progress" role="progressbar" aria-label="Step '+(idx+1)+' of '+total+'" aria-valuenow="'+(idx+1)+'" aria-valuemin="0" aria-valuemax="'+total+'"><span style="width:'+((idx+1)/total*100)+'%"></span></div>'+heading(copy[0], copy[1])+(s==='food'||s==='pace'?'':'<fieldset><legend'+(s==='ages'?' class="sr-only"':'')+'>'+({
-            dates:'Travel dates', budget:'Total trip budget', who:'Travel group', ages:'Traveler ages', style:state.answers.mode==='local'?'Day styles':'Trip styles', food:'Food preferences', pace:'Your days', musts:'Your requests'
+        view.innerHTML='<section class="question" data-topic="'+({style:'styles',pace:'sleep'}[s]||s)+'"><p>Step '+(idx+1)+' of '+total+'</p><div class="progress" role="progressbar" aria-label="Step '+(idx+1)+' of '+total+'" aria-valuenow="'+(idx+1)+'" aria-valuemin="0" aria-valuemax="'+total+'"><span style="width:'+((idx+1)/total*100)+'%"></span></div>'+heading(copy[0], copy[1])+(s==='food'||s==='pace'||s==='flights'?'':'<fieldset><legend'+(s==='ages'?' class="sr-only"':'')+'>'+({
+            flights:'Your flights', dates:'Travel dates', budget:'Total trip budget', who:'Travel group', ages:'Traveler ages', style:state.answers.mode==='local'?'Day styles':'Trip styles', food:'Food preferences', pace:'Your days', musts:'Your requests'
         }
-        [s])+'</legend>')+content+(s==='food'||s==='pace'?'':'</fieldset>')+'<div class="qfooter">'+btn('← Back', 'q-back', '')+btn('Skip', 'q-skip', '')+btn(s==='musts'||(a.mode==='local'&&s==='pace')?'Build my plan':s==='style'&&a.unsure?'See my options':'Continue →', 'q-continue', 'primary', validQuestion()?'':'disabled')+'</div></section>';
+        [s])+'</legend>')+content+(s==='food'||s==='pace'||s==='flights'?'':'</fieldset>')+'<div class="qfooter">'+btn('← Back', 'q-back', '')+btn('Skip', 'q-skip', '')+btn(s==='musts'||(a.mode==='local'&&s==='pace')?'Build my plan':s==='style'&&a.unsure?'See my options':'Continue →', 'q-continue', 'primary', validQuestion()?'':'disabled')+'</div></section>';
 
         on('pace-summary-edit',function(){state.paceEditing=!state.paceEditing;question();});
         requestAnimationFrame(function(){
@@ -846,6 +849,7 @@
             if(question&&footer)question.style.setProperty('--qfooter-height',footer.getBoundingClientRect().height+'px');
         });
         journal(s);
+        view.querySelectorAll('[data-flight-field]').forEach(function(el){el.oninput=function(){a[el.dataset.flightField]=el.value;save();};});
         if(s==='musts')setupVoice();
         view.querySelectorAll('.option input').forEach(function(el) {
             el.onchange=function() {
@@ -950,6 +954,7 @@
             var pages=questionPages(),at=pages.indexOf(s);go(at===0?(a.mode==='local'?'home':'start'):pages[at-1]);
         });
         on('q-skip', function() {
+            if(s==='flights'){a.arrivalTime='';a.returnTime='';a.arrivalFlight='';a.returnFlight='';a.flightsStep=true;}
             if(s==='dates') {
                 a.flexible=true;
                 a.month=flexibleMonth();
@@ -994,7 +999,7 @@
         return '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" class="line-icon" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(paths[key]||paths.style)+'"/></svg>';
     }
     function journal(s){
-        var hints={dates:'Leave room for a little discovery.',budget:'Leave some room for the unexpected.',who:'Good company makes the journey.',ages:'A few details now mean fewer surprises later.',style:'Follow your curiosity.',food:'Leave space for a new favorite.',pace:'There’s no finish line here.',musts:'The little details can make the best memories.'};
+        var hints={flights:'Keep your first evening easy.',dates:'Leave room for a little discovery.',budget:'Leave some room for the unexpected.',who:'Good company makes the journey.',ages:'A few details now mean fewer surprises later.',style:'Follow your curiosity.',food:'Leave space for a new favorite.',pace:'There’s no finish line here.',musts:'The little details can make the best memories.'};
         var page=view.querySelector('.question');
         page.insertAdjacentHTML('afterbegin','<div class="guide" data-testid="guide" aria-live="polite"><span>'+hints[s]+'</span></div>');
         if(s==='budget'){
@@ -1628,6 +1633,7 @@
         function model(date){var x=day(date);return x.d?dayModel(x.d,x.i):{items:[]};}
         function find(id,date){return model(date).items.find(function(it){return it.id===id;});}
         return {
+            flightAnswers:Object.assign({},state.answers,{start:p.start,end:p.end}),saveFlights:function(a){Object.assign(state.answers,a);save();},
             saveDraft:function(raw){if(state.shared||state.viewing==='finished')return;var list=readTrips(),t=list.find(function(t){return t.id===state.tripId;});if(t){t.builder=cloneData(raw);t.answers=cloneData(state.answers);writeTrips(list);}},
             swapCatalog:function(){var c=pickCatalog();return c?(c.activities||[]).concat(c.restaurants||[]):[];},
             swapPicks:function(oldPick,newPick){var before=cloneData(state.answers.picks||{activities:[],restaurants:[]});state.answers.picks=cloneData(before);var c=pickCatalog();[oldPick,newPick].forEach(function(p,index){if(!p)return;var key=c.restaurants.some(function(x){return x.id===p.id;})?'restaurants':'activities';state.answers.picks[key]=(state.answers.picks[key]||[]).filter(function(id){return id!==p.id;});if(index)state.answers.picks[key].push(p.id);});save();return function(){state.answers.picks=before;save();};},
@@ -1668,7 +1674,7 @@
                 var it=find(src,date);if(!it)return '';
                 var edit=(state.edits.items||{})[src]||{}, original=day(date).d.items.find(function(o){return o.id===src;});
                 if(item&&(item.checkinSwap||item.originalTitle||item.routeReview))return item.title;
-                if(item&&item.flight)return item.title;
+                if(item&&(item.flight||item.flightDirection))return item.title;
                 if(item&&item.locked&&original)return original.title.replace(/[\p{Extended_Pictographic}\u200d\ufe0f]/gu,'').trim();
                 if(it.kind==='meal'&&window.GoNowDiet.match(it,state.answers).status==='conflict'&&item&&!item.locked)return 'A place that fits your needs';
                 if(edit.title)return edit.title;

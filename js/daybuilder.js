@@ -149,8 +149,8 @@ function duration(item) {
 }
 function convert(item = {}) {
     return {
-        fixedBooking:item.fixedBooking, flight:item.flight, airport:item.airport, inboundRide:item.inboundRide, transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
-        duration: item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: item.tags || (/intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : []),
+        fixedBooking:item.fixedBooking, flight:item.flight, flightDirection:item.flightDirection, airport:item.airport, inboundRide:item.inboundRide, transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
+        duration: item.kind==='flight'?0:item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: item.tags || (/intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : []),
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
     };
@@ -250,10 +250,10 @@ function buildSuggested(date) {
         items = [ride, dive, lunch, shop, toHotel, dinner, home];
     }
 
-    if (date === '2026-11-25' && items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title))) Object.assign(items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title)), {flight:true, locked:true, textTime:'Add flight time', preferred:null, detail:'Sample arrival: 5:30 PM — add your actual flight time.'});
+    if (!day.flightsEdited && date === '2026-11-25' && items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title))) Object.assign(items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title)), {flight:true, locked:true, textTime:'Add flight time', preferred:null, detail:'Sample arrival: 5:30 PM — add your actual flight time.'});
 
     // The flight remains an unknown-time anchor until the traveler supplies a time.
-    if (date === '2026-11-29') items.filter(item => /flight|HNL/i.test(item.title)).slice(-1).forEach(item => {
+    if (!day.flightsEdited && date === '2026-11-29') items.filter(item => /flight|HNL/i.test(item.title)).slice(-1).forEach(item => {
         item.locked = true;
         item.title = 'Flight (add your time)';
         item.flight = true;
@@ -312,10 +312,13 @@ function replanStay(items, oldStay, newStay) {
 }
 function reflow(day, ctx = {}) {
     const output = [];
+    const fa=ctx.flightAnswers, active=fa&&(fa.flightsStep||fa.arrivalTime||fa.returnTime), fw=active&&window.GoNowFlights?window.GoNowFlights.windowFor(fa):null;
+    const first=sourcePlan().days[0]?.date,last=sourcePlan().days.at(-1)?.date;
+    const boundary=fw&&(day.date===first||day.date===last);
 
     const ages = (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number);
     const rejected=[];
-    const raw = clone(day.items).filter(item=>{const reason=blockedOn(item,day.date,ctx);if(reason)rejected.push({...item,blockedReason:reason});return !reason;});
+    const raw = clone(day.items).filter(item=>{const reason=blockedOn(item,day.date,ctx);if(boundary&&item.locked&&/flight/i.test(reason||''))return true;if(reason)rejected.push({...item,blockedReason:reason});return !reason;});
     raw.forEach(item => { delete item.notes; delete item.noteSources; delete item.notePriority; delete item.noteSource; });
     if(stayOverride)raw.forEach(item=>{['place','to'].forEach(k=>{if(item[k]===HOTEL)item[k]=stayOverride;});if(item.prepBlock&&item.prepBlock.place===HOTEL)item.prepBlock.place=stayOverride;});
     let previous = null;
@@ -360,7 +363,7 @@ function reflow(day, ctx = {}) {
         if (previous?.walkNext && previous.place === item.place) travel = {minutes: 5, label: 'Walk ~5 min'};
         // A ride booked from where you already are needs no connector.
         if (item.pickup && previous && (previous.to || previous.place) === item.place) travel = {minutes: 0, label: ''};
-        const earliest = previous ? previous.end + travel.minutes + (item.walkBack ? 10 : 0) : 0;
+        const earliest = Math.max(previous ? previous.end + travel.minutes + (item.walkBack ? 10 : 0) : 0, boundary&&day.date===first&&!['flight','travel'].includes(item.kind)?fw.arrivalStart:0);
         item.start = (item.manualTime || item.locked) && item.preferred !== null ? item.preferred : Math.max(earliest, item.preferred ?? (previous ? 0 : 540));
         if (item.flex && !item.locked && !item.manualTime) {
             // Work backwards from the next anchor, reserving every intervening
@@ -380,9 +383,14 @@ function reflow(day, ctx = {}) {
             item.duration = Math.max(0, Math.min(item.duration, latest - item.start));
             if (item.duration < 15) continue;
         }
+        if(boundary&&day.date===first&&!item.locked&&!['flight','travel'].includes(item.kind))item.start=Math.max(item.start,earliest);
         item.end = item.start + item.duration;
+        if(boundary&&!['flight','travel'].includes(item.kind)){
+            const conflict=(day.date===first&&(item.start<fw.arrivalStart||item.end>1440))||(day.date===last&&(fw.departure<=480||item.end>fw.leave||/flight/i.test(blockedOn({...item,preferred:item.start},day.date,ctx)||'')));
+            if(conflict){if(item.locked)warn(item,item.title+' conflicts with your flight');else {rejected.push(item);continue;}}
+        }
         const block=blockedOn({...item,preferred:item.start},day.date,ctx);
-        if(block){rejected.push({...item,blockedReason:block});continue;}
+        if(block&&!(boundary&&item.locked&&/flight/i.test(block))){rejected.push({...item,blockedReason:block});continue;}
         if (previous) {
             const buffer = item.dressy ? 15 : 0;
             const depart = item.locked && !item.textTime ? item.start - buffer - travel.minutes : previous.end;
@@ -553,6 +561,20 @@ function mount(root, ctx = {}) {
     if(KEY!==nextKey){session.date=nextPlan?.id==='oahu-demo-2026-11'?'2026-11-26':nextPlan?.days?.[0]?.date||'2026-11-26';session.open.clear();Object.keys(sourceCache).forEach(k=>delete sourceCache[k]);}
     KEY=nextKey;planSource=nextPlan;
     if(!sourcePlan().days.some(d=>d.date===session.date))session.date=sourcePlan().days[0]?.date||'2026-11-26';
+    // Reconstruct flight anchors before importing saved or shared builder IDs.
+    // In the untouched demo the existing sample cards remain unchanged.
+    const flightAnswers=ctx.flightAnswers;
+    if(window.GoNowFlights&&flightAnswers&&(flightAnswers.flightsStep||flightAnswers.arrivalTime||flightAnswers.returnTime)){
+        const w=window.GoNowFlights.windowFor(flightAnswers),ends=[sourcePlan().days[0],sourcePlan().days.at(-1)];
+        ends.forEach((d,index)=>{
+            const direction=index?'return':'arrival',at=index?w.departure:w.landing;
+            let anchor=d.items.find(i=>i.flightDirection===direction||i.kind==='flight'||(!index&&/land at|arrival flight/i.test(i.title)));
+            if(!anchor){anchor={id:direction+'-flight',prep:[],bring:[],sources:[]};d.items.push(anchor);}
+            Object.assign(anchor,{title:window.GoNowFlights.label(flightAnswers,direction),flightDirection:direction,kind:'flight',time:clock(at),duration:0,locked:true});
+            if(index)d.items.filter(i=>i.kind==='travel'&&/airport|HNL/i.test(i.title)).forEach(i=>{i.time=clock(w.leave);i.desc='About '+w.road+' min.';});
+            d.flightsEdited=true;
+        });
+    }
     let saved = {};
     if (ctx.shared) {
         const key = JSON.stringify(ctx.initial || null);
@@ -567,8 +589,19 @@ function mount(root, ctx = {}) {
         try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
     }
     const days = saved.days || {};
+    if(window.GoNowFlights&&flightAnswers&&(flightAnswers.flightsStep||flightAnswers.arrivalTime||flightAnswers.returnTime)){
+        const w=window.GoNowFlights.windowFor(flightAnswers);
+        [sourcePlan().days[0],sourcePlan().days.at(-1)].forEach((d,index)=>{
+            const stored=days[d.date];if(!stored)return;
+            if(index)stored.items.filter(i=>i.flight&&i.kind==='travel'&&/airport|HNL/i.test(i.title+' '+(d.items.find(s=>s.id===i.id)?.title||''))).forEach(i=>{
+                Object.assign(i,{flight:false,title:d.items.find(s=>s.id===i.id)?.title||'Leave for the airport',preferred:w.leave,duration:w.road,manualTime:true});delete i.textTime;delete i.detail;
+            });
+            d.items.filter(i=>i.flightDirection).forEach(i=>{if(!stored.items.some(s=>s.id===i.id))stored.items.push(convert(i));});
+        });
+    }
     if (ctx.shared) saved.days = days;
     let flightTime = saved.flightTime || sourcePlan().flightTime || '';
+    if(window.GoNowFlights&&flightAnswers&&(flightAnswers.flightsStep||flightAnswers.arrivalTime||flightAnswers.returnTime))flightTime=clock(window.GoNowFlights.windowFor(flightAnswers).departure);
     if(/^\d{1,2}:\d{2}$/.test(flightTime)){const parts=flightTime.split(':').map(Number);flightTime=clock(parts[0]*60+parts[1]);}
     if (ctx.dock) root.classList.add('db-dock');
     root.innerHTML = ctx.dock
@@ -674,7 +707,16 @@ function mount(root, ctx = {}) {
         });
     }
     function dayResult(stored, on) {
-        const intent=adjustedItems(visibleItems(stored,on),on);
+        let intent=adjustedItems(visibleItems(stored,on),on);
+        if(ctx.flightAnswers&&(ctx.flightAnswers.flightsStep||ctx.flightAnswers.arrivalTime||ctx.flightAnswers.returnTime)&&window.GoNowFlights){
+            const a=ctx.flightAnswers,w=window.GoNowFlights.windowFor(a),first=sourcePlan().days[0].date,last=sourcePlan().days.at(-1).date;
+            if(on===first||on===last)intent=intent.map(i=>{
+                const direction=i.flightDirection||((i.flight||i.kind==='flight')?(on===first?'arrival':'return'):null);
+                if(direction){const copy={...i,title:window.GoNowFlights.label(a,direction),flight:false,flightDirection:direction,kind:'flight',duration:0,preferred:direction==='arrival'?w.landing:w.departure,locked:true};delete copy.textTime;delete copy.detail;return copy;}
+                if(on===last&&i.kind==='travel'&&/airport|HNL/i.test(i.title))return {...i,preferred:w.leave,duration:w.road,manualTime:true};
+                return i;
+            });
+        }
         const result=reflow({...stored,items:stored.chronological?intent.map(i=>({...i,manualTime:true})):intent}, {...ctx,flightTime});
         if(stored.chronological)result.items.sort((a,b)=>(a.start ?? Infinity)-(b.start ?? Infinity));
         return result;
@@ -730,12 +772,14 @@ function mount(root, ctx = {}) {
         const uid = uidFor(on, i.id);
         const src = sourceOf(i, on);
         const transport = ['travel','flight'].includes(i.kind) || i.flight;
+        const flightDirection=i.flightDirection||(i.flight?(on===sourcePlan().days[0].date?'arrival':'return'):null);
+        const flightEdit= !tray&&!print&&(flightDirection||(i.id==='pick-airport'&&!sourcePlan().days.find(d=>d.date===on)?.items.some(i=>i.kind==='flight')));
         const cardFlightTime = on === '2026-11-25' ? (i.manualTime && i.preferred != null ? clock(i.preferred) : '') : flightTime;
         const transportType = i.flight || /flight|land at|airport/i.test(i.title) ? 'plane' : /shuttle/i.test(i.title) ? 'shuttle' : /bus/i.test(i.title) ? 'bus' : 'car';
         const paths = {plane:'M2 13l8-3V3l2-1 2 1v7l8 3v2l-8-1v5l3 2v1l-5-1-5 1v-1l3-2v-5l-8 1Z',car:'M4 10l2-6h12l2 6M3 10h18v9H3ZM6 19v3m12-3v3M6 14h2m8 0h2',bus:'M5 3h14v16H5ZM5 11h14M8 19v3m8-3v3M8 15h1m6 0h1',shuttle:'M3 6h14l4 6v7H3ZM3 12h18M7 6v6m6-6v6M6 19v3m12-3v3'};
         const transportIcon = `<svg class="transport-icon" data-transport-icon="${transportType}" aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="${paths[transportType]}"/></svg>`;
         const hhmm = n => String(Math.floor(n / 60)).padStart(2,'0') + ':' + String(n % 60).padStart(2,'0');
-        const canEditTime = !ctx.shared && !tray && !print && !i.textTime && i.kind !== 'prep';
+        const canEditTime = !ctx.shared && !tray && !print && !flightEdit && !i.textTime && i.kind !== 'prep';
         const travelTime = i.kind === 'travel';
         // Reuse persisted manualTime/estimate and duration; explicit arrival is start + duration.
         const arrivalEstimate = travelTime && (!i.manualTime || i.estimate);
@@ -744,7 +788,7 @@ function mount(root, ctx = {}) {
         const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number).some(age => age < r.minAge)) : null;
         const detail = (ctx.detail ? ctx.detail(src, on, i) : '') + (tray ? (i.rules || []).map(r => `<p>${esc(r.text || r)}</p>`).join('') : '');
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
-        const title = (!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
+        const title = i.flight&&!ctx.flightAnswers?.flightsStep?(flightDirection==='arrival'?'Sample lands ~5:30 PM':'Sample departure'):(!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
         const movable = !i.locked && i.kind !== 'prep' && !print;
         const canLock = !tray && !print && (lockable(i) || fixedBooking(i));
         const classes = ['db-pair', transport && 'db-transport', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
@@ -772,16 +816,16 @@ function mount(root, ctx = {}) {
             : `<strong id="db-title-${uid}">${esc(title)}</strong><small>${placeText}</small>`;
         const lockedLabel = !fixedBooking(i) ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
-            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight ? esc(cardFlightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
+            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight||i.flightDirection ? (flightDirection==='arrival'?'Arrival':'Return') : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
             ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt="">` : ''}
             <div class="db-activity" data-testid="db-activity">
-                ${heading}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
-                ${i.flight && !print ? `<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${cardFlightTime ? String(Math.floor(parse(cardFlightTime) / 60)).padStart(2, '0') + ':' + String(parse(cardFlightTime) % 60).padStart(2, '0') : ''}"><button type="button" data-testid="add-flight-time" aria-haspopup="dialog" ${ctx.shared ? 'disabled' : ''}>${cardFlightTime ? esc(cardFlightTime)+' · Edit' : 'Add flight time'}</button>` : ''}
+                ${heading}${flightEdit?`<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${Number.isFinite(i.preferred)?String(Math.floor(i.preferred/60)).padStart(2,'0')+':'+String(i.preferred%60).padStart(2,'0'):''}"><span data-testid="add-flight-time"><button type="button" data-testid="edit-flight" aria-haspopup="dialog" ${ctx.shared?'disabled':''}>Edit flight</button></span>`:''}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
+
                 ${!tray && i.detail ? `<small>${esc(i.detail)}</small>` : ''}
                 ${canLock ? '' : lockChip}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
                 ${controls}
-                ${i.overlapNote ? `<p class="db-note">${esc(i.overlapNote)}</p>` : ''}${(i.notes || []).map((note, index) => `<p class="db-note" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
+                ${i.overlapNote ? `<p class="db-note">${esc(i.overlapNote)}</p>` : ''}${(i.notes || []).map((note, index) => `<p class="db-note ${/conflicts with your flight/.test(note)?'flight-conflict-notice':''}" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>${/conflicts with your flight/.test(note)?'<span class="flight-conflict-text" title="'+esc(note)+'">'+esc(note)+'</span> · <button data-flight-conflict-edit>Edit</button>':'Heads-up: '+esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div>
             ${menu}
             ${editor}
@@ -1151,6 +1195,8 @@ function mount(root, ctx = {}) {
         if(['ArrowUp','ArrowDown'].includes(e.key)&&!picked){e.preventDefault();e.stopImmediatePropagation();const items=[...menu.querySelectorAll('button:not(:disabled)')];const n=items.indexOf(document.activeElement);items[(n+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();}
     });
     root.addEventListener('click', e => {
+        const flightEditButton=e.target.closest('[data-testid=edit-flight],[data-flight-conflict-edit]');
+        if(flightEditButton&&(flightEditButton.dataset.testid==='edit-flight'||flightEditButton.dataset.flightConflictEdit!==undefined)){editFlights();return;}
         const flightButton=e.target.closest('[data-testid=add-flight-time]');
         if(flightButton){flightButton.previousElementSibling.dataset.flightDirection=date==='2026-11-25'?'arrival':'departure';window.GoNowTimepicker.open(flightButton.previousElementSibling,flightButton);return;}
         if (suppressClick) { suppressClick = false; if (e.target.closest('[data-db-id]')) return; }
@@ -1239,12 +1285,48 @@ function mount(root, ctx = {}) {
             }
         }
     });
+    function editFlights(){
+        if(ctx.shared||!window.GoNowFlights)return;
+        const a={...(ctx.flightAnswers||{})};window.GoNowFlights.migrate(a);
+        // Keep the curated sample's times until the traveler edits them.
+        if(!a.flightsStep&&sourcePlan().id==='oahu-demo-2026-11'){a.arrivalTime ||= '17:30';a.returnTime ||= flightTime||'';}
+        const sheet=document.createElement('dialog');sheet.className='flight-sheet';sheet.innerHTML='<h2>Edit flights</h2>'+window.GoNowFlights.fields(a,esc)+'<button data-save-flights>Save flights</button><button data-close-flights>Cancel</button>';document.body.append(sheet);
+        const close=()=>{sheet.close();sheet.remove();root.querySelector('[data-testid=edit-flight]')?.focus();};
+        sheet.querySelector('[data-close-flights]').onclick=close;sheet.oncancel=e=>{e.preventDefault();close();};
+        sheet.querySelector('[data-save-flights]').onclick=()=>{
+            sheet.querySelectorAll('[data-flight-field]').forEach(el=>a[el.dataset.flightField]=el.value);a.flightsStep=true;
+            ctx.flightAnswers=a;ctx.saveFlights?.(a);const fw=window.GoNowFlights.windowFor(a);flightTime=clock(fw.departure);
+            const endpoints=[sourcePlan().days[0],sourcePlan().days.at(-1)];
+            endpoints.forEach((d,index)=>{
+                const stored=days[d.date]||buildSuggested(d.date);days[d.date]=stored;
+                const direction=index?'return':'arrival',at=index?fw.departure:fw.landing;
+                let anchor=stored.items.find(i=>i.flight||i.kind==='flight');
+                // The demo's departure used one airport card for both ride and flight.
+                // Keep that card as the ride, and give the flight its own anchor.
+                if(index&&anchor?.kind==='travel'){
+                    const source=d.items.find(i=>i.id===anchor.id);
+                    Object.assign(anchor,{flight:false,title:source?.title||'Leave for the airport',preferred:fw.leave,duration:fw.road,manualTime:true});
+                    delete anchor.textTime;delete anchor.detail;anchor=null;
+                }
+                if(!anchor){anchor=convert({id:direction+'-flight',title:'Flight',kind:'flight',time:clock(at),duration:0});stored.items.push(anchor);}
+                Object.assign(anchor,{title:window.GoNowFlights.label(a,direction),flightDirection:direction,flight:false,kind:'flight',preferred:at,duration:0,locked:true,manualTime:true});delete anchor.textTime;delete anchor.detail;
+                if(index)stored.items.filter(i=>i.kind==='travel'&&/airport|HNL/i.test(i.title)).forEach(i=>{Object.assign(i,{preferred:fw.leave,duration:fw.road,manualTime:true});});
+                stored.chronological=false;stored.items.sort((x,y)=>(x.preferred??0)-(y.preferred??0));
+                d.flightsEdited=true;
+                let source=d.items.find(i=>i.id===anchor.id);
+                if(!source){source={id:anchor.id,prep:[],bring:[],sources:[]};d.items.push(source);}
+                Object.assign(source,{title:anchor.title,flightDirection:direction,kind:'flight',time:clock(at),duration:0,locked:true});
+            });
+            save();close();render();announce('Flights updated');
+        };sheet.showModal();sheet.querySelector('input').focus();
+    }
     root.addEventListener('change', e => {
         if (e.target.matches('[data-testid=db-flight-time]')) {
             const [h, m] = e.target.value.split(':').map(Number);
             if(!Number.isFinite(h)||!Number.isFinite(m))return;
             if(date==='2026-11-25'){const item=current().items.find(i=>i.flight);Object.assign(item,{preferred:h*60+m,manualTime:true});}
             else flightTime = clock(h * 60 + m);
+            if(ctx.flightAnswers){const a=ctx.flightAnswers;window.GoNowFlights?.migrate(a);a[date===sourcePlan().days[0].date?'arrivalTime':'returnTime']=e.target.value;ctx.saveFlights?.(a);}
             save(); render(); root.querySelector('[data-testid=add-flight-time]').focus(); announce('Flight time updated');
         }
     });

@@ -1,3 +1,30 @@
+/* Destination-local flight windows; estimates never imply a flight lookup. */
+(function(root){
+'use strict';
+const parse=s=>{if(typeof s==='number')return s>=0&&s<1440?s:null;const m=String(s||'').trim().match(/^(\d{1,2}):([0-5]\d)\s*(AM|PM)?$/i);if(!m||+m[1]>(m[3]?12:23)||(m[3]&&+m[1]<1))return null;return (m[3]?+m[1]%12*60+(m[3].toUpperCase()==='PM'?720:0):+m[1]*60)+ +m[2];};
+const clock=n=>(Math.floor(n/60)%12||12)+':'+String(n%60).padStart(2,'0')+(n<720?' AM':' PM');
+function migrate(a){if(!a.returnTime&&a.flightTime)a.returnTime=a.flightTime;delete a.flightTime;return a;}
+function route(a){
+ const j=root.GoNowJetlag,home=j?j.home(a.origin):{tz:'America/Los_Angeles'},dest=j?j.home(a.destination):{tz:'Pacific/Honolulu'};
+ const zones={kyoto:'Asia/Tokyo',bali:'Asia/Makassar',lisbon:'Europe/Lisbon',barcelona:'Europe/Madrid',cancun:'America/Cancun',reykjavik:'Atlantic/Reykjavik',banff:'America/Edmonton',costarica:'America/Costa_Rica',capetown:'Africa/Johannesburg'};
+ const known=root.Engine&&root.Engine.matchDestination?root.Engine.matchDestination(a.destination):null;
+ const key=String(a.destination||'').toLowerCase().replace(/\s/g,'');dest.tz=known&&known.tz||zones[key]||dest.tz;
+ const countries=z=>/Honolulu|America\/(Los_Angeles|New_York|Chicago)/.test(z)?'US':/Tokyo/.test(z)?'JP':z;
+ let international=countries(home.tz)!==countries(dest.tz);
+ if(root.Engine&&root.Engine.originRegion){const r=root.Engine.originRegion(a);if(/^us/.test(r)&&known&&known.country)international=known.country!=='USA';if(r==='canada'&&known&&known.country)international=known.country!=='Canada';}
+ const region=root.Engine&&root.Engine.originRegion?root.Engine.originRegion(a):'west';
+ const hawaii=/oahu|hawaii|honolulu|hnl/i.test(a.destination||'');
+ const hours=hawaii?({usWest:6,usEast:11,usCentral:9,eastAsia:10,canada:7,europe:17}[region]||(/New_York/.test(home.tz)?11:/Asia/.test(home.tz)?10:6)):international?(/Tokyo/.test(dest.tz)?12:/Europe/.test(dest.tz)?(region==='usEast'?7:11):10):home.tz===dest.tz?2.5:5.5;
+ const date=a.start||'2026-11-25',delta=j?j.offset(date,dest.tz)-j.offset(date,home.tz): -120;
+ return {international,hours,landing:((540+hours*60+delta)%1440+1440)%1440,departure:((1080-hours*60+delta)%1440+1440)%1440};
+}
+function windowFor(a){a=migrate({...a});const r=route(a),landing=parse(a.arrivalTime)??r.landing,departure=parse(a.returnTime)??r.departure;
+ const road=root.DayBuilder?root.DayBuilder.estimateTravel({area:a.stay||'Hotel'},{area:'Airport'}).minutes:35;
+ return {landing,departure,arrivalStart:landing+75,leave:Math.max(0,departure-(r.international?180:120)-road),road,international:r.international,arrivalEstimated:parse(a.arrivalTime)===null,returnEstimated:parse(a.returnTime)===null};}
+function label(a,direction){const w=windowFor(a),arrival=direction==='arrival',number=a[arrival?'arrivalFlight':'returnFlight']||'',est=w[arrival?'arrivalEstimated':'returnEstimated'];return (number?number+' · ':'')+(est?'Est. ':'')+(arrival?'lands ':'departs ')+(est?'~':'')+clock(w[arrival?'landing':'departure']);}
+function fields(a,escape){const e=escape||String;return '<p>Times at your destination</p>'+['arrival','return'].map((k,i)=>'<div class="flight-row"><strong>'+ (i?'Return':'Arrival')+'</strong><label>Flight number (optional)<input data-flight-field="'+k+'Flight" data-testid="'+k+'-flight" placeholder="'+(i?'Flight number':'HA 11')+'" value="'+e(a[k+'Flight']||'')+'"></label><label>'+ (i?'Departs · last day':'Lands · day 1')+'<input type="time" data-flight-field="'+k+'Time" data-testid="'+k+'-time" value="'+e(parse(a[k+'Time'])===null?'':String(Math.floor(parse(a[k+'Time'])/60)).padStart(2,'0')+':'+String(parse(a[k+'Time'])%60).padStart(2,'0'))+'"></label></div>').join('')+'<span data-flight-booking-hook hidden></span>';}
+root.GoNowFlights={parse,clock,migrate,route,windowFor,label,fields};
+})(typeof window==='undefined'?globalThis:window);
 /* Pure local scheduling: constrained picks first, then area clusters and free slots. */
 (function(){
 'use strict';
@@ -5,7 +32,7 @@ const minute=t=>{if(typeof t==='number')return t;if(/[AP]M/i.test(String(t)))ret
 // Match the legacy Moderate default when the pace question was skipped.
 const pace=a=>['gentle','active','athlete'].includes(a.level)?a.level:({'Easy':'gentle','Moderate':'active','Full-on':'athlete'}[a.pace]||'active');
 const capacity=a=>({gentle:300,active:420,athlete:540}[pace(a)]);
-function departure(a){const sample=!a.generic&&a.start==='2026-11-25'&&a.end==='2026-11-29';const flight=minute(a.flightTime||a.builderFlightTime)??(sample?480:null);return {flight,leave:flight===null?600:Math.max(0,flight-185)};}
+function departure(a){if(window.GoNowFlights&&(a.flightsStep||a.returnTime||a.arrivalTime)){const w=window.GoNowFlights.windowFor(a);return {flight:w.departure,leave:w.leave};}const sample=!a.generic&&a.start==='2026-11-25'&&a.end==='2026-11-29';const flight=minute(a.flightTime||a.builderFlightTime)??(sample?480:null);return {flight,leave:flight===null?600:Math.max(0,flight-185)};}
 
 const travel=(a,b)=>!a||!b?0:window.DayBuilder.estimateTravel(a,b).minutes;
 function scheduleOnce(a,catalog,attempt=0,seed){
@@ -13,12 +40,13 @@ function scheduleOnce(a,catalog,attempt=0,seed){
  for(let t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z')&&days.length<31;t+=86400000)days.push({date:new Date(t).toISOString().slice(0,10),theme:'',items:[],prep:[],unscheduled:[]});
  const picks=a.picks||{},all=[...catalog.activities,...catalog.restaurants].map(p=>catalog.generic?{...p,area:p.area||'',duration:p.duration||60,price:p.price||'',intro:p.intro||'',closed:p.closed||[],hours:p.parsedHours||p.hours||{}}:p),selected=all.filter(i=>i.reservation||i.locked||i.booked||(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id));
  if(seed)days.forEach(d=>{d.items=JSON.parse(JSON.stringify(seed[d.date]||[]));});
- const unfit=[],bookingIssues=[];const {flight,leave}=departure({...a,start,end,generic:catalog.generic});
+ const fw=window.GoNowFlights.windowFor(a);const unfit=[],bookingIssues=[];const {flight,leave}=departure({...a,start,end,generic:catalog.generic});
  function fits(p,d,t){
   const length=p.duration||60,close=d.date===end?Math.min(1320,leave):1320;
+  if(d.date===end&&a.flightsStep&&fw.departure<=480)return false;
   if(d.date===end&&leave<=600&&(!p.meals||!p.meals.includes('breakfast')||length>60))return false;
   if(d.date===start&&!p.meals)return false;
-  if(t<(d.date===start?1140:360)||t+length+(d.date===end?travel(p,{area:"Airport"}):0)>close)return false;
+  if(t<(d.date===start?Math.max(1140,fw.arrivalStart):360)||t+length+(d.date===end?(a.flightsStep||a.returnTime||a.arrivalTime?Math.max(0,travel(p,{area:"Airport"})-fw.road):travel(p,{area:"Airport"})):0)>close)return false;
   const hrs=p.ruleHours&&(!p.ruleHours.date||p.ruleHours.date===d.date)?p.ruleHours:p.hours;
   if(hrs&&hrs.open!=null&&(t<minute(hrs.open)||t+length>minute(hrs.close)))return false;
   if(window.DayBuilder.closedOn({...p,title:p.name},d.date))return false;
@@ -44,9 +72,10 @@ function scheduleOnce(a,catalog,attempt=0,seed){
   if(!placed)((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);
  }
  for(const d of days){d.items.sort((a,b)=>a.start-b.start);const names=[...new Set(d.items.filter(i=>i.kind==='activity').map(i=>i.area))];d.theme=names.slice(0,2).join(' & ')||[...new Set(d.items.map(i=>i.area))].slice(0,1).join('')||(d.date===end?'Fly home':'Arrive & settle in');}
- if(!seed&&days.length)days[days.length-1].items.push({id:'pick-airport',title:catalog.generic?'Leave for the airport':'Uber to HNL',kind:'travel',time:window.DayBuilder.clock(leave),start:leave,duration:35,locked:true,desc:'Leave for the airport.',prep:[],bring:[],sources:[]});
- if(days[0]){days[0].unscheduled=unfit.map(p=>({id:p.id,title:p.name,place:p.area,duration:p.duration,kind:p.meals?'meal':'activity',custom:true,tags:p.tags||[],closed:p.closed,hours:p.hours}));if(!seed&&!days[0].items.some(i=>i.start<1140))days[0].items.unshift({id:'pick-checkin',title:'Hotel check-in',kind:'stay',time:'6:00 PM',desc:'About 30 min. Settle in.',duration:30,prep:[],bring:[],sources:[]});}
- if(!seed&&days[0]&&!days[0].items.some(i=>i.kind==='meal'||i.start>=1110))days[0].items.push({id:'pick-arrival-meal',title:'Evening meal near hotel',kind:'meal',time:'7:30 PM',desc:'About 60 min. Choose nearby.',duration:60,prep:[],bring:[],sources:[]});
+ if(!seed&&days.length)days[days.length-1].items.push({id:'pick-airport',title:catalog.generic?'Leave for the airport':'Uber to HNL',kind:'travel',time:window.DayBuilder.clock(leave),start:leave,duration:a.flightsStep?fw.road:35,locked:true,desc:a.flightsStep?'About '+fw.road+' min.':'Leave for the airport.',prep:[],bring:[],sources:[]});
+ if(days[0]){days[0].unscheduled=unfit.map(p=>({id:p.id,title:p.name,place:p.area,duration:p.duration,kind:p.meals?'meal':'activity',custom:true,tags:p.tags||[],closed:p.closed,hours:p.hours}));if(!seed&&fw.arrivalStart<1410&&!days[0].items.some(i=>i.start<1140))days[0].items.unshift({id:'pick-checkin',title:'Hotel check-in',kind:'stay',time:window.DayBuilder.clock(Math.max(1080,fw.arrivalStart)),desc:'About 30 min. Settle in.',duration:30,prep:[],bring:[],sources:[]});}
+ if(!seed&&days[0]&&Math.max(1170,fw.arrivalStart+30)+60<=1440&&!days[0].items.some(i=>i.kind==='meal'||i.start>=1110))days[0].items.push({id:'pick-arrival-meal',title:'Evening meal near hotel',kind:'meal',time:window.DayBuilder.clock(Math.max(1170,fw.arrivalStart+30)),desc:'About 60 min. Choose nearby.',duration:60,prep:[],bring:[],sources:[]});
+ if(a.flightsStep&&!seed){days[0].items.unshift({id:'arrival-flight',title:window.GoNowFlights.label(a,'arrival'),kind:'flight',time:window.DayBuilder.clock(fw.landing),duration:0,locked:true,flightDirection:'arrival',prep:[],bring:[],sources:[]});days.at(-1).items.push({id:'return-flight',title:window.GoNowFlights.label(a,'return'),kind:'flight',time:window.DayBuilder.clock(fw.departure),duration:0,locked:true,flightDirection:'return',prep:[],bring:[],sources:[]});}
  return {days,unfit:unfit.map(p=>({...p,reason:reason(p,{...a,start,end})})),bookingIssues,flightTime:flight===null?'':window.DayBuilder.clock(flight),leaveTime:leave,pace:pace(a)};
 }
 function schedule(a,catalog){

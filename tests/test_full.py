@@ -3,7 +3,7 @@ import asyncio, sys, subprocess, time, json, re
 from pathlib import Path
 from datetime import date, timedelta
 from urllib.parse import urlparse, parse_qs, unquote
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, expect
 ROOT=Path(__file__).resolve().parent.parent
 SITE=ROOT/'site' if (ROOT/'site'/'index.html').exists() else ROOT
 (ROOT/'screenshots').mkdir(exist_ok=True)
@@ -167,17 +167,30 @@ async def dashboard_action(pg, action):
   await card.get_by_test_id(action).click()
 
 async def choose_flight_time(pg, value):
-  current = await pg.get_by_test_id('db-flight-time').input_value() or '12:00'
-  current_hour, current_minute = map(int, current.split(':'))
-  await pg.get_by_test_id('add-flight-time').click()
-  dialog = pg.get_by_role('dialog')
-  await dialog.get_by_role('button', name='Other time', exact=True).click()
-  hour, minute = map(int, value.split(':'))
-  for _ in range((hour-current_hour)%24):
-    await dialog.get_by_role('button', name='Increase hour', exact=True).click()
-  for _ in range(((minute-current_minute)%60)//15):
-    await dialog.get_by_role('button', name='Increase minute', exact=True).click()
-  await dialog.get_by_role('button', name='Set time', exact=True).click()
+  # Flight edits now share a two-row sheet; preserve clock-picker coverage.
+  direction = await pg.evaluate("DayBuilder.selectedDate()===__gonow.state.plan.days[0].date?'arrival':'return'")
+  await pg.get_by_test_id('edit-flight').first.click()
+  sheet=pg.locator('dialog.flight-sheet')
+  field=sheet.get_by_test_id(direction+'-time')
+  current=await field.input_value() or '12:00'
+  current_hour,current_minute=map(int,current.split(':'))
+  await field.locator('..').get_by_role('button').click()
+  dialog=pg.locator('dialog.time-picker')
+  await dialog.get_by_role('button',name='Other time',exact=True).click()
+  hour,minute=map(int,value.split(':'))
+  # Step the total clock difference: minute wrap also advances the hour.
+  delta=(hour*60+minute-current_hour*60-current_minute)%1440
+  for _ in range(delta//60):
+    await dialog.get_by_role('button',name='Increase hour',exact=True).click()
+  for _ in range((delta%60)//15):
+    await dialog.get_by_role('button',name='Increase minute',exact=True).click()
+  await dialog.get_by_role('button',name='Set time',exact=True).click()
+  await expect(field).to_have_value(value)
+  await sheet.get_by_role('button',name='Save flights',exact=True).click()
+  await expect(sheet).to_have_count(0)
+  await expect(pg.get_by_test_id('db-flight-time')).to_have_count(1)
+  await expect(pg.get_by_test_id('db-flight-time')).to_have_value(value)
+  assert await pg.evaluate('(key)=>__gonow.state.answers[key]', direction+'Time') == value
 
 
 async def reopen(pg):
@@ -196,16 +209,18 @@ async def answer(pg, dest, unsure=False, ages=('18','19'), who='couple', styles=
   await pg.get_by_test_id('date-start').fill(start); await pg.get_by_test_id('date-end').fill(end)
   hint=await pg.get_by_test_id('guide').inner_text()
   await pg.get_by_test_id('q-continue').click()
-  ok('step progress + contextual guide', await pg.get_by_role('progressbar').get_attribute('aria-label')=='Step 2 of 8' and hint!=await pg.get_by_test_id('guide').inner_text())
+  # Flights are optional; preserve the budget checks after skipping the new step.
+  await pg.get_by_test_id('q-skip').click()
+  ok('step progress + contextual guide', await pg.get_by_role('progressbar').get_attribute('aria-label')=='Step 3 of 9' and hint!=await pg.get_by_test_id('guide').inner_text())
   ok('completed date retained without duplicate summary', await pg.evaluate("window.__gonow.state.answers.completed.includes('dates')") and await pg.get_by_test_id('pinned-answers').count()==0)
   ok('all five budget covers default checked', all([await pg.get_by_test_id('cover-'+k).is_checked() for k in ('flights','hotel','food','activities','transport')]))
   await pg.get_by_test_id('cover-flights').uncheck(); await pg.get_by_test_id('cover-food').uncheck()
   ok('single flights control stays synced', await pg.get_by_test_id('include-flights').count()==0 and await pg.evaluate('window.__gonow.state.answers.includeFlights') is False)
-  ok('progress maximum', await pg.get_by_role('progressbar').get_attribute('aria-valuemax')=='8')
+  ok('progress maximum', await pg.get_by_role('progressbar').get_attribute('aria-valuemax')=='9')
   ok('budget covers stored', await pg.evaluate("JSON.stringify(window.__gonow.state.answers.covers)")== '["hotel","activities","transport"]')
   await pg.get_by_test_id('opt-5000+').click(); await question_review_checks(pg)
   ok('selected option stamped', 'stamped' in (await pg.get_by_test_id('opt-5000+').get_attribute('class'))); await pg.get_by_test_id('q-continue').click()
-  ok('progress advances', await pg.get_by_role('progressbar').get_attribute('aria-valuenow')=='3')
+  ok('progress advances', await pg.get_by_role('progressbar').get_attribute('aria-valuenow')=='4')
   await pg.get_by_test_id('opt-'+who).click(); await pg.get_by_test_id('q-continue').click()
   for i,a in enumerate(ages): await pg.get_by_test_id(f'age-{i}').fill(a)
   await pg.get_by_test_id('q-continue').click()
@@ -232,6 +247,8 @@ async def extra(b, base, label):
   await pg.get_by_test_id('q-skip').click()
   m=await pg.evaluate('window.__gonow.state.answers.month'); exp=await pg.evaluate('new Date(Date.now()+75*864e5).getMonth()+1')
   ok(f'{label} skip dates sets month ~75 days out', m==exp, f'{m} vs {exp}')
+  # Skip the optional flights question before checking budget validation.
+  await pg.get_by_test_id('q-skip').click()
   # disabled continue style
   cont=pg.get_by_test_id('q-continue')
   if await cont.is_disabled():
@@ -432,6 +449,7 @@ async def run(base, label, shots):
     await open_form(pg)
     await pg.get_by_test_id('start-from').fill('Seattle'); await pg.get_by_test_id('start-unsure').click(); await pg.get_by_test_id('start-next').click()
     await pg.get_by_test_id('date-start').fill('2027-02-10'); await pg.get_by_test_id('date-end').fill('2027-02-16'); await pg.get_by_test_id('q-continue').click()
+    await pg.get_by_test_id('q-skip').click()  # Optional flights before budget.
     await pg.get_by_test_id('opt-3000').click(); await pg.get_by_test_id('q-continue').click()
     await pg.get_by_test_id('opt-family').click()
     if shots:
@@ -709,7 +727,8 @@ async def daybuilder_checks(b,base,label,shots):
   for date in ['2026-11-25','2026-11-26','2026-11-27','2026-11-28','2026-11-29']:
     await pg.get_by_test_id('db-day-'+date).click()
     ok(label+' db clear '+date,await day.locator('.db-conflict').count()==0)
-  ok(label+' db flight anchor','Flight (add your time)' in await day.inner_text() and await day.locator('.db-locked').count()==1)
+  # The default departure keeps its sample anchor and now offers the shared editor.
+  ok(label+' db flight anchor','Sample departure' in await day.inner_text() and await day.locator('.db-locked').count()==1)
   await pg.get_by_test_id('db-day-2026-11-26').click()
   async def ids():
     return await day.locator('[data-db-id]:not(.db-prep)').evaluate_all('es=>es.map(e=>e.dataset.dbId)')

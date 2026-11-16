@@ -30,7 +30,8 @@ async def checks(browser):
                     assert await pg.get_by_test_id('start-to').count() == 0
                     await pg.get_by_test_id('start-from').fill('Seattle')
                     await pg.get_by_test_id('start-next').click()
-                    pages = ['dates', 'budget', 'who', 'ages', 'style', 'food', 'pace', 'musts']
+                    # Optional flights now follows dates and counts toward progress.
+                    pages = ['dates', 'flights', 'budget', 'who', 'ages', 'style', 'food', 'pace', 'musts']
                 for index, page in enumerate(pages):
                     assert await pg.evaluate('__gonow.state.screen') == page
                     await collect()
@@ -69,7 +70,7 @@ async def checks(browser):
                     from test_full import wait_plan
                     await wait_plan(pg)
                     await expect(pg.locator('.plan-header')).to_be_visible()
-                expected = ['mode','pace','activities','city','length','styles','food','sleep'] if mode == 'local' else ['mode','pace','activities','destination','origin','dates','budget','who','ages','styles','food','sleep','musts']
+                expected = ['mode','pace','activities','city','length','styles','food','sleep'] if mode == 'local' else ['mode','pace','activities','destination','origin','dates','flights','budget','who','ages','styles','food','sleep','musts']
                 assert sorted(topics) == sorted(expected), topics
                 assert len(topics) == len(set(topics)), topics
                 await pg.evaluate("__gonow.go('home')")

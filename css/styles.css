@@ -1665,3 +1665,11 @@ body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;
 .db-root .db-fixed-lock{min-width:0;min-height:0}
 
 .db-root .db-fixed-lock > [data-testid=db-locked-tag]{display:inline-flex;align-items:center;gap:4px}
+
+/* Optional flights share the existing clock picker. */
+.flight-row{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px;margin:12px 0 20px;min-width:0}
+.flight-row>strong{grid-column:1/-1}.flight-row label,.flight-row input{min-width:0;width:100%}
+.flight-row label{font-size:12px}.flight-sheet{box-sizing:border-box;padding:20px;width:min(440px,calc(100vw - 32px));max-height:90dvh;overflow:auto}
+.flight-conflict-notice{display:flex;align-items:center;gap:4px;white-space:nowrap;padding:0 4px;min-width:0}
+.flight-conflict-text{overflow:hidden;text-overflow:ellipsis;min-width:0}.flight-conflict-notice svg{display:none}
+.flight-conflict-notice button{flex-shrink:0;min-height:44px;padding:0 4px;font-size:12px}

@@ -95,7 +95,9 @@ function smoke(label){
  const flight=departure.find(i=>i.flight);
  assert.equal(renderContext.titleFor(flight.sourceId||flight.id,'2026-11-29',flight),'Flight (add your time)');
  defaultBuilder.selectDay('2026-11-29',false);
- assert(node('default-regression .db-content').innerHTML.includes('Flight (add your time)'));
+ // The untouched demo now labels its sample time and offers one shared editor.
+ assert(node('default-regression .db-content').innerHTML.includes('Sample departure'));
+ assert.equal((node('default-regression .db-content').innerHTML.match(/data-testid="edit-flight"/g)||[]).length,1);
  defaultBuilder.selectDay('2026-11-26',false);
  const priorEdits=api.state.edits;
  api.state.edits={items:{'2026-11-26-0':{note:'Calendar note'}},removed:['2026-11-26-2']};
