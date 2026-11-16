@@ -20,6 +20,11 @@ async def through_picks(pg, picks=()):
   await pg.locator('[data-testid=pick-activities]:visible, [data-testid=pick-food]:visible, [data-testid=confirm-plan]:visible, [data-testid=db-root]:visible, [data-testid=trip-prep]:visible, [data-testid=treasure-map]:visible, [data-testid=plan-day]:visible').first.wait_for(timeout=45000)
   for screen in ('pick-activities', 'pick-food'):
     if await pg.get_by_test_id(screen).count():
+      # Non-curated destinations now load places; offline suites use the legacy fallback.
+      await pg.locator('[data-testid=pick-next]:visible, [data-testid=place-failure]:visible').first.wait_for(timeout=45000)
+      if await pg.get_by_test_id('place-failure').is_visible():
+        await pg.get_by_test_id('pick-fallback').click()
+        return
       for pick in picks:
         toggle=pg.locator(f'[data-pick-toggle="{pick}"]')
         if await toggle.count() and await toggle.get_attribute('aria-pressed')!='true':
@@ -125,14 +130,21 @@ async def local_api_fixture(ctx):
   # Every context uses these deterministic fixtures; never contact the live APIs.
   for host in ('api.open-meteo.com','archive-api.open-meteo.com','api.frankfurter.dev'):
     await ctx.route('https://'+host+'/**',mock_local_api)
+def is_place_url(url):
+  host = urlparse(str(url)).hostname or ''
+  return host in ('nominatim.openstreetmap.org', 'overpass-api.de', 'upload.wikimedia.org') or any(host == domain or host.endswith('.' + domain) for domain in ('wikipedia.org', 'wikidata.org'))
+
 async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False):
   ctx=await b.new_context(viewport={'width':w,'height':h}, reduced_motion=reduced_motion, has_touch=has_touch, is_mobile=has_touch and w<=600)
   await ctx.route("https://tile.openstreetmap.org/**", lambda route: route.fulfill(content_type="image/png", body=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGN4eXvnfwAIqwN9YzQAMgAAAABJRU5ErkJggg==")))
+  # Offline by default; fixture suites override these with later page routes.
+  await ctx.route(is_place_url, lambda route: route.abort())
   await local_api_fixture(ctx)
   pg=await ctx.new_page()
   pg.on('pageerror', lambda e: errors.append(f'{base[:5]} pageerror {e}'))
-  pg.on('console', lambda m: errors.append(f'{base[:5]} console {m.text}') if m.type=='error' else None)
-  pg.on('requestfailed', lambda r: errors.append(f'{base[:5]} requestfailed {r.url} {r.failure}'))
+  # Expected place-host aborts exercise fallback; keep other console/request errors fatal.
+  pg.on('console', lambda m: errors.append(f'{base[:5]} console {m.text}') if m.type=='error' and not is_place_url(m.location.get('url', '')) else None)
+  pg.on('requestfailed', lambda r: errors.append(f'{base[:5]} requestfailed {r.url} {r.failure}') if not is_place_url(r.url) else None)
   # Fulfill external fonts locally so offline verification has no network dependency.
   await pg.route('https://fonts.googleapis.com/**', lambda route: route.fulfill(status=200, content_type='text/css', body=''))
   await pg.goto(base+'?fast=1'); return ctx, pg

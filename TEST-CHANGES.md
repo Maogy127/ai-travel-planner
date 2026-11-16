@@ -1224,3 +1224,53 @@ Origin-fix proofread follow-up COPY-AUDIT:
 - From-home mode retains `Where are you flying from?`, `Trip to {destination} · Edit destination`, and the sr-only origin label without a visible duplicate.
 - Helpers remain unchanged and one line. Extended `test_origin_alias.py` assertions at 390/1280 cover both modes, single h1, combined labels, no visible duplicate from-home label, and one-line headings/labels/helpers/errors. Chromium execution remains with the supervisor.
 - Follow-up validation: PASS all 28 Node suites, `node --check js/app.js`, `py_compile` on all 47 Python test files, and `git diff --check`. No browser or network used; changes remain uncommitted.
+
+## any-city batch
+
+### Item A — Any-city picks
+
+Changes:
+- Added on-demand `js/placesource.js` with injectable fetch, clock, sleep and storage. Nominatim runs only after entering non-Oahu picks, with a 300 ms settling delay, serialized requests at least 1 second apart, a normalized-query 180-day cache, a persisted last-request timestamp, and one contact constant (`gonow-preview@users.noreply.github.com`). Browser Referer identifies the site; there is no autocomplete or background lookup.
+- One combined, bounded Overpass query covers named activities and restaurants/cafes within 10 km of known hotel coordinates or the geocoded centre. Queries serialize, abort on timeout, retry at most once after 1.5 seconds, and cache for 7 days by rounded coordinates/radius. Rank by Wikipedia/Wikidata presence, tag richness, then distance; deduplicate names.
+- Non-Oahu pick screens use the same selection, Draft → Confirm → Trip prep flow and destination-specific pick IDs. Restaurants have one nonempty “Popular nearby” section. Loading, empty and failure states stay concise; failure offers the existing generator. Oahu's curated catalog, photos and GoNow Picks remain intact and make no place-source requests.
+- Visible cards lazily enrich from Wikipedia summaries or Wikidata/Commons (30-day cache). Missing/unavailable photos use category illustrations, never stock place photos. Details carry hours, estimates, known address/area, map link and source-photo credit; pick pages credit OpenStreetMap.
+- Common weekly hours, daily hours, split intervals, 24/7 and off are parsed conservatively. Unsupported forms remain unenforced and show “Hours not listed”. Weekly hours/closures survive scheduler → DayBuilder conversion. Non-Oahu airport transfers no longer say HNL; unknown per-place prices are hidden rather than invented. Generic restaurant swaps use the restaurant selection list.
+- Added one versioned script and updated the asset-count assertion with its reason. Every asset reference in index.html retains `?v=originfix-20261116`.
+
+Data provenance and estimates:
+- Live names, coordinates, categories, cuisine, addresses and opening_hours come from OpenStreetMap; intros and photos come from Wikipedia/Wikimedia Commons when available. They are source data, not a verification of current operating conditions. Source intros are reduced to one sentence in the tap sheet.
+- Duration (museum/zoo/aquarium 2 h; other categories 1 h) and effort (Easy/Moderate) are category estimates explicitly marked “est.”. No researched price is available from this source, so price is hidden; the existing trip budget remains an estimate. No fabricated reviews, menus or photos are added.
+- Seattle/Tokyo JSON files are deterministic mocked examples of source response shapes, not a claimed live scrape or verified source snapshot. Thumbnail bytes in browser tests are mocked as well. No network access was used during implementation.
+- Public-service limits apply per browser; persistent caching and serialized requests reduce usage, but this static implementation cannot coordinate a global limit across unrelated visitors. Review hosting/public-service capacity before scaling traffic.
+
+Tests:
+- `tests/test_placesource.js`: Seattle/Tokyo fixtures, ranking/tie breakers, deduplication, normalized caching, cache expiry, photo caching/laziness, category placeholders, estimate copy, injected-clock ≥1-second Nominatim spacing/contact parameter, known-hotel centre, empty results, bounded retry/failure signal, opening-hours parsing, weekly scheduler/DayBuilder constraints and actual app checkout IDs.
+- `tests/test_any_city.py` (supervisor, port 8871; `test_full.new` and `test_wellness_home.serve_checks`): intercepted source/photo requests, Seattle at 1280/390, photos/placeholders, hours/map/credit details, Popular nearby only, all selected stops scheduled, Confirm → Trip prep, Tokyo checkout, aborted-source fallback, and zero place-source requests for Oahu. Screenshots are saved under `/tmp/any-city-seattle-{width}.png`.
+- Validation: all 29 Node suites passed, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs; all Python test files compile. Chromium/Playwright execution and screenshot review are reserved for the supervisor.
+
+COPY-AUDIT (all new/changed visible strings; existing Oahu copy remains unchanged):
+- States: `Finding places near {city}…`, `No places found nearby`, `Couldn’t load places`, `Plan without picks`. One short status line; the failure action enters the existing plan generator.
+- Non-Oahu restaurant heading: `Popular nearby`; never renders an empty heading or GoNow Picks section.
+- Card categories: `Park`, `Beach`, `Museum`, `Viewpoint`, `Attraction`, `Zoo`, `Aquarium`, `Gallery`, `Restaurant`, `Cafe`. Card secondary line: `{Category} · {1|2} h est.` or `{Category} · {cuisine}`; cafes without cuisine use `Coffee`. Cuisine is source text with underscores/semicolons changed to spaces. Names/source cuisine can truncate on small cards; details retain the full name.
+- Details: source intro, source hours when parsed, `Hours not listed`, `How long · {1|2} h est.`, `Effort · Easy est.`, `Effort · Moderate est.`, known source address or city/area, `Open in map`, `Photo: Wikipedia/Wikimedia Commons`. Price, menus and reviews are omitted when unavailable. No duplicate card metadata is added to cards; expanded information requires a tap.
+- Attribution: `Map data © OpenStreetMap contributors` (small text, linked copyright page).
+- Generic scheduled transfer: `Leave for the airport` replaces Oahu's `Uber to HNL` only for generic catalogs. Existing transfer detail `Leave for the airport.` is retained.
+- Reused controls: `Pick activities`, `Pick restaurants`, `All`, category chips, `Breakfast`, `Lunch`, `Dinner`, `Snacks`, `Search`, `Back`, `Next: restaurants`, `Check out`, `Picked {n}` / existing day-count copy, `Add`, `Remove`, `×` (`Close` accessible label), `ⓘ` (`Details: {name}` accessible label). Placeholders have `{Category} illustration` accessible labels and a category symbol. No service names, developer terminology, unknown-price filler, fake reviews or fake menus appear in the new UI.
+
+
+### Item A follow-up — Lookup rendering and offline browser helpers
+
+Changes:
+- Fixed nearby results, count and detail-sheet lookups to use their HTML IDs. The shared `get()` helper selects testids, which caused loaded catalogs to stop rendering after chips appeared.
+- Loading renders immediately with `place-loading`; rejected lookups and fallback results render `place-failure` plus the existing `pick-fallback` action. Loading/failure screens contain no chips. Stale lookup completions cannot replace another screen or destination.
+- Fixture JSON responses include `Access-Control-Allow-Origin: *`, including Overpass POST responses; OPTIONS has a local response if needed. Overpass remains a simple form POST with a `data=` body.
+- `test_full.new()` blocks place/photo hosts by default, including Wikipedia/Wikidata subdomains and Wikimedia uploads; fixture page routes override the defaults. Expected blocked-host errors are excluded from shared error collection; other errors remain checked. `through_picks()` waits for either loaded controls or failure, then uses `pick-fallback` for offline destinations. The curated Oahu selection path remains intact.
+
+Tests:
+- PASS all 29 Node suites, including the requested daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- Extended the Node regression to execute the actual nearby screen function: immediate loading without chips, rejected lookup failure without chips, fallback action, and loaded cards/count without testid lookup errors. Asserted simple Overpass POST headers/body.
+- Extended supervisor browser checks for immediate loading, failure testid and absence of chips during loading/failure. Existing card, details, fallback and plan assertions remain.
+- PASS py_compile on all 48 Python test files, node --check js/app.js, and git diff --check. Browser execution/screenshots remain with the supervisor; no network access, commits, pushes or remote changes.
+
+COPY-AUDIT:
+- No visible strings added or changed. Existing `Finding places near {city}…`, `Couldn’t load places`, and `Plan without picks` now reliably appear in their intended states. Existing card/detail/attribution copy remains unchanged; new testids are invisible.

@@ -1,0 +1,63 @@
+{
+  "elements": [
+    {
+      "type": "node",
+      "id": 100,
+      "lat": 47.6062,
+      "lon": -122.3321,
+      "tags": {
+        "name": "Seattle Art Museum",
+        "tourism": "museum",
+        "opening_hours": "Tu-Su 10:00-18:00",
+        "wikipedia": "en:Seattle_Art_Museum",
+        "wikidata": "Q123"
+      }
+    },
+    {
+      "type": "node",
+      "id": 101,
+      "lat": 47.608200000000004,
+      "lon": -122.3301,
+      "tags": {
+        "name": "Olympic Sculpture Park",
+        "leisure": "park"
+      }
+    },
+    {
+      "type": "node",
+      "id": 102,
+      "lat": 47.6102,
+      "lon": -122.32809999999999,
+      "tags": {
+        "name": "Space Needle",
+        "tourism": "viewpoint",
+        "opening_hours": "24/7",
+        "wikipedia": "en:Space_Needle"
+      }
+    },
+    {
+      "type": "node",
+      "id": 103,
+      "lat": 47.6122,
+      "lon": -122.3261,
+      "tags": {
+        "name": "Cafe Campagne",
+        "amenity": "cafe",
+        "cuisine": "coffee_shop",
+        "opening_hours": "Mo-Fr 09:00-17:00; Sa 10:00-16:00"
+      }
+    },
+    {
+      "type": "way",
+      "id": 900,
+      "center": {
+        "lat": 47.6062,
+        "lon": -122.3321
+      },
+      "tags": {
+        "name": "Seattle Art Museum",
+        "tourism": "museum"
+      }
+    }
+  ]
+}

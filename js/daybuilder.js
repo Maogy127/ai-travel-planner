@@ -150,6 +150,7 @@ function operatingRules(item) {
 }
 function closedOn(item,date) {
     const rules=operatingRules(item);
+    if(rules.hours?.week && !rules.hours.week[new Date(date+'T12:00:00Z').getUTCDay()].length)return {weekdays:[new Date(date+'T12:00:00Z').getUTCDay()]};
     return (rules.closed||[]).find(r=>r.date===date || (r.weekdays||[]).includes(new Date(date+'T12:00:00Z').getUTCDay())) || null;
 }
 function shortDate(date) { return new Date(date+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC'}); }
@@ -157,6 +158,7 @@ function blockedOn(item,date,ctx={}) {
     if(closedOn(item,date))return 'Closed '+shortDate(date);
     const start=item.preferred ?? item.start ?? 540, end=start+(item.duration||60);
     const rules=operatingRules(item);
+    if(rules.hours?.week && !rules.hours.week[new Date(date+'T12:00:00Z').getUTCDay()].some(([a,b])=>start>=a&&end<=b))return 'Outside opening hours';
     if(rules.hours && (!rules.hours.date||rules.hours.date===date) && (start<rules.hours.open || end>rules.hours.close))return 'Outside opening hours';
     if(!['travel','flight'].includes(item.kind) && ((item.tags||[]).includes('dive') || /\b(?:dive|diving|scuba)\b/i.test(item.title||''))) {
         const departure=ctx.departureDate||sourcePlan().end||sourcePlan().days.at(-1)?.date;

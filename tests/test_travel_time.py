@@ -14,7 +14,8 @@ async def checks(browser):
         assets = await pg.locator('script[src],link[rel=stylesheet]').evaluate_all(
             "els => els.map(e => e.getAttribute('src') || e.getAttribute('href')).filter(p => /^(js|css|vendor|fonts)\\//.test(p))")
         # Includes the shared place alias script.
-        assert len(assets) == 25
+        # Any-city place source adds one versioned script.
+        assert len(assets) == 26
         for path in assets:
             assert path.endswith('?v=originfix-20261116'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200

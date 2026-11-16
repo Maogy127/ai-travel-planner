@@ -1133,7 +1133,9 @@
         });
     }
     function pickBackPage(){return ['fork'].concat(extra).includes(state.answers.pickBack)?state.answers.pickBack:(state.answers.personal?'musts':'fork');}
-    function pickCatalog(){return window.GONOW_PICKS&&window.GONOW_PICKS[Engine.matchDestination(state.answers.destination).id];}
+    function nearbyKey(){return GoNowPlaceSource.normalize(state.answers.destination)+'|'+JSON.stringify(state.answers.hotelCoordinates||state.answers.hotelCoords||null);}
+    var nearbyCatalogs={},nearbySource;
+    function pickCatalog(){return (window.GONOW_PICKS&&window.GONOW_PICKS[Engine.matchDestination(state.answers.destination).id])||(window.GoNowPlaceSource&&nearbyCatalogs[nearbyKey()]);}
     var pickFilter='All',pickQuery='';
     function checkoutPicks(){
         state.answers.level=PickScheduler.pace(state.answers);
@@ -1144,7 +1146,7 @@
         var trips=readTrips(),trip=trips.find(function(t){return t.id===state.tripId;});
         if(trip&&!state.shared){trip.confirmed=false;trip.snapshot=null;writeTrips(trips);}
         result.days.forEach(function(d){var template=p.days.find(function(t){return t.date===d.date;});if(template&&template.car)d.car=template.car;});
-        p.destinationId=Engine.matchDestination(state.answers.destination).id;p.id=p.destinationId+'-picks-'+p.start;p.days=result.days;p.unfit=result.unfit;p.bookingIssues=result.bookingIssues;p.curatedMismatch=false;p.banner='';
+        p.destinationId=Engine.matchDestination(state.answers.destination).id;if(pickCatalog().generic)p.destinationId=GoNowPlaceSource.slug(state.answers.destination);p.id=p.destinationId+'-picks-'+p.start;p.days=result.days;p.unfit=result.unfit;p.bookingIssues=result.bookingIssues;p.curatedMismatch=false;p.banner='';
         p.start=result.days[0].date;p.end=result.days[result.days.length-1].date;p.flightTime=result.flightTime;
         p.meta=Engine.dateRange(p.start,p.end)+' · '+(state.answers.who||'Travelers')+' · Ages '+state.answers.ages.join(' & ');
         result.days.forEach(function(d){d.items.forEach(function(i){if(i.photo)ITEM_PHOTOS[i.id]=i.photo;});});
@@ -1152,7 +1154,7 @@
     }
     function pickScreen(){
         var food=state.screen==='pick-food',catalog=pickCatalog(),key=food?'restaurants':'activities';
-        if(!catalog){generate();return;}
+        if(!catalog||catalog.generic){nearbyPickScreen();return;}
         var a=normalizeAnswers(state.answers);
         if(!a.picks.initialized){a.picks.activities=catalog.activities.filter(function(i){return PickCatalog.eligible(i,a)&&PickCatalog.must(i,a);}).map(function(i){return i.id;});a.picks.initialized=true;}
         catalog.restaurants.filter(function(i){return i.reservation;}).forEach(function(i){if(!a.picks.restaurants.includes(i.id))a.picks.restaurants.push(i.id);});save();
@@ -1171,10 +1173,57 @@
         on('pick-back',function(){pickFilter='All';pickQuery='';go(food?'pick-activities':pickBackPage());});on('pick-next',function(){pickFilter='All';pickQuery='';if(food)checkoutPicks();else go('pick-food');});
     }
 
-    function generate(resume) {
+    function nearbyPickScreen(){
+        var food=state.screen==='pick-food',screen=state.screen,city=state.answers.destination,key=food?'restaurants':'activities',identity=nearbyKey(),catalog=nearbyCatalogs[identity];
+        var credit='<small class="place-attribution">Map data © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap contributors</a></small>';
+        if(!catalog){
+            view.innerHTML='<section class="shell pick-screen" data-testid="'+screen+'"><p role="status" data-testid="place-loading">Finding places near '+esc(city)+'…</p>'+credit+'</section>';
+            if(!nearbySource)nearbySource=GoNowPlaceSource.create();
+            var hotel=state.answers.hotelCoordinates||state.answers.hotelCoords;
+            function failure(){
+                if(nearbyKey()!==identity||state.screen!==screen)return;
+                view.innerHTML='<section class="shell pick-screen" data-testid="'+screen+'"><p role="status" data-testid="place-failure">Couldn’t load places</p>'+btn('Plan without picks','pick-fallback','primary')+credit+'</section>';
+                on('pick-fallback',function(){state.answers.picks={activities:[],restaurants:[],initialized:false};generate(false,true);});
+            }
+            Promise.resolve().then(function(){return nearbySource.load(city,hotel);}).then(function(result){
+                if(result.catalog)nearbyCatalogs[identity]=result.catalog;
+                if(nearbyKey()!==identity||state.screen!==screen)return;
+                if(result.fallback||!result.catalog)failure();
+                else nearbyPickScreen();
+            }).catch(failure);return;
+        }
+        var a=normalizeAnswers(state.answers);
+        if(a.picks.city!==identity){a.picks={activities:[],restaurants:[],initialized:true,city:identity};}
+        save();
+        var chips=food?['All','Breakfast','Lunch','Dinner','Snacks']:['All'].concat(Array.from(new Set(catalog.activities.map(function(p){return p.category;}))));
+        view.innerHTML='<section class="shell pick-screen nearby-picks" data-testid="'+screen+'"><h1>Pick '+(food?'restaurants':'activities')+'</h1><div class="pick-chips">'+chips.map(function(c){return '<button data-pick-filter="'+esc(c)+'" aria-pressed="'+(pickFilter===c)+'">'+esc(c)+'</button>';}).join('')+'</div><label class="pick-search">Search<input type="search" data-testid="pick-search" value="'+esc(pickQuery)+'"></label><div id="pick-results"></div>'+credit+'<div class="pick-footer"><button data-testid="pick-back">Back</button><span id="pick-count" aria-live="polite"></span>'+btn(food?'Check out':'Next: restaurants','pick-next','primary')+'</div></section>';
+        var observer;
+        function media(p,detail){return p.photo?'<img '+(detail?'class="pick-detail-photo" ':'')+'src="'+esc(p.photo)+'" alt="'+esc(p.name)+'">':GoNowPlaceSource.placeholder(p);}
+        function details(p){
+            var sheet=document.getElementById('sheet');
+            sheet.innerHTML='<button id="pick-close" aria-label="Close">×</button>'+media(p,true)+'<h2>'+esc(p.name)+'</h2>'+(p.intro?'<p>'+esc(p.intro)+'</p>':'')+'<p>'+esc(p.parsedHours?p.openingHours:'Hours not listed')+'</p><p>How long · '+esc(GoNowPlaceSource.durationLabel(p))+'</p><p>Effort · '+esc(p.effort)+'</p>'+(p.address?'<p>'+esc(p.address)+'</p>':p.area?'<p>'+esc(p.area)+'</p>':'')+'<p><a href="'+esc(p.mapUrl)+'" target="_blank" rel="noopener">Open in map</a></p>'+(p.photo&&p.creditUrl?'<small class="pick-photo-credit"><a href="'+esc(p.creditUrl)+'" target="_blank" rel="noopener">Photo: Wikipedia/Wikimedia Commons</a></small>':'')+'<footer class="pick-detail-footer"><button class="primary full" id="pick-detail-toggle">'+(a.picks[key].includes(p.id)?'Remove':'Add')+'</button></footer>';
+            sheet.setAttribute('data-testid','pick-details');sheet.showModal();document.getElementById('pick-close').onclick=function(){sheet.close();};document.getElementById('pick-detail-toggle').onclick=function(){toggle(p.id);sheet.close();};
+        }
+        function toggle(id){a.picks[key]=a.picks[key].includes(id)?a.picks[key].filter(function(x){return x!==id;}):a.picks[key].concat(id);save();results();}
+        function results(){
+            if(observer)observer.disconnect();
+            var items=PickCatalog.filter(catalog[key],pickQuery,pickFilter,a);
+            document.getElementById('pick-results').innerHTML=(food&&items.length?'<h2>Popular nearby</h2>':'')+(!items.length?'<p>'+(catalog[key].length?'No matches · try another word':'No places found nearby')+'</p>':'<div class="pick-grid">'+items.map(function(p){var selected=a.picks[key].includes(p.id);return '<article class="pick-card '+(selected?'picked':'')+'" data-testid="pick-card" data-pick-id="'+p.id+'"><button class="pick-toggle" data-pick-toggle="'+p.id+'" aria-label="'+esc(p.name)+'" aria-pressed="'+selected+'"><div class="place-media">'+media(p,false)+'</div><span><strong>'+esc(p.name)+'</strong><small>'+esc(GoNowPlaceSource.cardLine(p))+'</small></span><b aria-hidden="true">'+(selected?'✓':'')+'</b></button><button class="pick-info" data-pick-info="'+p.id+'" aria-label="Details: '+esc(p.name)+'">ⓘ</button></article>';}).join('')+'</div>');
+            document.getElementById('pick-count').textContent=food?'Picked '+a.picks.restaurants.length:PickCatalog.count(a.picks.activities.length,catalog.activities.filter(function(p){return a.picks.activities.includes(p.id);}).reduce(function(n,p){return n+p.duration;},0),PickScheduler.capacity(a));
+            view.querySelectorAll('[data-pick-toggle]').forEach(function(b){b.onclick=function(){toggle(b.dataset.pickToggle);};});
+            view.querySelectorAll('[data-pick-info]').forEach(function(b){b.onclick=function(){details(catalog[key].find(function(p){return p.id===b.dataset.pickInfo;}));};});
+            function hydrate(el){var p=items.find(function(p){return p.id===el.dataset.pickId;});if(!p||(!p.wikipedia&&!p.wikidata))return;nearbySource.enrich(p).then(function(){if(!el.isConnected)return;el.querySelector('.place-media').innerHTML=media(p,false);var img=el.querySelector('img');if(img)img.onerror=function(){p.photo='';el.querySelector('.place-media').innerHTML=media(p,false);};});}
+            if(window.IntersectionObserver){observer=new IntersectionObserver(function(entries){entries.forEach(function(e){if(e.isIntersecting){observer.unobserve(e.target);hydrate(e.target);}});});view.querySelectorAll('[data-pick-id]').forEach(function(el){observer.observe(el);});}
+        }
+        results();view.querySelector('input').oninput=function(e){pickQuery=e.target.value;results();};
+        view.querySelectorAll('[data-pick-filter]').forEach(function(b){b.onclick=function(){pickFilter=b.dataset.pickFilter;nearbyPickScreen();};});
+        on('pick-back',function(){if(observer)observer.disconnect();pickFilter='All';pickQuery='';go(food?'pick-activities':pickBackPage());});on('pick-next',function(){if(observer)observer.disconnect();pickFilter='All';pickQuery='';if(food)checkoutPicks();else go('pick-food');});
+    }
+
+    function generate(resume,withoutPicks) {
         normalizeAnswers(state.answers);
         if(resume&&!openingDemo&&state.answers.picks&&state.answers.picks.initialized&&pickCatalog()){checkoutPicks();return;}
-        if(!resume&&!openingDemo&&state.answers.mode!=='local'&&pickCatalog()){state.answers.pickBack=['fork'].concat(extra).includes(state.screen)?state.screen:pickBackPage();pickFilter='All';pickQuery='';go('pick-activities');return;}
+        if(!resume&&!withoutPicks&&!openingDemo&&state.answers.mode!=='local'&&(pickCatalog()||window.GoNowPlaceSource)){state.answers.pickBack=['fork'].concat(extra).includes(state.screen)?state.screen:pickBackPage();pickFilter='All';pickQuery='';go('pick-activities');return;}
         normalizeAnswers(state.answers);
         var generation=++activeGeneration;
         go('loading');
