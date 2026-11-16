@@ -54,7 +54,8 @@ function scheduleOnce(a,catalog,attempt=0,seed){
   if(d.items.reduce((s,i)=>s+i.duration,0)+length>capacity(a))return false;
   return !d.items.some(i=>t<i.start+i.duration+travel(p,i.pick||i)+((i.tags||[]).includes('dive')?30:0)&&t+length+travel(p,i.pick||i)+((p.tags||[]).includes('dive')?30:0)>i.start);
  }
- const ordered=selected.slice().sort((x,y)=>Number(!!(y.reservation||y.locked||y.booked))-Number(!!(x.reservation||x.locked||x.booked))||Number(!!y.meals)-Number(!!x.meals)||Number(y.fixed!=null)-Number(x.fixed!=null)||(attempt%2?y.area.localeCompare(x.area):x.area.localeCompare(y.area))||(attempt%3?x.duration-y.duration:y.duration-x.duration));
+ let ordered=selected.slice().sort((x,y)=>Number(!!(y.reservation||y.locked||y.booked))-Number(!!(x.reservation||x.locked||x.booked))||Number(!!y.meals)-Number(!!x.meals)||Number(y.fixed!=null)-Number(x.fixed!=null)||(attempt%2?y.area.localeCompare(x.area):x.area.localeCompare(y.area))||(attempt%3?x.duration-y.duration:y.duration-x.duration));
+ if(window.goNowAccount?.group)ordered=window.goNowAccount.sort(ordered);
  for(const p of ordered){
   if(days.some(d=>d.items.some(i=>(i.sourceId||i.id)===p.id)))continue;
   if(p.minAge&&(a.ages||[]).some(age=>String(age).trim()!==''&&Number(age)<p.minAge)){((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);continue;}

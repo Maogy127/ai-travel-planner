@@ -137,7 +137,7 @@
         return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted">'+esc(p.meta)+'</p><p>'+icon('hotel')+' Staying: '+esc(p.stay)+'</p>'+hotelControls()+'<small class="local-times">Local times'+(dest.id==='oahu'?' · Hawaii Standard Time (HST)':'')+'</small><div class="row">'+btn('Change my answers', 'change-answers', '')+btn('Reset my edits', 'reset-edits', '')+trackToggle()+'</div></div></header>';
     }
     function shareMenuHTML() {
-        return '<div class="share-controls"><button type="button" data-testid="share-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="plan-share-menu"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m-5 5 5-5 5 5M5 13v7h14v-7"/></svg>Share</button><div id="plan-share-menu" data-testid="share-menu" role="menu" aria-label="Share" hidden>'+[['Print / Save as PDF','print-plan'],['Copy as text','copy'],['Share link','share-link'],['Download calendar','download-ics']].map(function(item){var wrapper=item[1]==='print-plan'?'print':item[1]==='share-link'?'share':'';return (wrapper?'<span data-testid="'+wrapper+'">':'')+btn(item[0],item[1],'','role="menuitem" tabindex="-1"')+(wrapper?'</span>':'');}).join('')+'<!-- Item I: Invite friends belongs here. --></div></div>';
+        return '<div class="share-controls"><button type="button" data-testid="share-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="plan-share-menu"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m-5 5 5-5 5 5M5 13v7h14v-7"/></svg>Share</button><div id="plan-share-menu" data-testid="share-menu" role="menu" aria-label="Share" hidden>'+[['Print / Save as PDF','print-plan'],['Copy as text','copy'],['Share link','share-link'],['Download calendar','download-ics'],['Invite friends','invite-friends']].map(function(item){var wrapper=item[1]==='print-plan'?'print':item[1]==='share-link'?'share':'';return (wrapper?'<span data-testid="'+wrapper+'">':'')+btn(item[0],item[1],'','role="menuitem" tabindex="-1"')+(wrapper?'</span>':'');}).join('')+'</div></div>';
     }
     var shareMenuCleanup;
     function bindShareMenu() {
@@ -350,7 +350,7 @@
     }
     var TRIPS='gonow:trips';
     function readTrips(){try{var list=JSON.parse(localStorage.getItem(TRIPS));return Array.isArray(list)?list.filter(function(t){return t&&typeof t==='object'&&typeof t.id==='string';}):[];}catch(e){return [];}}
-    function writeTrips(list){try{localStorage.setItem(TRIPS, JSON.stringify(list));}catch(e){}}
+    function writeTrips(list){try{var previous=readTrips();list.forEach(function(t){var old=previous.find(function(p){return p.id===t.id;});if(JSON.stringify(old)!==JSON.stringify(t))t.updatedAt=Date.now();});localStorage.setItem(TRIPS, JSON.stringify(list));if(window.goNowAccount)window.goNowAccount.write(list);}catch(e){}}
     function cloneData(value){return JSON.parse(JSON.stringify(value||null));}
     function prepTripKey(){return state.shared?'shared:'+state.plan.id+':'+location.hash:(state.tripId||state.plan.id);}
     function currentTrip(){return readTrips().find(function(t){return t.id===state.tripId;})||null;}
@@ -1198,6 +1198,8 @@
         toastEl.setAttribute('data-testid','plan-toast');toastEl.querySelector('button').setAttribute('data-testid','plan-undo');
     }
     function checkoutPicks(){
+        if(window.goNowAccount&&window.goNowAccount.group&&!window.goNowAccount.owner())return;
+        if(window.goNowAccount?.group){var voted=Object.keys(window.goNowAccount.group.votes||{}).filter(function(id){return window.goNowAccount.group.votes[id].length;});var catalog=pickCatalog();['activities','restaurants'].forEach(function(key){voted.forEach(function(id){if(catalog[key].some(function(p){return p.id===id;})&&!state.answers.picks[key].includes(id))state.answers.picks[key].push(id);});});}
         if(editingPicks){updatePicks();return;}
         state.answers.level=PickScheduler.pace(state.answers);
         var p=Engine.buildTemplatePlan(state.answers,Engine.matchDestination(state.answers.destination));
@@ -2278,7 +2280,40 @@
         newTripFlow=false;
         go('home');
     };
+    var lastGroupTrip=null,seenGroupId=null,appliedGroupChanges={};
     window.__gonow= {
+        currentTrip:currentTrip,
+        acceptGroup:function(group){
+            var first=seenGroupId!==group.id;seenGroupId=group.id;var version=JSON.stringify(group.trip), changed=lastGroupTrip!==version;
+            lastGroupTrip=version;
+            var list=readTrips().filter(function(t){return t.id!==group.trip.id;});
+            list.unshift(group.trip);localStorage.setItem(TRIPS,JSON.stringify(list));
+            if(!first&&state.tripId!==group.trip.id)return;
+            if(changed){appliedGroupChanges={};if(group.trip.builder)write('gonow:daybuilder:'+group.trip.planId,group.trip.builder);}
+            if(first){appliedGroupChanges={};if(state.tripId!==group.trip.id)openSaved(group.trip.id,'plan');}
+            else if(changed&&state.screen==='plan')go('plan');
+            if(!window.goNowAccount.owner()){
+                var raw=window.DayBuilder.importForPlan(window.DayBuilder.exportState(),state.plan),lockChanged=false;
+                if(raw&&raw.days)Object.values(raw.days).forEach(function(d){d.items.forEach(function(i){if(Object.prototype.hasOwnProperty.call(group.locks,i.id)&&i.locked!==group.locks[i.id]){i.locked=group.locks[i.id];i.userLocked=i.locked;lockChanged=true;}});});
+                if(lockChanged){write('gonow:daybuilder:'+state.plan.id,raw);if(state.screen==='plan')go('plan');}
+            }
+            Object.keys(group.planContent||{}).forEach(function(id){window.__gonow.applyGroupChange({itemId:id,change:group.planContent[id]});});
+        },
+        applyGroupChange:function(s){
+            var signature=JSON.stringify(s.change);if(appliedGroupChanges[s.itemId]===signature||!state.plan)return;
+            // Share exports are compact d/i records; edits and local storage use days/items.
+            var raw=window.DayBuilder.importForPlan(window.DayBuilder.exportState(),state.plan);
+            state.plan.days.forEach(function(d){if(!raw.days[d.date])raw.days[d.date]=window.DayBuilder.buildSuggested(d.date);});
+            var changed=false;Object.values(raw.days).forEach(function(d){var index=d.items.findIndex(function(i){return i.id===s.itemId;}),item=d.items[index];if(!item)return;var change=s.change;
+                if(change.time){var start=window.DayBuilder.parseClock(change.time);if(item.preferred!==start){item.preferred=start;item.manualTime=true;changed=true;}}
+                if(change.action==='move-day'&&raw.days[change.date]&&raw.days[change.date]!==d){d.items.splice(index,1);raw.days[change.date].items.push(item);changed=true;}
+                if(change.action==='remove'){d.items.splice(index,1);changed=true;}
+                if(['up','down','position'].includes(change.action)){var at=change.action==='up'?index-1:change.action==='down'?index+1:change.target;d.items.splice(index,1);d.items.splice(Math.max(0,Math.min(d.items.length,at)),0,item);d.chronological=false;changed=true;}
+                if(change.alternative){Object.assign(item,change.alternative);changed=true;}
+            });
+            appliedGroupChanges[s.itemId]=signature;
+            if(changed){write('gonow:daybuilder:'+state.plan.id,raw);if(state.screen==='plan')go('plan');}
+        },
         state:state, go:go, isOahuPlan:isOahuPlan, isPickPlan:isPickPlan, buildICS:buildICS, planText:planText
     };
     window.addEventListener('hashchange',function(){if(location.hash.indexOf('#trip=')===0)restoreShared();});

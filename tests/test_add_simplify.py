@@ -56,7 +56,7 @@ async def checks(browser):
             # Use plain breakfast: generated return transport re-derives after removal.
             # Removal keeps the item in Needs a time; only the day row disappears.
             removable = day.locator('[data-db-zone=day][data-db-id="2026-11-26-4"]')
-            title = await removable.get_by_test_id('db-activity').locator('strong').first.inner_text()
+            title = await removable.get_by_test_id('db-activity').locator('strong').first.text_content()
             remove_action = await card_action(pg, removable, 'db-remove')
             # The removed ideas chest is no longer the destination in action copy.
             await expect(remove_action).to_have_text('Remove from day')
@@ -74,7 +74,8 @@ async def checks(browser):
             # Reset restores the day row and removes its untimed tray copy.
             await expect(removable).to_have_count(1)
             await expect(pending).to_have_count(0)
-            await expect(removable.get_by_test_id('db-activity').locator('strong').first).to_have_text(title)
+            # Reset preserves title content regardless of layout whitespace.
+            assert ''.join((await removable.get_by_test_id('db-activity').locator('strong').first.text_content()).split()) == ''.join(title.split())
             assert ''.join((await photos.get_by_test_id('db-time').text_content()).split()) == before
             await expect(booked.get_by_test_id('db-locked-tag')).to_have_text('Locked')
             await expect(walk).to_have_count(0)

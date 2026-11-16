@@ -227,7 +227,7 @@ async def checks(browser, base, width):
         # Use plain breakfast: generated return transport re-derives with a changed title.
         # Removal keeps the item in Needs a time; only the day row disappears.
         suggestion = day.locator('[data-db-zone=day][data-db-id="2026-11-26-4"]')
-        suggestion_title = await suggestion.get_by_test_id('db-activity').locator('strong').first.inner_text()
+        suggestion_title = ''.join((await suggestion.get_by_test_id('db-activity').locator('strong').first.text_content()).split())
         await (await card_action(pg, suggestion, 'db-remove')).click()
         await expect(suggestion).to_have_count(0)
         # Needs a time is outside db-day-list, so locate its tray from the page.
@@ -239,7 +239,8 @@ async def checks(browser, base, width):
         # Reset restores the day row and removes its untimed tray copy.
         await expect(suggestion).to_have_count(1)
         await expect(pending).to_have_count(0)
-        await expect(suggestion.get_by_test_id('db-activity').locator('strong').first).to_have_text(suggestion_title)
+        # Reset preserves title content regardless of layout whitespace.
+        assert ''.join((await suggestion.get_by_test_id('db-activity').locator('strong').first.text_content()).split()) == suggestion_title
         await expect(tray.locator('[data-db-id]')).to_have_count(0)
         await pg.evaluate("DayBuilder.addToDay('2026-11-26',{title:'Reset sentinel'})")
         # Item F: untimed items retain their separate Needs a time controls, with no ideas chest.

@@ -1651,3 +1651,104 @@ COPY-AUDIT — every visible string added/changed:
 - No visible strings added or rewritten. Existing Good to know, We may earn a fee, local facts, guidance/source/status copy, Book, Reserve and Book flights retain their text.
 - Static guidance, timezone, local time, currency/languages, plugs/voltage, emergency and tipping facts move from empty summary rows to paragraphs behind the single Good to know tap; no duplicate copy or empty fact headings remain. The collapsed row stays one line at 390px.
 - Reserve is removed from food-court/counter/grab-and-go stops; eligible sit-down restaurant and ticketed activity actions remain within their expanded detail panels.
+
+### Item I — Accounts + group trips
+
+Changes:
+- Add the public gonow-8e9e8 configuration and lazy Firebase v10 modular client. SDK imports happen on account intent, an email-link return, or a remembered session; rejected imports and timeouts preserve guest planning. A configurable SDK base and injectable SDK/importer isolate tests.
+- Add Google and email-link sign-in, name-only anonymous joining, an initials account button next to Share, account details/sign-out, and per-user first-device sync choices. Debounced edits and deletions sync private trips; newer timestamps win dashboard merges, including serialized Firestore timestamps. Not now does not bulk-upload existing trips.
+- Add Invite friends to the existing accessible Share menu. Create owner/member group documents and 36-character random invites; join by reading the invite, updating only self with joinInvite, then subscribing. Reuse existing invites and restore subscriptions for remembered sessions.
+- Add live votes, up to three voter initials plus a total, member checkout waiting state, vote-prioritized scheduling, owner locks, member time/move/remove/swap suggestions, and owner approval/dismissal. Remote additions announce one debounced polite toast. Account and longer group text remain single-line; email details open on tap.
+- Add Firestore rules and Firestore-only emulator configuration, with no hosting/deployment targets. Keep all existing testids and cache tags; asset-count regression now expects 29 assets.
+
+Tests:
+- PASS all 33 top-level tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS Python compilation for all tests, including new tests/test_accounts.py.
+- Add tests/test_cloud.js for rejected/timed-out loading, identity transitions, passwordless email settings/completion, once-per-user sync choices, upload/decline/edit/delete behavior, newer-wins merges, invite-read → self-update ordering, stable vote sorting, member suggestions and owner application.
+- Add local ESM Firebase fixtures with in-memory identities/documents, snapshot relays, remote Alex additions, and load-failure controls. No Firebase requests, real accounts, or production writes are used in these tests.
+- Add tests/test_accounts.py using test_full.new and test_wellness_home.serve_checks on unique port 8879 at 1280/390: blocked SDK guest planning, mocked sign-in/sync, invite copying, a separate name-only member context, remote announcement, card voting, owner lock/member time suggestion/owner approval. Separate contexts explicitly relay mock snapshots.
+- Add tests/rules/firestore.rules.test.mjs for supervisor execution with @firebase/rules-unit-testing v3 against the local emulator: private account access, owner creation/deletion, member read/votes, forbidden membership/lock/owner changes, valid/invalid joins, forged additional members, and authenticated/unauthenticated invite access. It is isolated from the plain Node runner.
+- Real-versus-mocked: Node SDK behavior is mocked; browser tests are authored for the same local mocks. Chromium, screenshots, and emulator rule execution remain supervisor-run and have not run here. No installation, network, deployment, commit, push, or remote changes.
+- Update existing Share keyboard/menu assertions with an explanatory Item I comment: Invite friends is now the fifth/final action; preserve export and focus checks.
+
+COPY-AUDIT — every visible string added/changed:
+- `Sign in`, `Continue with Google`, `Email me a link`, `Email`, `Send`: short account entry/button labels; the email form sits behind one tap.
+- `Check your email for the link`, `Sign-in isn’t available right now`: single-line sheet feedback; blocked loading leaves guest planning usable.
+- `Name`, `Join with just a name`: invite-only name entry and anonymous-join action.
+- `Save your trips on this device to your account?`, `Yes`, `Not now`: one compact line plus two actions; remembered separately for each account.
+- `Account` (accessible avatar label), `Sign out`, dynamic initials and the account name/email: one account identity line inside the sheet; long identities truncate. `Traveler` is the fallback name when a profile has none.
+- `Invite friends`, `Invite link copied`, `Couldn’t copy the invite link`: one menu action and one-line feedback.
+- `<name> added <place>`: one debounced, polite, single-line announcement; long names/places truncate visually.
+- Voter initials and `👍 <N>`: compact card annotation, up to three initials followed by the total when needed; no extra heading.
+- `Waiting for <owner> to check out`: replaces the member’s checkout action; single line with truncation for long names.
+- `Time`, `Send suggestion`, `Cancel`: member’s locked-time sheet uses concise existing-style controls.
+- `<name> suggests <time/change> for <place> ·`, `Approve`, `Dismiss`: one suggestion row with truncated venue text and visible actions. Change labels are `a new day`, `moving up`, `moving down`, `a new place`, `a swap`, `removing it`, or `a change`; internal action identifiers never appear as copy.
+- `Sent to <owner> for OK`: one-line member feedback after a locked-item suggestion.
+- `Close` and `×`: sheet dismissal label/icon. Existing Share/export, planner, lock, move and swap labels retain their copy and testids.
+
+### Item I follow-up review — consent, invitations and group permissions
+
+Changes:
+- Confirmed run26 already moves the single account button into the Share action cluster, with topbar fallback. Added browser assertions for placement and uniqueness.
+- Local account writes now require the per-UID `yes` choice, including when the debounce fires; auth changes preserve choices. Remote trips still load. Owner group snapshots and private uploads strip nested group objects and undefined fields.
+- Groups use random document IDs, separate from local trip IDs. Per-owner/per-trip saved associations reuse invitations across auth changes without resetting members, votes or locks. Existing booked/locked items seed locks.
+- Join completion is serialized, waits for the entered name, and retains the invitation until joining succeeds. SDK failure leaves guest boot quiet and the sign-in action available; feedback retains the existing short line without internal error codes.
+- Rules deny invite enumeration and preserve invite ownership and referenced-trip ownership. Members cannot write trip snapshots, ownership, membership or locks; votes can change only their own entry, suggestions cannot replace/delete another person's suggestion, and plan changes target one unlocked item. Owner approval remains required for locked changes.
+- Fixed emulator setup by caching the admin database and reused authenticated databases. Mock writes reject undefined/deep recursive shapes.
+
+Tests:
+- PASS all 33 top-level Node JS/CJS suites, including every specifically requested suite; PASS compilation of all 56 Python tests. Rechecked after final changes.
+- Expanded mocked cloud coverage for negative/unanswered consent, later explicit consent, sanitized documents, random group IDs for identical local IDs, preserved repeat invitations, existing booking locks and entered member names.
+- Expanded supervisor browser coverage on port 8879 at 1280/390: explicit PASS output, a visible pick-card vote, single Alex join, real booked La Mer retaining its visible time before approval, then owner/member visible updates after approval. Existing dinner assertions were changed because the regression must cover a pre-existing booked item rather than a newly toggled generic dinner.
+- Expanded supervisor emulator cases for exact authenticated invite GET, unauthenticated GET denial, collection query denial, invite ownership/retargeting, snapshot and locked-content bypasses, impersonated votes/suggestions, deletion of another person's suggestion and multi-item edits.
+- Playwright/screenshots and emulator execution remain supervisor-side; none ran here. No network, commits, pushes or remotes used.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Existing account, sharing, error, voting and suggestion copy is retained. New change metadata is internal and produces no empty notice. Test PASS lines are console output, not product copy.
+
+### Item I targeted-test follow-up — whitespace and empirical rules results
+
+Changes:
+- Preserve existing app changes; fix the booked La Mer comparison in tests/test_accounts.py by removing all whitespace from both text_content values. Check unchanged time before owner approval and equal owner/member time after approval, retaining the visible 7:00 PM and saved-plan assertions.
+- Audit other captured inner_text comparisons: normalize reset-title comparisons in test_add_simplify.py and test_time_entry.py and the unchanged-traveler check in test_checkin.py. Add comments explaining that layout whitespace must not affect content equality; retain the assertions.
+- No app behavior, testids, assets, cache tags or asset-count changes.
+
+Tests:
+- Local validation: PASS all 33 top-level tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs; PASS py_compile for all 56 Python tests.
+- Supervisor run27 empirical result: all 12 Firestore rules tests PASS, 0 fail against the local Firestore emulator using Java 21 and project demo-gonow-rules. Tests were copied unchanged into ../fbtools/tests/rules/ to resolve installed npm dependencies, with firestore.rules copied into ../fbtools/firestore.rules. Command in ../fbtools: `node --test --test-reporter=tap tests/rules/firestore.rules.test.mjs`.
+- Real versus mocked: the 12 rules tests exercised actual local emulator rule enforcement. Node account/client tests and authored Playwright account flows use local SDK mocks and relayed in-memory snapshots; they do not verify production authentication. No real anonymous sign-in attempted, real accounts, production writes, deployment or authentication.
+- Playwright and screenshots remain supervisor-run; these Python changes were compiled here, not browser-executed. No network access, commits, pushes, git writes or remote changes performed.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Only test comparisons, explanatory test comments and this log changed; all visible product copy remains unchanged.
+
+### Item I test-only follow-up — approved dinner schedule shape
+
+Changes:
+- Correct tests/test_accounts.py to read DayBuilder.schedule().days by date and its items by ID. exportState() returns compact share data, not the resolved schedule shape.
+- Validate both La Mer's resolved start and preferred time equal 1140 (7:00 PM) after owner approval. Retain the cloud.planContent check and all following visible owner/member time assertions, including equality after relaying approval. Add an explanatory comment for the changed assertion.
+- No application code, testids, assets or cache tags changed.
+
+Tests:
+- PASS all 33 top-level tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 56 Python tests. Playwright execution remains supervisor-run; no browser execution attempted here.
+- No network access, commits, pushes, git writes or remote changes performed.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Only a test assertion, its explanatory comment and this log changed; product copy remains unchanged.
+
+### Item I actual approval fix — local booked dinner updates
+
+Changes:
+- Convert DayBuilder's compact share export with importForPlan before applying accepted changes or member locks. Materialize untouched dates so approval also reaches an unchanged booked item. Persist runtime days/items and remount to update the visible schedule while retaining booked/locked state.
+- Invalidate applied-change signatures when a different trip snapshot arrives and remount the owner's builder too. Reapply accepted planContent over older snapshot content; record signatures before rendering so duplicate approval events do not apply twice.
+- Preserve the existing 1140 and visible 7:00 PM browser assertions; strengthen owner/member runtime checks to require booked and locked.
+
+Tests:
+- PASS all 33 top-level tests/*.js and tests/*.cjs Node suites, including all specifically requested suites.
+- PASS py_compile of all 56 Python tests; recompiled test_accounts.py after strengthening its assertions.
+- Added real-builder Node regression coverage for owner approval, duplicate apply events, stale trip snapshots, member snapshot handling and reopening, checking preferred/start 1140 and booked/locked throughout.
+- Existing supervisor Playwright flow retains port 8879 and visible owner/member 7:00 PM checks. Browser execution/screenshots remain supervisor-side. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Product copy, assets, cache tags and testids remain unchanged.

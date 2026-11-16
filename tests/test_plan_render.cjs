@@ -70,6 +70,26 @@ function smoke(label){
  assert.equal(JSON.parse(memory.get('gonow:trips'))[0].confirmed,true);
  click('prep-continue');
  smoke('demo');
+ // Approval must edit runtime days, preserve bookings, and survive duplicate/stale snapshots.
+ const originalBuilder=ctx.DayBuilder.importForPlan(ctx.DayBuilder.exportState(),api.state.plan);
+ for(const day of api.state.plan.days)originalBuilder.days[day.date] ||= ctx.DayBuilder.buildSuggested(day.date);
+ const groupTrip=JSON.parse(JSON.stringify(api.currentTrip()));groupTrip.builder=originalBuilder;
+ const group={id:'approval-regression',trip:groupTrip,locks:{lamer:true},planContent:{lamer:{time:'7:00 PM'}}};
+ ctx.goNowAccount={owner:()=>true};
+ function approvedDinner(){
+  const dinner=ctx.DayBuilder.schedule().days.find(d=>d.date==='2026-11-26').items.find(i=>i.id==='lamer');
+  assert.equal(dinner.preferred,1140);assert.equal(dinner.start,1140);
+  assert.equal(dinner.locked,true);assert.equal(dinner.booked,true);
+ }
+ api.acceptGroup(group);approvedDinner();
+ api.applyGroupChange({itemId:'lamer',change:{time:'7:00 PM'}});approvedDinner();
+ group.trip.updatedAt='later-stale-builder';api.acceptGroup(group);approvedDinner();
+ ctx.goNowAccount.owner=()=>false;
+ group.trip.updatedAt='member-snapshot';api.acceptGroup(group);approvedDinner();
+ api.go('plan');approvedDinner();
+ delete ctx.goNowAccount;
+ memory.set('gonow:daybuilder:'+api.state.plan.id,JSON.stringify(originalBuilder));api.go('plan');
+
  // Item E: builder headers must detect the raw ride even when scheduling omits it.
  const lastDay=api.state.plan.days.at(-1);
  function assertFlyHome(day){

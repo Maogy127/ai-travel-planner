@@ -1,0 +1,70 @@
+rules_version = '2';
+service cloud.firestore {
+ match /databases/{database}/documents {
+  function signed() { return request.auth != null; }
+  match /users/{uid}/{document=**} { allow read, write: if signed() && request.auth.uid == uid; }
+  match /invites/{inviteId} {
+   allow get: if signed();
+   allow list: if false;
+   allow create: if signed() && request.resource.data.keys().hasOnly(['tripId','ownerId']) && request.resource.data.ownerId == request.auth.uid && get(/databases/$(database)/documents/trips/$(request.resource.data.tripId)).data.ownerId == request.auth.uid;
+   allow update: if signed() && resource.data.ownerId == request.auth.uid && request.resource.data.keys().hasOnly(['tripId','ownerId']) && request.resource.data.ownerId == resource.data.ownerId && get(/databases/$(database)/documents/trips/$(request.resource.data.tripId)).data.ownerId == resource.data.ownerId;
+   allow delete: if signed() && resource.data.ownerId == request.auth.uid;
+  }
+  match /trips/{tripId} {
+   function owner() { return signed() && resource.data.ownerId == request.auth.uid; }
+   function member() { return signed() && request.auth.uid in resource.data.memberIds; }
+   function joining() {
+    let uid = request.auth.uid;
+    let before = resource.data;
+    let after = request.resource.data;
+    return !(uid in before.memberIds)
+      && after.diff(before).affectedKeys().hasOnly(['members','memberIds','joinInvite'])
+      && after.joinInvite == before.inviteId
+      && after.memberIds.size() == before.memberIds.size()+1
+      && after.memberIds.hasAll(before.memberIds) && uid in after.memberIds
+      && after.members.diff(before.members).affectedKeys().hasOnly([uid])
+      && after.members.keys().size() == before.members.keys().size()+1
+      && after.members.keys().hasAll(before.members.keys()) && uid in after.members;
+   }
+   function voteChange() {
+    let before = resource.data.votes;
+    let after = request.resource.data.votes;
+    let keys = after.diff(before).affectedKeys();
+    let key = request.resource.data.lastChange.itemId;
+    let old = before.get(key, []);
+    let next = after[key];
+    return keys.size() == 1 && keys.hasOnly([key]) && next is list
+      && next.size() == next.toSet().size()
+      && next.removeAll([request.auth.uid]) == old.removeAll([request.auth.uid]);
+   }
+   function suggestionChange() {
+    let before = resource.data.suggestions;
+    let after = request.resource.data.suggestions;
+    let keys = after.diff(before).affectedKeys();
+    let key = request.resource.data.lastChange.itemId;
+    return keys.size() == 1 && keys.hasOnly([key]) && key in after
+      && after[key].by == request.auth.uid
+      && (!(key in before) || before[key].by == request.auth.uid);
+   }
+   function contentChange() {
+    let before = resource.data.get('planContent', {});
+    let after = request.resource.data.planContent;
+    let keys = after.diff(before).affectedKeys();
+    let key = request.resource.data.lastChange.itemId;
+    return keys.size() == 1 && keys.hasOnly([key]) && resource.data.locks.get(key, false) != true;
+   }
+   function memberChange() {
+    let keys = request.resource.data.diff(resource.data).affectedKeys();
+    return request.resource.data.lastChange.by == request.auth.uid && (
+      (keys.hasOnly(['votes','lastChange']) && voteChange())
+      || (keys.hasOnly(['suggestions','lastChange']) && suggestionChange())
+      || (keys.hasOnly(['planContent','lastChange']) && contentChange()));
+   }
+   allow read: if member();
+   allow create: if signed() && request.resource.data.ownerId == request.auth.uid && request.resource.data.memberIds == [request.auth.uid] && request.resource.data.members.keys() == [request.auth.uid];
+   allow update: if signed() && ((owner() && request.resource.data.ownerId == resource.data.ownerId) || (member() && memberChange()) || joining());
+   allow delete: if owner();
+  }
+  match /{document=**} { allow read, write: if false; }
+ }
+}

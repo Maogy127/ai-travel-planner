@@ -75,12 +75,13 @@ async def checks(browser):
             assert await suggestions.count() > 0
             apply=pg.get_by_test_id('checkin-apply').first
             item_id=await apply.get_attribute('data-id')
-            before_other=await rings.nth(1).inner_text()
+            # Compare content rather than rendered line breaks after the check-in update.
+            before_other=''.join((await rings.nth(1).text_content()).split())
             before_person=await rings.nth(0).locator('svg').get_attribute('aria-label')
             await apply.click()
             await expect(pg.get_by_test_id('traveler-alternative').first).to_be_visible()
             assert await pg.evaluate('DayBuilder.schedule().days[3].items') == shared
-            assert await rings.nth(1).inner_text() == before_other
+            assert ''.join((await rings.nth(1).text_content()).split()) == before_other
             assert await rings.nth(0).locator('svg').get_attribute('aria-label') != before_person
             c=await record(pg,'gonow.checkin.v1',date)
             assert item_id in c['alternatives']
