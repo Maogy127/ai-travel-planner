@@ -4,7 +4,8 @@
         return JSON.parse(JSON.stringify(x));
     };
     function matchDestination(text) {
-        var t=(text||'').toLowerCase().trim();
+        var normalized=window.GoNowPlaces?window.GoNowPlaces.normalize(text).name:(text||'');
+        var t=normalized.toLowerCase().trim().replace(/ \((?:NYC|JFK|EWR|LGA|HNL)\)$/i,'');
         var aliases= {
             oahu:['oahu', 'honolulu', 'waikiki', 'hawaii'], kyoto:['kyoto', 'japan'], lisbon:['lisbon', 'portugal'], cancun:['cancun', 'cancún', 'mexico', 'riviera maya'], reykjavik:['reykjavik', 'reykjavík', 'iceland'], bali:['bali', 'indonesia'], barcelona:['barcelona', 'spain'], banff:['banff', 'canada'], costarica:['costa rica', 'arenal', 'la fortuna'], capetown:['cape town', 'south africa'], newyork:['new york', 'nyc', 'new york city']
         };

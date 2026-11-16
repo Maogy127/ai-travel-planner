@@ -211,10 +211,10 @@ async def extra(b, base, label):
   import re as _re
   css=(SITE/'css/styles.css').read_text()
   ok(f'{label} no invalid "x: :y" / "button: hover" selectors', not _re.search(r'^[a-z]+: :?[a-z]+\{', css, _re.M) and 'button:disabled{' in css and 'dialog::backdrop{' in css)
-  # place validation
+  # Two-letter custom places are valid; only junk gets the concise error.
   await open_form(pg)
-  await pg.get_by_test_id('start-to').fill('zz'); await pg.get_by_test_id('start-next').click()
-  ok(f'{label} place validation message', "couldn’t find that place" in await pg.locator('main').text_content())
+  await pg.get_by_test_id('start-to').fill('1'); await pg.get_by_test_id('start-next').click()
+  ok(f'{label} place validation message', "Enter a city or airport code." in await pg.locator('main').text_content())
   await pg.get_by_test_id('start-to').fill('Oahu'); await pg.get_by_test_id('start-from').fill('Los Angeles'); await pg.get_by_test_id('start-next').click()
   # skip dates -> flexible month (not January hard-coded)
   await pg.get_by_test_id('q-skip').click()

@@ -244,17 +244,19 @@
     }
     function start() {
         var a=state.answers;
-        view.innerHTML='<div class="shell"><div class="start-grid"><section class="intro"><div class="eyebrow">MOVE YOUR WAY.</div>'+heading('Come home better than you left.', 'Beautifully planned days that make room for movement, calm and sleep.')+'<div class="form-stack"><div>'+(a.unsure?'<div class="row banner" style="margin:0">Surprise me ✓ '+btn('Change', 'start-change', '')+'</div>':'<label class="field-label" for="to">Where do you want to go?</label><label class="destination-label"><input id="to" data-testid="start-to" placeholder="City, region or country" value="'+esc(a.destination)+'"></label><div class="error" id="dest-error" role="alert"></div>'+btn("I'm not sure yet", 'start-unsure', 'outline full')+'<small>Tell us a few things and we’ll suggest three places.</small>')+'</div><div><label class="sr-only" data-topic="origin" for="from">Where are you flying from?</label><input id="from" data-testid="start-from" placeholder="City or airport (e.g., Seattle, SEA)" value="'+esc(a.origin)+'" autocomplete="off"><small>We use this to estimate flights.</small><div class="error" id="origin-error" role="alert"></div></div>'+btn('Next <span aria-hidden="true">↗</span>', 'start-next', 'primary full')+'</div><div class="demo"><div class="eyebrow">A LITTLE INSPIRATION</div><strong>Try the demo: Oahu, Nov 25–29</strong><p>Couple aged 18 & 19 · The Kahala Hotel & Resort</p>'+btn('Open the Oahu sample ↗', 'demo-oahu', 'outline full')+'</div><p class="footer-note">Free to use. Your answers stay on this device until you save.</p></section>'+photo('images/hero.jpg', 'A sunlit island coastline, an invitation to slow down', 'hero-photo', '<div class="photo-caption"><span class="eyebrow" style="color:white">YOUR NEXT CHAPTER</span><strong>Somewhere feels like you.</strong><span>We’ll help you find it.</span></div>')+'</div><div class="start-footer"><span>'+icon('style')+' Made for your kind of travel</span><span>Thoughtful plans, down to the little things</span><span>Always yours to change</span></div></div>';
+        if(state.fromHome)a.destination=window.GoNowPlaces.normalize(a.destination).name;
+        var combinedMode=!state.fromHome||window.GoNowPlaces.isJunk(a.destination);
+        view.innerHTML='<div class="shell"><div class="start-grid"><section class="intro"><div class="eyebrow">MOVE YOUR WAY.</div>'+heading('Come home better than you left.', 'Beautifully planned days that make room for movement, calm and sleep.')+'<div class="form-stack"><div>'+(a.unsure?'<div class="row banner" style="margin:0">Surprise me ✓ '+btn('Change', 'start-change', '')+'</div>':'<label class="field-label" for="to">Where do you want to go?</label><label class="destination-label"><input id="to" data-testid="start-to" placeholder="City, region or country" value="'+esc(a.destination)+'"></label><div class="error" id="dest-error" role="alert"></div>'+btn("I'm not sure yet", 'start-unsure', 'outline full')+'<small>Tell us a few things and we’ll suggest three places.</small>')+'</div><div><label class="'+(combinedMode?'field-label':'sr-only')+'" data-topic="origin" for="from">'+(combinedMode?'Flying from':'Where are you flying from?')+'</label><input id="from" data-testid="start-from" placeholder="City or airport code" value="'+esc(a.origin)+'" autocomplete="off"><small>We use this to estimate flights.</small><div class="error" id="origin-error" role="alert"></div></div>'+btn('Next <span aria-hidden="true">↗</span>', 'start-next', 'primary full')+'</div><div class="demo"><div class="eyebrow">A LITTLE INSPIRATION</div><strong>Try the demo: Oahu, Nov 25–29</strong><p>Couple aged 18 & 19 · The Kahala Hotel & Resort</p>'+btn('Open the Oahu sample ↗', 'demo-oahu', 'outline full')+'</div><p class="footer-note">Free to use. Your answers stay on this device until you save.</p></section>'+photo('images/hero.jpg', 'A sunlit island coastline, an invitation to slow down', 'hero-photo', '<div class="photo-caption"><span class="eyebrow" style="color:white">YOUR NEXT CHAPTER</span><strong>Somewhere feels like you.</strong><span>We’ll help you find it.</span></div>')+'</div><div class="start-footer"><span>'+icon('style')+' Made for your kind of travel</span><span>Thoughtful plans, down to the little things</span><span>Always yours to change</span></div></div>';
         view.querySelector('.hero-photo').remove();
         view.querySelector('.start-grid').classList.add('origin-question');
         view.querySelector('.intro .eyebrow').remove();
-        view.querySelector('.intro h1').textContent='Where are you flying from?';
+        view.querySelector('.intro h1').textContent=combinedMode?'Plan your trip':'Where are you flying from?';
         var subtitle=view.querySelector('.intro h1 + p');if(subtitle)subtitle.remove();
         view.querySelector('.demo').remove();view.querySelector('.start-footer').remove();
 
         bindWellness();
         if(get('start-to'))setupVoice('start-to','start-');
-        var destinationInput=get('start-to');if(destinationInput&&state.fromHome&&a.destination.trim().length>=3){var destBlock=destinationInput.closest('.form-stack>div');destBlock.innerHTML='<div class="origin-destination">Trip to '+esc(a.destination)+' · '+btn('Edit destination','edit-destination','text-button')+'</div><div id="dest-error" class="error" role="alert"></div>';on('edit-destination',function(){go('home');});}
+        var destinationInput=get('start-to');if(destinationInput&&state.fromHome&&!window.GoNowPlaces.isJunk(a.destination)){var destBlock=destinationInput.closest('.form-stack>div');destBlock.innerHTML='<div class="origin-destination">Trip to '+esc(a.destination)+' · '+btn('Edit destination','edit-destination','text-button')+'</div><div id="dest-error" class="error" role="alert"></div>';on('edit-destination',function(){go('home');});}
         on('start-from', function(e) {
             a.origin=e.target.value;
             save();
@@ -273,8 +275,16 @@
         });
         on('start-next', function() {
             var valid=true;
-            if(!a.origin.trim()) {
-                document.getElementById('origin-error').textContent="Add where you're flying from so we can estimate flights.";
+            a.origin=window.GoNowPlaces.normalize(a.origin).name;
+            a.destination=window.GoNowPlaces.normalize(a.destination).name;
+            get('start-from').value=a.origin;
+            if(get('start-to'))get('start-to').value=a.destination;
+            ['origin','dest'].forEach(function(id){var error=document.getElementById(id+'-error');if(error)error.textContent='';});
+            get('start-from').removeAttribute('aria-invalid');
+            if(get('start-to'))get('start-to').removeAttribute('aria-invalid');
+            save();
+            if(window.GoNowPlaces.isJunk(a.origin)) {
+                document.getElementById('origin-error').textContent="Enter a city or airport code.";
                 get('start-from').setAttribute('aria-invalid', 'true');
                 valid=false;
             }
@@ -282,14 +292,9 @@
                 document.getElementById('dest-error').textContent='Add a city, region or country, or choose “I’m not sure yet”.';
                 if(get('start-to'))get('start-to').setAttribute('aria-invalid', 'true');
                 valid=false;
-            } else if(!a.unsure&&Engine.matchDestination(a.destination).id==='custom'&&(a.destination.trim().length<3||!/[A-Za-z\u00C0-\u024F]/.test(a.destination))) {
-                document.getElementById('dest-error').textContent='We couldn’t find that place. Try a nearby city or airport code.';
+            } else if(!a.unsure&&window.GoNowPlaces.isJunk(a.destination)) {
+                document.getElementById('dest-error').textContent='Enter a city or airport code.';
                 if(get('start-to'))get('start-to').setAttribute('aria-invalid', 'true');
-                valid=false;
-            }
-            if(a.origin.trim()&&(a.origin.trim().length<3||!/[A-Za-z]/.test(a.origin))) {
-                document.getElementById('origin-error').textContent='We couldn’t find that place. Try a nearby city or airport code.';
-                get('start-from').setAttribute('aria-invalid', 'true');
                 valid=false;
             }
             if(valid){flipNext=true;go('dates');}
@@ -485,7 +490,7 @@
         if(get('home-destination'))setupVoice('home-destination','home-');
         function startFromHome(){state.tripId=null;state.viewing='live';state.fromHome=true;go('start');}
         on('home-unsure',function(){state.answers.unsure=true;startFromHome();});
-        on('start-new-trip',function(){if(!state.answers.destination.trim()){document.getElementById('home-dest-error').textContent='Add a destination or choose “I’m not sure yet”.';get('home-destination').focus();return;}startFromHome();});
+        on('start-new-trip',function(){if(!state.answers.destination.trim()){document.getElementById('home-dest-error').textContent='Add a destination or choose “I’m not sure yet”.';get('home-destination').focus();return;}if(window.GoNowPlaces.isJunk(state.answers.destination)){document.getElementById('home-dest-error').textContent='Enter a city or airport code.';get('home-destination').setAttribute('aria-invalid','true');return;}state.answers.destination=window.GoNowPlaces.normalize(state.answers.destination).name;get('home-destination').value=state.answers.destination;save();startFromHome();});
         on('demo-oahu', demo);
     }
     function libraryEntries(){

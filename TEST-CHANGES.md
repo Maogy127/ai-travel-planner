@@ -1190,3 +1190,37 @@ COPY-AUDIT
 | ` · leave by {time}` | Late connector | Existing wording preserved; derived departure. |
 
 Existing notes, transfer names/fallback (“Local transfer — confirm route”), proposal text and handwritten demo labels retain their wording. Removed repeated all-trip transfer/date headings.
+
+## origin-fix
+
+Changes:
+- Added `js/places.js`: shared case-insensitive exact aliases, uppercase fallback for unknown three-letter airport codes, and validation accepting any input with at least two Unicode letters. Full names remain as entered (apart from surrounding whitespace).
+- Origin and destination normalize on Next, including stored answers and visible fields. Home destinations normalize before the origin screen; short custom destinations also get the “Trip to …” summary. Empty destination messages retain the “I’m not sure yet” option.
+- Engine matching preserves Oahu for HNL and New York for NYC/JFK/EWR/LGA normalized labels. Los Angeles and San Francisco remain custom destinations because the catalog does not support them.
+- Extended jetlag time zones for NYC, Hong Kong, Kuala Lumpur and Washington DC/IAD/DCA. Existing airport aliases remain supported.
+- Updated all 24 existing index assets and the new places script to `?v=originfix-20261116`.
+
+Tests:
+- PASS: all 28 Node suites (`node` on each `tests/*.js` and `tests/*.cjs`). New `test_places.js` covers exact/case-insensitive aliases, full names, junk, two-letter custom places, unknown codes, supported engine destinations and normalized-name time-zone offsets.
+- PASS: `py_compile` on all 47 Python test files recursively under tests.
+- PASS: static verification of all 25 local assets, cache suffixes, file existence and places-before-jetlag/app ordering.
+- Added `tests/test_origin_alias.py`, port 8870, using `test_full.new` and `test_wellness_home.serve_checks`. Covers 1280/390 widths, origin aliases and Back values, destination aliases, junk, home HNL → Oahu, unsure destination, overflow and one-line helpers/errors.
+- Updated `test_travel_time.py` suffix/count and `test_full.py` validation assertion. The latter now uses `1` instead of `zz`, with a comment explaining that two-letter custom places are valid.
+- Playwright was not run: Chromium is unavailable in this sandbox; supervisor execution is required. No network access or git operations were used.
+
+Proofread notes:
+- Source copy reviewed for origin/destination at the requested desktop/mobile widths: the shorter placeholder identifies the input; “We use this to estimate flights.” explains its purpose without repeating it. The destination suggestion helper explains “I’m not sure yet”. No typos found.
+- Visual verification at 1280/390 remains pending supervisor Playwright execution; the new suite asserts one-line helper/error layout and no horizontal overflow.
+
+COPY-AUDIT of changed strings:
+- Origin placeholder: `City or airport (e.g., Seattle, SEA)` → `City or airport code` (shorter and consistent with accepted aliases/codes).
+- Empty-origin error: `Add where you're flying from so we can estimate flights.` → `Enter a city or airport code.`
+- Junk origin/destination error: `We couldn’t find that place. Try a nearby city or airport code.` → `Enter a city or airport code.` The same concise message now validates junk in the home destination field.
+- Normalized values/summary labels use the shared canonical place labels (for example `Los Angeles (LAX)`, `New York (NYC)`, `Honolulu (HNL)`). Helpers and separate empty-destination messages are unchanged.
+
+Origin-fix proofread follow-up COPY-AUDIT:
+- Combined-mode heading: `Where are you flying from?` → `Plan your trip`; retains the single heading helper/h1 and no subtitle.
+- Combined-mode origin label: screen-reader-only `Where are you flying from?` → visible `Flying from`. Destination label remains `Where do you want to go?`.
+- From-home mode retains `Where are you flying from?`, `Trip to {destination} · Edit destination`, and the sr-only origin label without a visible duplicate.
+- Helpers remain unchanged and one line. Extended `test_origin_alias.py` assertions at 390/1280 cover both modes, single h1, combined labels, no visible duplicate from-home label, and one-line headings/labels/helpers/errors. Chromium execution remains with the supervisor.
+- Follow-up validation: PASS all 28 Node suites, `node --check js/app.js`, `py_compile` on all 47 Python test files, and `git diff --check`. No browser or network used; changes remain uncommitted.
