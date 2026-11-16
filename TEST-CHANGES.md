@@ -1156,3 +1156,37 @@ Polish 1 remaining supervisor fixes:
 - Print hides editing-only day options, add panels, item/trip menus, pace, overflow, check-in and booking search controls deterministically.
 - COPY-AUDIT correction: normal `Uber ~{N} min / Drive ~{N} min / Walk ~{N} min`; late `{mode} ~{N} min · leave by {time}`. Both target one line at 390.
 - Validation: all 26 Node suites passed; `py_compile` passed for all test Python files; `git diff --check` passed. Chromium remains supervisor-only. No network, commit, push or remote operations.
+
+## pick-flow polish 2
+
+- Follow-up: Getting around uses muted 13px normal-weight text, a 6px chevron gap and a 44px tap target; browser checks assert weight and label separation at both widths.
+
+- Getting around: omit empty/whitespace-only transport notes. Real information appears in a collapsed native details row with a rotating ▸ chevron and a hint of at most two words. Template transfers belong only to the current day; removed the unused all-trip renderer and repeated headings. Informational content remains printable.
+- Short nights: hide prompts for earliest flights/airport rides, including locked flight/airport flags. Preserve source flags during conversion. Compact one-line text/buttons retain existing testids, proposal behavior and persisted dismissal.
+- Travel: renderer and pick scheduler share `DayBuilder.estimateTravel`. Road km = 1.4 × straight-line km; walk only ≤0.8 road km at 4.5 km/h, minimum 5 minutes. Motor travel uses 25 km/h urban, 35 km/h beyond 10 road km, minimum 10 minutes. Round to five minutes. Preserve modes, late leave-by suffixes and curated demo routes/copy. Departure-day placement also reserves travel to the airport ride.
+
+Tests: all Node suites (`tests/*.js`, `tests/*.cjs`) pass. New `test_pick_polish2.js` checks road factor, minimum, walking threshold, rounding, Drive mode, Leonard’s→Helena’s ≥15 minutes and scheduler travel separation. `test_track_mode.js` adds airport/flight suppression and compact action labels. Existing header/template assertions now check hinted rows and per-day transfers. Python tests pass `python3 -m py_compile tests/*.py`.
+
+Supervisor: `python3 tests/test_pick_polish2.py`, port **8867**, uses `test_full.new` and `test_wellness_home.serve_checks` at 1280 and 390. Covers demo headers, collapsed hinted disclosures, demo/pick Nov 29 suppression, non-flight short-night line geometry, and Nov 26 bakery→Helena’s connector. Browser/screenshots remain supervisor-only; Chromium was not run here.
+
+Proofread checklist (supervisor, 1280 + 390):
+- [ ] Populated Getting around rows have hints/chevrons, collapse by default and remain printable; no empty headings or duplicate transfers.
+- [ ] Demo and pick Nov 29 airport-first days have no sleep prompt.
+- [ ] Non-flight short-night prompt and both buttons fit one line; proposal, cancel and Keep work.
+- [ ] Bakery→Helena’s shows 15+ minutes; travel, meal windows and departure cutoff agree.
+- [ ] Demo handwritten labels/late connector unchanged; no overflow or dead UI.
+
+COPY-AUDIT
+
+| Visible string added/changed | Location | Audit |
+| --- | --- | --- |
+| `▸ Getting around · {hint}` | Day summary | Chevron rotates downward; hint ≤2 words: Uber, No car, Transfers or existing level/mode. |
+| `Later start` | Sleep action | Replaces “Suggest a later start”; same action/testid. |
+| `Earlier night` | Sleep action | Replaces “Suggest an earlier evening”; same action/testid. |
+| `Keep` | Sleep action | Replaces “Keep plan”; same dismissal. |
+| `Walk ~{N} min` | Coordinate connector | Road-distance threshold and rounded walking time. |
+| `Uber ~{N} min` | Coordinate connector | Road estimate, motor minimum 10 minutes. |
+| `Drive ~{N} min` | Coordinate connector | Same model with car mode. |
+| ` · leave by {time}` | Late connector | Existing wording preserved; derived departure. |
+
+Existing notes, transfer names/fallback (“Local transfer — confirm route”), proposal text and handwritten demo labels retain their wording. Removed repeated all-trip transfer/date headings.

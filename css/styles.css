@@ -1641,3 +1641,12 @@ body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;
   display:none!important;
  }
 }
+/* Informational disclosure stays printable; native details exposes expanded state. */
+/* Override the compact .day-head>details>summary tap height for this row only. */
+.day-head [data-testid=day-info]>summary{display:flex;align-items:center;gap:6px;min-height:44px;list-style:none;cursor:pointer;color:var(--ink-2);font-size:13px;font-weight:400;white-space:nowrap}
+[data-testid=day-info] summary::-webkit-details-marker{display:none}
+.day-info-chevron{display:inline-block;flex-shrink:0;transition:transform .15s}
+[data-testid=day-info][open] .day-info-chevron{transform:rotate(90deg)}
+[data-testid=sleep-nudge]{font-size:12px;white-space:nowrap}
+[data-testid=sleep-nudge] button{font-size:12px;white-space:nowrap;padding:4px 6px;margin:0 0 0 4px;min-height:44px}
+[data-testid=sleep-proposal]{white-space:normal}

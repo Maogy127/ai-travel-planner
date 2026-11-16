@@ -99,6 +99,17 @@ function roadMode(item = {}, day = {}, ctx = {}) {
     if (/required|recommended|needed/i.test(level) && !/not needed/i.test(level)) return 'Drive';
     return /not needed|no car|rideshare|uber/i.test(level + ' ' + (car?.note || '')) ? 'Uber' : 'Drive';
 }
+// Shared road estimate for coordinate legs and pick scheduling.
+function estimateTravel(a,b,mode='Uber') {
+    if(![a?.lat,a?.lng,b?.lat,b?.lng].every(Number.isFinite)) {
+        const minutes=a?.area&&a.area===b?.area?10:30;
+        return {minutes,label:mode+' ~'+minutes+' min'};
+    }
+    const roadKm=1.4*Math.hypot((a.lat-b.lat)*111,(a.lng-b.lng)*111*Math.cos(b.lat*Math.PI/180));
+    const walking=roadKm<=0.8;
+    const minutes=Math.max(walking?5:10,Math.round(roadKm/(walking?4.5:roadKm>10?35:25)*60/5)*5);
+    return {roadKm,minutes,label:(walking?'Walk':mode==='Walk'?'Uber':mode)+' ~'+minutes+' min'};
+}
 function leg(from, to, mode = 'Drive') {
     const minutes = from === to ? 5 : commuteMinutes(from, to);
     const label = (from === to || minutes === 10 || isWalk(from,to) ? 'Walk' : mode) + ' ~' + Math.max(5,Math.round(minutes/5)*5) + ' min';
@@ -125,8 +136,8 @@ function duration(item) {
 }
 function convert(item = {}) {
     return {
-        transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
-        duration: item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
+        flight:item.flight, airport:item.airport, inboundRide:item.inboundRide, transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
+        duration: item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: item.tags || (/intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : []),
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
     };
@@ -320,9 +331,7 @@ function reflow(day, ctx = {}) {
         const mode = roadMode(item, day, ctx);
         let travel = previous ? leg(previous.to || previous.place, item.place, mode) : {minutes: 0, label: ''};
         if(previous&&[previous.lat,previous.lng,item.lat,item.lng].every(Number.isFinite)){
-            const km=Math.hypot((previous.lat-item.lat)*111,(previous.lng-item.lng)*111*Math.cos(item.lat*Math.PI/180));
-            const walking=km<0.8,minutes=Math.max(5,Math.round(km/(walking?4.5:35)*60/5)*5);
-            travel={minutes,label:(walking?'Walk':mode)+' ~'+minutes+' min'};
+            travel=estimateTravel(previous,item,mode);
         }
         if (previous?.place === 'Kahala palms' && item.place === WAIKIKI) {
             item.walkBack = {depart: previous.end, arrive: previous.end + 10};
@@ -1421,7 +1430,7 @@ function mount(root, ctx = {}) {
     return api;
 }
 const active = () => (session.active && session.active.root.isConnected ? session.active : null);
-window.DayBuilder = {parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+window.DayBuilder = {estimateTravel,parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
     toggleLock, exportDays, importDays, importForPlan, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
     openTime: (date, id) => active()?.openTime(date, id),

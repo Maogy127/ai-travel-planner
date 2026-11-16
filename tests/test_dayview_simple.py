@@ -61,7 +61,7 @@ async def checks(browser):
             await open_info(pg)
             await expect(day.locator('.day-badges, .day-guidance, [data-testid=jetlag-note]')).to_have_count(0)
             info = day.get_by_test_id('day-info')
-            await expect(info.locator('summary')).to_have_text('Getting around')
+            await expect(info.locator('summary')).to_contain_text('Getting around · ')  # Compact mode hint.
             await expect(info.locator('p')).to_be_visible()
             day_head_text = await day.locator('.day-head').inner_text()
             assert not any(text in day_head_text

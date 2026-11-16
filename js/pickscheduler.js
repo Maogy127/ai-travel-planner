@@ -7,7 +7,7 @@ const pace=a=>['gentle','active','athlete'].includes(a.level)?a.level:({'Easy':'
 const capacity=a=>({gentle:300,active:420,athlete:540}[pace(a)]);
 function departure(a){const sample=a.start==='2026-11-25'&&a.end==='2026-11-29';const flight=minute(a.flightTime||a.builderFlightTime)??(sample?480:null);return {flight,leave:flight===null?600:Math.max(0,flight-185)};}
 
-const travel=(a,b)=>{if(!a||!b)return 0;if(![a.lat,a.lng,b.lat,b.lng].every(Number.isFinite))return a.area===b.area?5:30;const km=Math.hypot((a.lat-b.lat)*111,(a.lng-b.lng)*111*Math.cos(b.lat*Math.PI/180));return Math.max(5,Math.round(km/(km<0.8?4.5:35)*60/5)*5);};
+const travel=(a,b)=>!a||!b?0:window.DayBuilder.estimateTravel(a,b).minutes;
 function scheduleOnce(a,catalog,attempt=0){
  const start=a.start||'2026-11-25',end=a.end||'2026-11-29',days=[];
  for(let t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z')&&days.length<31;t+=86400000)days.push({date:new Date(t).toISOString().slice(0,10),theme:'',items:[],prep:[],unscheduled:[]});
@@ -17,7 +17,7 @@ function scheduleOnce(a,catalog,attempt=0){
   const length=p.duration||60,close=d.date===end?Math.min(1320,leave):1320;
   if(d.date===end&&leave<=600&&(!p.meals||!p.meals.includes('breakfast')||length>60))return false;
   if(d.date===start&&!p.meals)return false;
-  if(t<(d.date===start?1140:360)||t+length>close)return false;
+  if(t<(d.date===start?1140:360)||t+length+(d.date===end?travel(p,{area:"Airport"}):0)>close)return false;
   const hrs=p.ruleHours&&(!p.ruleHours.date||p.ruleHours.date===d.date)?p.ruleHours:p.hours;
   if(hrs&&(t<minute(hrs.open)||t+length>minute(hrs.close)))return false;
   if(window.DayBuilder.closedOn({...p,title:p.name},d.date))return false;

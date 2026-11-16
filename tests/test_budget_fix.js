@@ -114,7 +114,7 @@ const paceSource=app.slice(app.indexOf('    function paceDayHTML('),app.indexOf(
 assert(!/Sleep timing|Suggestions|day-guidance|wind-down|jetlag-note/.test(paceSource));
 const headSource=app.slice(app.indexOf('    function dayHeadHTML('),app.indexOf('    function dayHeadHTML(')+1700);
 assert(!/Transport &amp; conditions|Typical conditions|Staying at/.test(headSource));
-assert(app.includes('<summary>Getting around</summary>'));
+assert(app.includes('Getting around · ')); // Hint marks a tappable info row.
 console.log('PASS minimal day header, Draft hint removal and prep dedupe copy');
 
 assert.equal(packs.length,50);

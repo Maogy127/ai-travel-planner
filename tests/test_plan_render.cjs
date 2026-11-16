@@ -50,7 +50,7 @@ function smoke(label){
  for(let i=0;i<plan.days.length;i++){
   const html=helpers.dayHeadHTML(plan.days[i],i,helpers.dayModel(plan.days[i],i));
   assert(html.includes('wellness-rings'));
-  if(plan.id.startsWith('template-'))assert((html.match(/data-testid="travel-chip"/g)||[]).length>3);
+  if(plan.id.startsWith('template-'))assert.equal((html.match(/data-testid="travel-chip"/g)||[]).length,Math.max(0,plan.days[i].items.length-1)) // Only this day's transfers.;
  }
  const context=helpers.builderContext();let heads=0;
  const head=context.dayHead;context.dayHead=(...args)=>{heads++;return head(...args);};

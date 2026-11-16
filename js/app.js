@@ -1485,11 +1485,13 @@
     function sleepNudgeHTML(day,items,context){
         var ringResult=context.ringResult,previous=context.previous,html='';
         var R=window.GoNowRings,detail=ringResult.sleepDetail,first=detail&&detail.first,locked=items.find(function(it){return it.locked&&it.start<480;}),direction=first&&first.start<480?'later':'earlier',targetDate=direction==='later'?day.date:previous&&previous.date,proposal=R.proposal(direction==='later'?items:previous&&previous.items,direction);
+        var earliest=items.filter(function(it){return Number.isFinite(it.start);}).sort(function(a,b){return a.start-b.start;})[0];
+        if(earliest&&(earliest.kind==='flight'||earliest.flight||earliest.id==='pick-airport'||/\b(?:airport|HNL)\b/i.test(earliest.title||'')&&(earliest.locked||earliest.kind==='travel')||earliest.locked&&(earliest.airport||earliest.inboundRide?.airport||(earliest.tags||[]).some(function(t){return /flight|airport/i.test(t);}))))return '';
         var dismissed=false;try{dismissed=localStorage.getItem('gonow.sleep-nudge.'+day.date)==='keep';}catch(e){}
         if(R.shortNight(ringResult.values.sleep,ringResult.goals.sleep)&&!dismissed){
             html+='<aside class="sleep-nudge" data-testid="sleep-nudge" data-date="'+day.date+'"><span>Short night · '+Math.floor(ringResult.values.sleep)+'h'+String(Math.round(ringResult.values.sleep*60)%60).padStart(2,'0')+' sleep</span> ';
             if(locked&&direction==='later')proposal=null;
-            html+='<button data-testid="sleep-nudge-accept">'+(direction==='later'?'Suggest a later start':'Suggest an earlier evening')+'</button><button data-testid="sleep-nudge-keep">Keep plan</button><div data-testid="sleep-proposal" hidden>'+(proposal?'<p>Move '+esc(proposal.title)+' to '+R.clock(proposal.start)+' (30 minutes '+direction+').</p><button data-testid="sleep-proposal-apply" data-date="'+targetDate+'" data-id="'+esc(proposal.id)+'" data-start="'+proposal.start+'">Apply</button>':'<p>The reserved times stay in place. An earlier wind-down tonight can help.</p>')+'<button data-testid="sleep-proposal-cancel">Cancel</button></div></aside>';
+            html+='<button data-testid="sleep-nudge-accept">'+(direction==='later'?'Later start':'Earlier night')+'</button><button data-testid="sleep-nudge-keep">Keep</button><div data-testid="sleep-proposal" hidden>'+(proposal?'<p>Move '+esc(proposal.title)+' to '+R.clock(proposal.start)+' (30 minutes '+direction+').</p><button data-testid="sleep-proposal-apply" data-date="'+targetDate+'" data-id="'+esc(proposal.id)+'" data-start="'+proposal.start+'">Apply</button>':'<p>The reserved times stay in place. An earlier wind-down tonight can help.</p>')+'<button data-testid="sleep-proposal-cancel">Cancel</button></div></aside>';
         }
         return html;
     }
@@ -1510,16 +1512,11 @@
         scope.querySelectorAll('[data-testid=day-pace-option]').forEach(function(el){el.onchange=function(){state.answers.dayPaces=Object.assign({},state.answers.dayPaces);state.answers.dayPaces[el.closest('[data-date]').dataset.date]=el.value;save();render();};});
         scope.querySelectorAll('[data-testid=traveler-name],[data-testid=traveler-pace]').forEach(function(el){el.onchange=function(){var t=travelers()[Number(el.dataset.index)];t[el.tagName==='SELECT'?'level':'name']=el.value;save();render();};});
     }
-    function templateTransfersHTML(){
-        if(!state.plan.id.startsWith('template-'))return '';
-        return '<div class="template-transfers"><h3>Trip transfers · confirm routes</h3>'+state.plan.days.map(function(day){
-            return '<h4>'+esc(day.date)+'</h4>'+day.items.slice(0,-1).map(function(item,index){
-                return '<p class="travel-chip" data-testid="travel-chip">'+esc(item.title)+' → '+esc(day.items[index+1].title)+': '+esc(item.travelToNext||'Local transfer — confirm route')+'</p>';
-            }).join('');
-        }).join('')+'</div>';
-    }
     function dayHeadHTML(d, i, m) {
-        var car=d.car||{};
+        var car=d.car||{},carText=[car.level,car.note].filter(function(v){return typeof v==='string'&&v.trim();}).map(function(v){return v.trim();}).join(' · ');
+        var transfers=state.plan.id.startsWith('template-')&&d.items.length>1?'<div class="template-transfers">'+d.items.slice(0,-1).map(function(item,index){return '<p class="travel-chip" data-testid="travel-chip">'+esc(item.title)+' → '+esc(d.items[index+1].title)+': '+esc(item.travelToNext||'Local transfer — confirm route')+'</p>';}).join('')+'</div>':'';
+        var hint=/uber|rideshare|taxi/i.test(carText)?'Uber':/not needed|no car/i.test(carText)?'No car':String(car.level||car.note||'Transfers').trim().split(/\s+/).slice(0,2).join(' ');
+        var info=carText||transfers?'<details data-testid="day-info"><summary><span class="day-info-chevron" aria-hidden="true">▸</span>Getting around · '+esc(hint)+'</summary>'+(carText?'<p>'+esc(carText)+'</p>':'')+transfers+'</details>':'';
         var label=new Date(d.date+'T12:00:00').toLocaleDateString('en-US',  {
             weekday:'short', month:'short', day:'numeric'
         });
@@ -1528,7 +1525,7 @@
         var current=days.find(function(day){return day.date===d.date;});
         var next=days[days.findIndex(function(day){return day.date===d.date;})+1];
         var ringItems=schedule&&current?current.items:m.items;
-        return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+((car.level||car.note)?'<details data-testid="day-info"><summary>Getting around</summary><p>'+esc([car.level,car.note].filter(Boolean).join(' · '))+'</p>'+templateTransfersHTML()+'</details>':'')+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
+        return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+info+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
     }
     function dayFooterHTML(d, i, m) {
         return '<details class="day-options"><summary '+(mergedPlan()?'':'data-testid="day-add"')+'>'+(mergedPlan()?'Day options':'+ Add')+'</summary><div class="day-footer row">'+(d.relax?'<label><input type="checkbox" data-testid="relax-toggle" data-relax="'+i+'" '+(m.relaxed?'checked':'')+'>Make this day more relaxing</label>':'')+(d.rain?'<label><input type="checkbox" data-testid="rain-toggle" data-rain="'+i+'" '+(m.rain?'checked':'')+'>Rain backup</label>':'')+btn('+ Add your own item', 'day-custom-add', '', 'data-add-day="'+i+'"')+'</div></details>';
