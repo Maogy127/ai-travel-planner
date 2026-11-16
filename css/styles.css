@@ -1695,3 +1695,15 @@ body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;
 .add-own-sheet [data-testid=add-own-submit]{flex:1}
 @media print{.day-primary-actions,.day-reset-prompt,.add-own-sheet{display:none!important}}
 .add-own-sheet label.row{min-height:44px}
+
+/* Item G: one header action, with room for a truncated mobile title. */
+.plan-header{overflow:visible;z-index:2}
+.plan-heading-row{display:flex;align-items:center;gap:12px;min-width:0}
+.plan-heading-row h1{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:0}
+.share-controls{position:relative;flex:none}
+.plan-title [data-testid="share-menu-toggle"]{display:flex;align-items:center;gap:6px;white-space:nowrap;padding:10px 12px;font-size:14px;margin:0}
+[data-testid="share-menu"]{position:absolute;right:0;top:calc(100% + 8px);width:220px;max-width:calc(100vw - 64px);padding:6px;border:1px solid var(--boundary);border-radius:12px;background:var(--surface);box-shadow:0 8px 24px #0003;z-index:10}
+[data-testid="share-menu"][hidden]{display:none}
+.plan-title [role="menuitem"]{display:block;width:100%;text-align:left;white-space:nowrap;font-size:14px;padding:12px 10px;margin:0;border:0;background:transparent;border-radius:6px}
+.plan-title [role="menuitem"]:hover,.plan-title [role="menuitem"]:focus{background:var(--soft)}
+@media print{.share-controls,[data-testid="share-menu"]{display:none!important}.plan-heading-row h1{white-space:normal;overflow:visible}}

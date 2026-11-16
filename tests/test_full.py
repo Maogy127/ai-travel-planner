@@ -46,6 +46,11 @@ async def wait_plan(pg):
   await through_picks(pg)
   await pg.locator('[data-testid=trip-prep]:visible, [data-testid=db-root]:visible, [data-testid=plan-day]:visible, [data-testid=treasure-map]:visible').first.wait_for(timeout=45000)
   await continue_prep(pg)
+async def open_share_menu(pg):
+  # Item G: exports now live in the header Share menu, opened before each action.
+  toggle = pg.get_by_test_id('share-menu-toggle')
+  if await toggle.get_attribute('aria-expanded') != 'true': await toggle.click()
+
 async def open_guidance(pg):
   await pg.locator('.pace-control').evaluate_all('items=>items.forEach(e=>e.open=true)')
 
@@ -491,6 +496,8 @@ async def batch_a_checks(b,base,label):
   await pg.get_by_test_id('fork-no').click()
   await through_picks(pg, OAHU_EXPORT_PICKS)
   await continue_prep(pg)
+  # Item G: open the header menu to retain the screen/print action visibility check.
+  await open_share_menu(pg)
   ok(f'{label} print button and screen stamp hidden', await pg.get_by_test_id('print-plan').is_visible() and not await pg.get_by_test_id('stamped-footer').is_visible())
   await pg.emulate_media(media='print')
   ok(f'{label} print chrome hidden', not await pg.locator('.topbar').is_visible() and not await pg.get_by_test_id('print-plan').is_visible() and not await pg.get_by_test_id('trip-prep-button').is_visible())
@@ -532,11 +539,14 @@ async def batch_a_checks(b,base,label):
   ok(f'{label} ICS timezone and researched events', 'TZID=Pacific/Honolulu' in ics and 'BEGIN:VTIMEZONE' in ics and 'Diamond Head' in unfolded and 'Kualoa' in unfolded)
   ok(f'{label} ICS respects note and removed stop', 'Shared café note\\, bring water\\; enjoy 🌺' in unfolded and ('SUMMARY:'+removed.replace(',', '\\,').replace(';','\\;')+'\r\n') not in unfolded)
   if label=='http':
+    await open_share_menu(pg)
     async with pg.expect_download() as pending: await pg.get_by_test_id('download-ics').click()
     download=await pending.value
     ok(f'{label} ICS download filename and content', download.suggested_filename=='gonow-oahu-2026-11-25.ics' and Path(await download.path()).read_bytes().startswith(b'BEGIN:VCALENDAR\r\n'))
   else:
+    await open_share_menu(pg)
     await pg.get_by_test_id('download-ics').click()
+  await open_share_menu(pg)
   await pg.get_by_test_id('share-link').click(); url=await pg.get_by_test_id('share-url').input_value()
   ok(f'{label} share URL compact and excludes packing', len(url)<4000 and '#trip=j.' in url)
   await pg.get_by_test_id('modal-0').click()
@@ -950,6 +960,7 @@ async def merged_checks(b,base,label,shots):
   saved=await pg.evaluate("JSON.parse(localStorage.getItem('gonow:daybuilder:oahu-demo-2026-11')).days['2026-11-27'].items.find(i=>i.id==='dive-1127')")
   ok(label+' lock stored in localStorage',saved.get('locked') and saved.get('userLocked'))
   # Share round-trip
+  await open_share_menu(pg)
   await pg.get_by_test_id('share-link').click(); url=await pg.get_by_test_id('share-url').input_value(); await pg.get_by_test_id('modal-0').click()
   ok(label+' share link carries builder',len(url)<4000 and '#trip=j.' in url)
   c2,p2=await new(b,base,1280,844)
@@ -1145,8 +1156,10 @@ async def regression_checks(b,base,label):
   ok(label+' ICS matches reflowed times', '20261126T220000' in unfolded and '20261126T230000' in unfolded and '20261126T174000' not in unfolded and '20261126T193000' in unfolded and '20261126T213000' in unfolded)
   ok(label+' copy text matches reflowed times', '10:00 PM–11:00 PM' in text and 'Kahala Beach' in text and '5:40 PM–6:40 PM' not in text and '7:30 PM–9:30 PM' in text)
   await pg.evaluate("navigator.clipboard.writeText=t=>{window.__copied=t;return Promise.resolve()}")
+  await open_share_menu(pg)
   await pg.get_by_test_id('copy').click()
   ok(label+' copy button uses the same text', await pg.evaluate('window.__copied')==text)
+  await open_share_menu(pg)
   await pg.get_by_test_id('share-link').click(); url=await pg.get_by_test_id('share-url').input_value(); await pg.get_by_test_id('modal-0').click()
   c2,p2=await new(b,base)
   await p2.goto(url); await p2.get_by_test_id('db-root').wait_for(); await p2.get_by_test_id('db-day-2026-11-26').click()

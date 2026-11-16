@@ -134,7 +134,36 @@
         var image=dest.id==='custom'?'images/hero.jpg':'images/'+dest.id+'.jpg';
         var visual=state.answers.templateOahu&&dest.id==='oahu'?'':photo(image, p.title, 'banner-photo');
         if(visual){ var bid=image.split('/').pop().replace('.jpg',''); var bc=window.PHOTO_CREDITS.find(function(c){return c.id===bid;}); visual+='<div class="banner-credit">'+creditHTML(bc)+'</div>'; }
-        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+heading(esc(p.title), esc(p.meta))+'<p>'+icon('hotel')+' Staying: '+esc(p.stay)+'</p>'+hotelControls()+'<small class="local-times">Local times'+(dest.id==='oahu'?' · Hawaii Standard Time (HST)':'')+'</small><div class="row">'+btn('Change my answers', 'change-answers', '')+btn('Reset my edits', 'reset-edits', '')+trackToggle()+'</div></div></header>';
+        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted">'+esc(p.meta)+'</p><p>'+icon('hotel')+' Staying: '+esc(p.stay)+'</p>'+hotelControls()+'<small class="local-times">Local times'+(dest.id==='oahu'?' · Hawaii Standard Time (HST)':'')+'</small><div class="row">'+btn('Change my answers', 'change-answers', '')+btn('Reset my edits', 'reset-edits', '')+trackToggle()+'</div></div></header>';
+    }
+    function shareMenuHTML() {
+        return '<div class="share-controls"><button type="button" data-testid="share-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="plan-share-menu"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m-5 5 5-5 5 5M5 13v7h14v-7"/></svg>Share</button><div id="plan-share-menu" data-testid="share-menu" role="menu" aria-label="Share" hidden>'+[['Print / Save as PDF','print-plan'],['Copy as text','copy'],['Share link','share-link'],['Download calendar','download-ics']].map(function(item){var wrapper=item[1]==='print-plan'?'print':item[1]==='share-link'?'share':'';return (wrapper?'<span data-testid="'+wrapper+'">':'')+btn(item[0],item[1],'','role="menuitem" tabindex="-1"')+(wrapper?'</span>':'');}).join('')+'<!-- Item I: Invite friends belongs here. --></div></div>';
+    }
+    var shareMenuCleanup;
+    function bindShareMenu() {
+        if(shareMenuCleanup)shareMenuCleanup();
+        var toggle=get('share-menu-toggle'), menu=get('share-menu');
+        var items=Array.from(menu.querySelectorAll('[role="menuitem"]'));
+        function close(){menu.hidden=true;toggle.setAttribute('aria-expanded','false');toggle.focus({preventScroll:true});}
+        function open(last){menu.hidden=false;toggle.setAttribute('aria-expanded','true');items[last?items.length-1:0].focus();}
+        toggle.onclick=function(){if(menu.hidden)open();else close();};
+        menu.addEventListener('click',function(e){if(e.target.closest('[role="menuitem"]'))close();},true);
+        function outside(e){if(!menu.hidden&&!toggle.parentElement.contains(e.target))close();}
+        function keys(e){
+            if(!toggle.isConnected)return;
+            if(e.target===toggle&&(e.key==='ArrowDown'||e.key==='ArrowUp')){e.preventDefault();open(e.key==='ArrowUp');return;}
+            if(menu.hidden)return;
+            if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();close();return;}
+            if(e.key==='Tab'){close();return;}
+            var i=items.indexOf(document.activeElement);
+            if(i<0)return;
+            if(['ArrowDown','ArrowUp','Home','End'].indexOf(e.key)<0)return;
+            e.preventDefault();
+            items[e.key==='Home'?0:e.key==='End'?items.length-1:(i+(e.key==='ArrowDown'?1:items.length-1))%items.length].focus();
+        }
+        document.addEventListener('click',outside);
+        document.addEventListener('keydown',keys,true);
+        shareMenuCleanup=function(){document.removeEventListener('click',outside);document.removeEventListener('keydown',keys,true);};
     }
     function hotelControls(){if(state.answers.mode==='local')return '';var d=Engine.matchDestination(state.answers.destination);return (state.answers.stayUnsure?'<p data-testid="stay-later-note">Planning around '+esc(window.GoNowJetlag.center(d))+" for now. Add your hotel later and we’ll re-plan around it.</p>":'')+'<button type="button" data-testid="trip-add-hotel">'+(state.answers.stayUnsure?'Add your hotel':'Edit your hotel')+'</button><form data-testid="trip-hotel-form" hidden><label>Hotel name<input data-testid="trip-hotel-name" value="'+esc(state.answers.stay)+'" required></label><button data-testid="trip-hotel-save">Save</button></form>';}
     function applyStay(){var name=state.answers.stayUnsure||!state.answers.stay?window.GoNowJetlag.center(Engine.matchDestination(state.answers.destination)):state.answers.stay;var old=state.plan.stay;state.plan.stay=name;window.DayBuilder.setStay(name);state.plan.days.forEach(function(d){if(!mergedPlan())d.items=window.DayBuilder.replanStay(d.items,old,name);d.items.forEach(function(it,i){['place','from','to','desc','title'].forEach(function(k){if(typeof it[k]==='string'&&old)it[k]=it[k].split(old).join(name);});if(it.kind==='stay')it.desc=name;if(i<d.items.length-1){var next=d.items[i+1];it.travelToNext='approx. '+window.DayBuilder.commuteMinutes(it.place||name,next.place||next.title)+' min from '+(it.kind==='stay'?name:it.place||it.title)+' — confirm route';}});});}
@@ -1722,7 +1751,7 @@
         }
         if(state.answers.mode!=='local'&&(state.answers.stayUnsure||state.answers.hotelEdited))applyStay();
         state.tab='plan';
-        view.innerHTML='<div class="shell">'+(state.viewing==='finished'?'<div data-testid="finished-banner"><p>Saved finished plan</p>'+(currentTrip()&&currentTrip().snapshot&&currentTrip().snapshot.weather?'<p data-testid="snapshot-weather">'+esc(currentTrip().snapshot.weather.label)+' '+esc(currentTrip().snapshot.weather.text)+'</p>':'')+'</div>':'')+planBanner(p)+planNotices(p)+'<div id="tab-content">'+(mergedPlan()?'':'<nav class="daynav" aria-label="Jump to day">'+p.days.map(function(d,i){return '<a href="#day-'+i+'" data-testid="day-nav-'+i+'">Day '+(i+1)+' · '+esc(dateLabel(d.date,{weekday:'short'})+' '+dateLabel(d.date,{day:'numeric'}))+'</a>';}).join('')+'</nav><div class="itinerary-days">'+p.days.map(dayHTML).join('')+'</div>')+'</div><details data-testid="travel-info"><summary>Travel info</summary><div data-testid="local-info" id="local-info"><p>Open for local details.</p></div></details><details data-testid="booking-searches"><summary>Booking searches</summary><div data-testid="book-links">'+bookLinksHTML().replace('<h2>Book this</h2>','')+'</div></details><footer class="row export-actions"><span data-testid="print">'+btn('Print / Save as PDF','print-plan','outline')+'</span>'+btn('Copy as text','copy','outline')+'<span data-testid="share">'+btn('Share link','share-link','outline')+'</span>'+btn('Download calendar','download-ics','outline')+'</footer><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
+        view.innerHTML='<div class="shell">'+(state.viewing==='finished'?'<div data-testid="finished-banner"><p>Saved finished plan</p>'+(currentTrip()&&currentTrip().snapshot&&currentTrip().snapshot.weather?'<p data-testid="snapshot-weather">'+esc(currentTrip().snapshot.weather.label)+' '+esc(currentTrip().snapshot.weather.text)+'</p>':'')+'</div>':'')+planBanner(p)+planNotices(p)+'<div id="tab-content">'+(mergedPlan()?'':'<nav class="daynav" aria-label="Jump to day">'+p.days.map(function(d,i){return '<a href="#day-'+i+'" data-testid="day-nav-'+i+'">Day '+(i+1)+' · '+esc(dateLabel(d.date,{weekday:'short'})+' '+dateLabel(d.date,{day:'numeric'}))+'</a>';}).join('')+'</nav><div class="itinerary-days">'+p.days.map(dayHTML).join('')+'</div>')+'</div><details data-testid="travel-info"><summary>Travel info</summary><div data-testid="local-info" id="local-info"><p>Open for local details.</p></div></details><details data-testid="booking-searches"><summary>Booking searches</summary><div data-testid="book-links">'+bookLinksHTML().replace('<h2>Book this</h2>','')+'</div></details><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
         if(p.bookingIssues&&p.bookingIssues.length){
             view.querySelector('.shell').insertAdjacentHTML('afterbegin',p.bookingIssues.map(function(i){return '<p class="booking-issue" data-testid="booking-issue">'+esc(i.id==='lamer'?'La Mer':i.name.replace(/ Chinatown$/, ''))+' '+esc(PickScheduler.reason(i,state.answers).replace(/^Booked/,'booked'))+' <button class="outline" data-booking-fix="'+i.id+'">Fix</button></p>';}).join(''));
             view.querySelectorAll('[data-booking-fix]').forEach(function(b){b.onclick=function(){go('dates');};});
@@ -1780,6 +1809,7 @@
             }
             ]);
         });
+        bindShareMenu();
         on('print-plan', function() { earn('Printed a plan'); window.print(); });
         on('share-link', shareTrip);
         on('download-ics', downloadICS);
@@ -2124,7 +2154,7 @@
         var data={answers:state.answers,edits:state.edits,id:state.plan.id};
         if(window.DayBuilder){var builder=window.DayBuilder.exportState();if(builder)data.db=builder;}
         var url=location.href.split('#')[0]+'#trip='+encodeTrip(data);
-        showModal('Share & export', 'Anyone with this link can open a copy. Packing ticks stay private.<label>Trip link<input readonly data-testid="share-url" value="'+esc(url)+'"></label>',[{text:'Close'}]);
+        showModal('Share link', 'Anyone with this link can open a copy. Packing ticks stay private.<label>Trip link<input readonly data-testid="share-url" value="'+esc(url)+'"></label>',[{text:'Close'}]);
         var field=get('share-url');field.onclick=function(){field.select();};field.select();
         if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(url).catch(function(){});
         earn('Created a share link');
@@ -2152,7 +2182,6 @@
         var shell=view.querySelector('.shell');
         if(state.shared){shell.insertAdjacentHTML('afterbegin','<aside class="banner" data-testid="shared-banner">Shared trip — view only copy; changes stay on this device '+btn('Make it mine','adopt-shared','outline')+'</aside>');on('adopt-shared',function(){if(window.DayBuilder&&window.DayBuilder.persist)window.DayBuilder.persist();state.shared=false;state.sharedBuilder=null;var prep=prepRecord();prep.seen=true;savePrep(prep);save();persistEdits();write(KEY+'lastTrip',{answers:state.answers});history.replaceState({screen:'plan'},'','#plan');planRender(false);});}
         shell.insertAdjacentHTML('beforeend','<p class="stamped-footer '+(state.shared?'shared-stamp':'')+'" data-testid="stamped-footer">Planned with GoNow · maogy127.github.io/ai-travel-planner</p>');
-        var toolbar=get('print-plan').closest('footer');toolbar.setAttribute('aria-label','Share & export');toolbar.insertAdjacentHTML('afterbegin','<strong>Share & export</strong>');
         if(state.tab!=='plan')return;
         var pref;try{pref=localStorage.getItem(KEY+'view');}catch(e){}
         var map= !state.shared&&pref==='map';

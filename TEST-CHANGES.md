@@ -1568,3 +1568,38 @@ Tests:
 
 COPY-AUDIT — every visible string added/changed:
 - None. No UI strings added or changed.
+
+### Item G — Header Share menu
+
+Changes:
+- Replaced the bottom export row and heading with one icon + Share button beside the trip title. The title truncates to keep the button on the same row at 390px.
+- Kept existing action and wrapper testids and export handlers. The shared and finished plan render the same header menu. Added an internal Item I insertion hook without an Invite friends action.
+- Added menu semantics, expanded state, arrow/Home/End navigation, Escape/outside/action dismissal and toggle focus restoration. Hide Share controls in print.
+- Updated existing export tests to open the menu first, with an explanatory helper comment. No assets added or renamed; existing cache tags and asset counts remain unchanged.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 54 Python tests.
+- Added tests/test_share_menu.py using test_full.new and test_wellness_home.serve_checks, port 8877: desktop/mobile header placement, footer removal, overflow, menu keyboard/focus/dismissal, print invocation, copy toast, calendar download, share modal, print hiding, finished/shared headers.
+- Browser execution and screenshots remain supervisor-run; Chromium was not run. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- `Share`: new single header button and menu accessible name; one short line at 390px, inline icon hidden from assistive technology.
+- `Print / Save as PDF`, `Copy as text`, `Share link`, `Download calendar`: existing labels moved unchanged into the tapped menu, each on one line.
+- `Share link`: replaces the modal title `Share & export` to describe the selected action.
+- Removed the bottom `Share & export` heading and export row entirely. No empty footer or duplicate action labels remain visible. No developer terminology added.
+
+### Item G follow-up — Visible outside-click target and mobile title
+
+Changes:
+- Replaced the hidden mobile subtitle outside-click target with the visible trip heading. The comment explains the mobile behavior; assert the opened menu closes, restores toggle focus, and resets aria-expanded.
+- Added header checks for title ellipsis styles, positive title width, no title/Share overlap, and Share within the viewport. At 390px, temporarily exercise a long title, assert actual text overflow and button visibility/placement, then restore the original title.
+- Retained existing uncommitted changes, shared browser helpers and port 8877. No application code, assets, testids, cache tags or asset counts changed in this follow-up.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 54 Python tests.
+- Playwright execution and screenshots remain supervisor-run; Chromium was not run. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- No product UI copy added or changed. The temporary browser-test fixture `A long trip title with plenty of room to explore Oahu` exercises truncation and is restored immediately afterward; it is not shipped UI copy.
