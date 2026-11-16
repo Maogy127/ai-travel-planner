@@ -44,8 +44,12 @@ async def checks(browser):
                 print('PASS test_dayview_simple.py check line 43')
                 await expect(card.get_by_test_id('db-activity')).to_be_visible()
                 print('PASS test_dayview_simple.py check line 45')
+            # Only interactive lock toggles need aria prefixes and 44px targets; bookings use static tags.
+            for tag in await day.get_by_test_id('db-locked-tag').all():
+                assert await tag.evaluate("e=>e.tagName==='SPAN'&&!e.hasAttribute('role')&&!e.hasAttribute('tabindex')")
             for testid, prefix in (('db-more', 'More actions for '), ('db-lock', ('Lock ', 'Unlock '))):
-                for button in await day.get_by_test_id(testid).all():
+                # db-lock also identifies static booking indicators; only buttons are targets.
+                for button in await day.locator(f'button[data-testid={testid}]').all():
                     assert (await button.get_attribute('aria-label')).startswith(prefix)
                     print('PASS test_dayview_simple.py check line 49')
                     assert 'More' not in await button.inner_text()

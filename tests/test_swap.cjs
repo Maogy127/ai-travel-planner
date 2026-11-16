@@ -1,0 +1,14 @@
+'use strict';
+const assert=require('node:assert/strict');
+global.window={};require('../js/daybuilder.js');
+const B=window.DayBuilder;
+const item={start:540,end:660,lat:0,lng:0};
+const pick=(id,extra={})=>({id,name:id,duration:30,lat:0,lng:0,...extra});
+const args={item,next:{start:660,lat:0,lng:0},date:'2026-11-26',catalog:[pick('far',{lng:.1}),pick('near'),pick('long',{duration:116}),pick('closed',{closedDates:['2026-11-26']}),pick('late',{hours:{open:600,close:900}}),pick('used'),pick('travel',{lng:5})],inPlan:['used']};
+assert.deepEqual(B.slotCandidates(args).map(r=>r.pick.id),['near','far']);
+assert.equal(B.slotCandidates({...args,catalog:[pick('unknown')]}).length,1);
+assert.equal(B.slotCandidates({...args,catalog:[pick('week',{hours:{week:Array.from({length:7},()=>[])}})]}).length,0);
+assert.equal(B.slotCandidates({...args,catalog:[pick('shut',{closedDays:[4]})]}).length,0);
+assert.equal(B.slotCandidates({...args,catalog:[pick('exact',{duration:115})]})[0].slot,115);
+assert.equal(B.slotCandidates({item, next:{start:660,lat:0,lng:0}, catalog:[pick('date',{closedDates:['2026-11-26']})],date:'2026-11-26'}).length,0);
+console.log('PASS swap duration, hours, closures, travel, distance order and in-plan exclusions');

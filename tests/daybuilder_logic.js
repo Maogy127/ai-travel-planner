@@ -185,3 +185,21 @@ assert(sunsetResult.items.some(i=>i.travel || i.kind==='prep'));
 }
 
 for(const ages of [['',30],[],[null,'bad',30]])assert(!db.reflow({date:'2026-11-26',items:[db.trayItems().at(-1)]},{ages}).conflicts.some(c=>c.note.includes('21+')));
+
+{
+ const date='2026-11-26', day=db.buildSuggested(date);
+ const slot=day.items.find(i=>i.id===date+'-1');
+ assert(slot.locked && !slot.booked);
+ assert.equal(db.toggleLock(slot),false);
+ const restored=db.importDays(db.exportDays({[date]:day})).days[date];
+ assert.equal(restored.items.find(i=>i.id===slot.id).locked,false);
+ assert.equal(db.toggleLock(slot,{start:360,end:450}),true);
+ assert.equal(db.toggleLock(slot),false);
+ for(const item of [...day.items.filter(i=>i.id==='lamer'||i.fixedBooking),
+   db.buildSuggested('2026-11-27').items.find(i=>i.id==='senia'),
+   {custom:true,locked:true},{flight:true,locked:true}]) {
+   assert.equal(db.toggleLock(item),true);
+   assert.equal(item.locked,true);
+ }
+ console.log('Source planned locks toggle and persist; confirmed bookings remain fixed.');
+}

@@ -172,6 +172,25 @@ function smoke(label){
   form.elements={date:{value:date},start:{value:start},end:{value:''}};
   form.onsubmit({target:form,preventDefault(){}});
  }
+ // Booking actions remain usable even though the lock indicator is static.
+ const bookingHTML=node('transfer-regression .db-content').innerHTML.split('data-db-id="lamer"')[1].split('data-testid="db-pair"')[0];
+ assert(bookingHTML.includes('data-testid="db-more"'));
+ assert(bookingHTML.includes('data-db-action="move-day"'));
+ assert(bookingHTML.includes('data-db-action="edit-time"'));
+ const indicator=bookingHTML.match(/<span[^>]*data-testid="db-lock"[^>]*>/)[0];
+ assert(!/aria-pressed|data-db-action|tabindex|role=/.test(indicator));
+ action('lamer','day','move-day');
+ let reservationUnlock=latestDialog('unlock-confirm');
+ assert(reservationUnlock,'booking move still asks for confirmation');
+ reservationUnlock.querySelector('[data-testid=unlock-decline]').onclick();
+ assert(transfer.getDay().items.find(i=>i.id==='lamer').locked,'declining retains reservation lock');
+ action('lamer','day','edit-time');
+ reservationUnlock=latestDialog('unlock-confirm');
+ node('transfer-regression [data-testid=activity-time-form]').elements={start:{disabled:false,focus(){}}};
+ reservationUnlock.querySelector('[data-testid=unlock-accept]').onclick();
+ assert(!transfer.getDay().items.find(i=>i.id==='lamer').locked,'explicit time confirmation releases reserved time');
+ assert(node('transfer-regression .db-content').innerHTML.includes('data-testid="activity-time-form"'));
+ console.log('PASS booking menu, static lock indicator, move decline and time-edit confirmation');
  action(moving.id,'day','move-day');
  const unlock=latestDialog('unlock-confirm');
  if(unlock)unlock.querySelector('[data-testid=unlock-accept]').onclick();
@@ -254,10 +273,11 @@ function smoke(label){
  for(const date of ['2026-11-26','2026-11-27']){
   exportBuilder.selectDay(date,false);
   const html=node('export-plan .db-content').innerHTML;
-  const buttons=html.match(/<button[^>]*data-testid="db-lock"[^>]*aria-pressed="true"[^>]*>[\s\S]*?<\/button>/g)||[];
+  // Confirmed bookings use static tags instead of dead unlock toggles.
+  const buttons=html.match(/<span[^>]*data-testid="db-locked-tag"[^>]*>[\s\S]*?<\/span>/g)||[];
   assert(buttons.length>0);
-  for(const button of buttons){assert.equal((button.match(/<svg/g)||[]).length,1);assert(button.includes('<small>Locked</small></button>'));}
-  assert(!html.includes('class="db-lock"'),'toggle is the only booking lock indicator');
+  for(const button of buttons){assert.equal((button.match(/<svg/g)||[]).length,1);assert(button.includes('<small>Locked</small></span>'));}
+  assert(!html.includes('class="db-lock"'),'static tag is the only booking lock indicator');
  }
  api.state.edits={items:{'pick-checkin':{note:'Shared café note, bring water; enjoy 🌺'}},removed:['udon']};
  const fullICS=api.buildICS();const unfolded=fullICS.replace(/\r\n /g,'');

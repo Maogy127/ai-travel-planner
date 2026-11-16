@@ -897,15 +897,15 @@ async def merged_checks(b,base,label,shots):
   ok(label+' drag does not leave box expanded',order.index('photos')<order.index('return-hotel') and await moved.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false' and not await moved.get_by_test_id('db-detail').is_visible(),str(order))
   await open_add_menu(pg)
   await pg.get_by_test_id('db-reset').click()
-  # Lock toggle on every box
+  # Confirmed bookings use static tags to avoid dead unlock toggles.
   rows=day.locator('[data-testid=db-pair]:not(.db-prep)')
-  n=await rows.count(); locks=day.get_by_test_id('db-lock')
-  ok(label+' lock toggle on every box',n>5 and await locks.count()==n,f'{n} rows {await locks.count()} locks')
+  n=await rows.count(); locks=day.locator('button[data-testid=db-lock]')  # Static indicators are not 44px toggle targets.
+  ok(label+' lock toggle on every box',n>5 and await locks.count()+await day.get_by_test_id('db-locked-tag').count()==n,f'{n} rows {await locks.count()} locks')
   ok(label+' lock toggle 44px padlock',await locks.evaluate_all("es=>es.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44&&e.querySelector('svg')&&['true','false'].includes(e.getAttribute('aria-pressed'))})"))
   ok(label+' lock and move menu share card',await day.locator('[data-db-id=free]').evaluate("e=>!!e.querySelector('.db-controls [data-db-action=lock]')&&!!e.querySelector('.db-controls [data-testid=db-more]')&&['handle','up','down','remove'].every(a=>e.querySelector('[data-testid=db-more-menu] [data-db-action='+a+']'))"))
-  lamer=day.locator('[data-db-id=lamer]').get_by_test_id('db-lock')
-  ok(label+' booking starts locked',await lamer.get_attribute('aria-pressed')=='true' and await lamer.get_attribute('aria-label')=='Unlock time')
-  ok(label+' open box starts unlocked',await free.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await free.get_by_test_id('db-lock').get_attribute('aria-label')=='Lock time')
+  lamer=day.locator('[data-db-id=lamer]').get_by_test_id('db-locked-tag')
+  ok(label+' booking starts locked',await lamer.count()==1 and await lamer.evaluate("e=>e.tagName==='SPAN'&&!e.hasAttribute('role')&&!e.hasAttribute('tabindex')"))
+  ok(label+' open box starts unlocked',await free.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and (await free.get_by_test_id('db-lock').get_attribute('aria-label')).startswith('Lock '))
   # 11/27: lock the dive at 8:00, then push lunch into it.
   await pg.get_by_test_id('db-day-2026-11-27').click()
   dive=day.locator('[data-db-id=dive-1127]')
@@ -950,16 +950,12 @@ async def merged_checks(b,base,label,shots):
   await dive.get_by_test_id('db-lock').click()
   await pg.get_by_test_id('unlock-accept').click()
   ok(label+' unlock restores reflow',await dive.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await dive.get_by_test_id('db-handle').count()==1 and not any('dive' in n.lower() for n in await day.get_by_test_id('db-note').all_text_contents()) and await dive.get_by_test_id('db-note').count()==0 and await t('dive-1127')!=before and 'Unlocked' in await pg.get_by_test_id('db-live').inner_text())
-  # Unlock a booking
+  # Confirmed bookings stay fixed; the old unlock control was a dead toggle.
   senia=day.locator('[data-db-id=senia]')
-  await senia.get_by_test_id('db-lock').click()
-  await pg.get_by_test_id('unlock-accept').click()
-  ok(label+' booking can be unlocked',await senia.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await senia.get_by_test_id('db-up').count()==1 and not await senia.evaluate("e=>e.classList.contains('db-locked')"))
-  o0=await order27(); s0=await t('senia'); await (await card_action(pg, senia, 'db-up')).click()
-  o=await order27(); ok(label+' unlocked booking moves',o.index('senia')==o0.index('senia')-1,f'{o0} -> {o}')
+  ok(label+' booking stays locked',await senia.locator('button[data-testid=db-lock]').count()==0 and await senia.get_by_test_id('db-locked-tag').count()==1 and await senia.get_by_test_id('db-up').count()==0)
   await open_add_menu(pg)
   await pg.get_by_test_id('db-reset').click()
-  ok(label+' reset restores default locks',await day.locator('[data-db-id=senia]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='true' and await day.locator('[data-db-id=dive-1127]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await t('senia')=='6:00 PM–8:00 PM' and await t('dive-1127')==before)
+  ok(label+' reset restores default locks',await day.locator('[data-db-id=senia]').get_by_test_id('db-locked-tag').count()==1 and await day.locator('[data-db-id=dive-1127]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await t('senia')=='6:00 PM–8:00 PM' and await t('dive-1127')==before)
   # Print: every day, every box open, no controls
   await pg.evaluate("window.dispatchEvent(new Event('beforeprint'))"); await pg.emulate_media(media='print')
   pa=root.locator('.db-print-all')

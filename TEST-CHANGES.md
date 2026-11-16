@@ -1295,3 +1295,77 @@ COPY-AUDIT (every added/changed visible string):
 - “Update plan”: last pick page primary action during editing only; one line.
 - “Plan updated · Undo”: existing toast with actionable Undo; explicitly nowrap and sized for 390px. No technical language or extra heading.
 - Existing booking task text and “N left” counts are reused without new wording. All remaining card/details copy is unchanged.
+
+### Item C — Swap
+
+Changes:
+- Added Swap to the existing DayBuilder more menu for editable activities, meals and free-time cards; locked/booked items do not offer it.
+- The sheet searches the trip's curated or any-city catalog, excluding scheduled picks. Candidates fit duration, known hours/closures and the outgoing road estimate, sorted by proximity. Up to five appear.
+- Swapping preserves the exact start and all other displayed times; removing leaves a gap. Both synchronize Edit picks and offer exact Undo through the existing plan toast. Confirmed status is preserved.
+- No assets were added or renamed.
+
+Tests:
+- `tests/test_swap.cjs`: duration boundary, known/unknown hours, weekly closures, dated/weekday closures, outgoing travel, nearest ordering and in-plan exclusion.
+- `tests/test_swap.py`: supervisor Playwright suite on port 8873 using `test_full.new` and `test_wellness_home.serve_checks`, 1280/390, curated demo Day 2, Draft/confirmed, one-line rows, exact slot, unchanged other times, Undo, free gap and locked La Mer.
+- All `tests/*.js` and `tests/*.cjs` passed, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. All Python tests compiled. Chromium execution is reserved for the supervisor.
+
+COPY-AUDIT (every added/changed visible string):
+- “Swap”: concise menu action and sheet title.
+- “×” / “Close”: existing close convention and accessible label.
+- “Search places”: one-line search placeholder and accessible label.
+- “[place name] · [duration] min · [Walk/Uber/Drive] ~[minutes] min”: one-line candidate, sourced name and estimated outgoing travel; long names ellipsize.
+- “No matches”: concise empty search result with the free-time action still available.
+- “Remove, keep time free”: single-line free-slot action.
+- “Swapped · Undo”: single-line toast using the existing Undo button.
+
+### Item C follow-up — Locked demo Swap test
+
+Changes:
+- Updated `tests/test_swap.py` to assert Day 2 Diamond Head (`2026-11-26-1`) starts locked with “Unlock time” and no Swap in its open more menu, then unlock it before the existing swap checks. The demo's default lock is unchanged.
+- `open_swap` now closes an already-open more menu (including one restored by Undo), verifies it closed, then opens it and verifies visibility before selecting Swap.
+
+Tests:
+- Retained desktop/mobile and Draft/confirmed coverage, exact start slot, unchanged other times, Undo, Remove keep time free, and locked La Mer without Swap. Continues using the shared browser/server helpers on port 8873.
+- PASS all 31 Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs; PASS py_compile for all 50 Python test files. Playwright execution remains with the supervisor.
+
+COPY-AUDIT:
+- No visible strings added or changed. “Unlock time” is an assertion of existing accessible copy. No production code or assets changed.
+
+### Item C follow-up 2 — Source locks and confirmed bookings
+
+Changes:
+- Diamond Head's planned entry slot now unlocks directly; locking pins its displayed time and unlocking persists through storage/share state.
+- Confirmed La Mer and Senia reservations, custom Booked items, both fixed Kualoa shuttle legs and flights retain fixed locks. They show one small non-interactive Locked tag, with no unlock button semantics. Fixed times and move-day actions no longer offer an unusable unlock path; flight-time entry remains available.
+- User-created time locks retain their confirmation step. No assets added or renamed.
+
+Tests:
+- Added Node coverage for source-slot unlock/relock, state round-trip, and immutable confirmed/custom/flight/transfer locks.
+- Updated full.py and plan-render booking assertions with dead-toggle comments; retained lock-button aria and 44px checks. Dayview checks distinguish static tags from buttons.
+- Swap browser suite retains shared helpers and port 8873, desktop/mobile and Draft/confirmed checks, exact-slot replacement, unchanged other times, Undo and Remove keep time free; adds reload persistence and explicit La Mer no-unlock/static-tag assertions.
+- All Node suites passed, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. All Python tests compiled. Playwright/screenshot execution remains with the supervisor.
+
+COPY-AUDIT (every visible/accessibility string added or changed):
+- “Locked”: reused single small tag for confirmed bookings, with no button role, tab stop or pressed state; short enough for 390px.
+- “Lock <title>”: accessible unlocked-toggle label now identifies its activity; icon-only visible control remains compact. Locked toggle retains “Unlock time”.
+- “Locked time — unlock to move”: existing accessible row description now also describes planned source locks accurately. Confirmed rows retain “Locked booking — times are fixed”.
+- Removed unusable “Move to another day” and “Edit time:” controls from fixed bookings; no replacement reading burden or extra headings.
+
+### Item C follow-up 3 — Booking actions and lock indicator compatibility
+
+Changes:
+- Restored booked cards’ existing more-menu Move to another day action and time-edit entry. Explicit move/time confirmation works again; declining keeps the reservation unchanged. The static Locked tag has no unlock action.
+- Kept one `db-lock` indicator on each fixed booking as a non-interactive span, retaining the nested `db-locked-tag` identifier and compact icon/text alignment. Button-only aria-prefix and 44px checks exclude static indicators.
+- Swap tests now use `test_full.show_day` after confirmation and reload to reopen the live plan before selecting Day 2. Shared browser/server helpers and port 8873 remain unchanged.
+- Preserved existing uncommitted work. No assets added or renamed.
+
+Tests:
+- PASS all 31 `tests/*.js` and `tests/*.cjs` suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- Extended actual-builder Node regression for La Mer’s more menu, move-day and time-edit controls, inert lock indicator, declined move confirmation and accepted time-edit confirmation.
+- Checkout and Swap assert one static indicator without pressed/action semantics. Dayview/full checks retain button aria and 44px assertions, plus static booking coverage.
+- PASS py_compile for all 50 Python tests. Browser execution/screenshots remain supervisor-only.
+
+COPY-AUDIT (every visible/accessibility string added or changed):
+- No new wording. “Locked” remains one compact static indicator, with no button label or pressed state.
+- Restored “Move to another day” in the existing tapped more menu and “Edit time: {time range}” on the existing time button. The menu action is unchanged and short; the time label is accessible copy.
+- Existing confirmation copy is reachable again for booking edits: “Unlock this item’s reserved time before changing it?”, “Unlock this item”, “Keep reserved time”. Details remain behind an explicit action.
+- Existing move dialog and time-editor copy is reused unchanged after confirmation, including “Target date”, “Time on new day — optional”, “Move”, “Cancel”, “Edit scheduled time”, “Activity time”, “Start”, “End”, “Duration (minutes)”, “Save activity time”, and “Close time editor”. No duplicate card copy, new headings or technical terminology added.

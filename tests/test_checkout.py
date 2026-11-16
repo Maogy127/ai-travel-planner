@@ -25,7 +25,9 @@ async def checks(browser):
             assert diamond['movementMinutes']>0 and diamond['wellness']['type']=='movement'
             await pg.get_by_test_id('db-day-2026-11-26').click()
             lamer=pg.locator('[data-db-id=lamer][data-db-zone=day]')
+            # One static lock indicator preserves the count without a dead toggle.
             await expect(lamer.locator('[data-testid=db-lock]')).to_have_count(1)
+            assert await lamer.get_by_test_id('db-lock').evaluate("e=>e.tagName==='SPAN'&&!e.hasAttribute('aria-pressed')&&!e.hasAttribute('data-db-action')&&!e.hasAttribute('tabindex')")
             await expect(lamer.locator('.db-lock')).to_have_count(0)
             await pg.get_by_test_id('confirm-plan').click()
             await expect(pg.get_by_test_id('trip-prep')).to_be_visible()

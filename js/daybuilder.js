@@ -110,6 +110,19 @@ function estimateTravel(a,b,mode='Uber') {
     const minutes=Math.max(walking?5:10,Math.round(roadKm/(walking?4.5:roadKm>10?35:25)*60/5)*5);
     return {roadKm,minutes,label:(walking?'Walk':mode==='Walk'?'Uber':mode)+' ~'+minutes+' min'};
 }
+// Candidates must fit the outgoing road leg as well as the activity itself.
+function slotCandidates({item,previous,next,catalog,inPlan=[],date,mode='Uber'}) {
+    return catalog.filter(p=>!inPlan.includes(p.id)).map(p=>{
+        const travel=next?estimateTravel(p,next,mode):{minutes:0,label:mode+' ~0 min'};
+        const slot=(next?.start??item.end)-item.start-travel.minutes;
+        const duration=Number(p.duration)||60;
+        const candidate={...p,title:p.name,preferred:item.start,duration,hours:p.parsedHours||p.hours,
+            closed:[...(p.closed||[]),...(p.closedDates||[]).map(date=>({date})),...(p.closedDays?.length?[{weekdays:p.closedDays}]:[])]};
+        const distance=estimateTravel(previous||item,p);
+        return {pick:p,duration,slot,travel,candidate,distance:distance.roadKm??distance.minutes};
+    }).filter(r=>r.duration>0&&r.duration<=r.slot&&!blockedOn(r.candidate,date))
+      .sort((a,b)=>a.distance-b.distance||a.pick.name.localeCompare(b.pick.name));
+}
 function leg(from, to, mode = 'Drive') {
     const minutes = from === to ? 5 : commuteMinutes(from, to);
     const label = (from === to || minutes === 10 || isWalk(from,to) ? 'Walk' : mode) + ' ~' + Math.max(5,Math.round(minutes/5)*5) + ' min';
@@ -136,7 +149,7 @@ function duration(item) {
 }
 function convert(item = {}) {
     return {
-        flight:item.flight, airport:item.airport, inboundRide:item.inboundRide, transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
+        fixedBooking:item.fixedBooking, flight:item.flight, airport:item.airport, inboundRide:item.inboundRide, transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
         duration: item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: item.tags || (/intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : []),
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
@@ -202,8 +215,8 @@ function buildSuggested(date) {
         Object.assign(items[0], {place: HOTEL, to: 'Diamond Head'});
         Object.assign(items[1], {preferred: 360, duration: 90, locked: true});
         Object.assign(items[2], {place: 'Diamond Head', to: WAIKIKI});
-        Object.assign(items[3], {place: WAIKIKI, to: 'Kualoa Ranch', locked: true});
-        Object.assign(items[6], {place: 'Kualoa Ranch', to: WAIKIKI, locked: true});
+        Object.assign(items[3], {place: WAIKIKI, to: 'Kualoa Ranch', locked: true, fixedBooking: true});
+        Object.assign(items[6], {place: 'Kualoa Ranch', to: WAIKIKI, locked: true, fixedBooking: true});
         Object.assign(items[7], {id: 'return-hotel', place: WAIKIKI, to: HOTEL});
         Object.assign(items[8], {id: 'free', flex: true});
         Object.assign(items[9], {id: 'prep-dress', kind: 'prep', place: HOTEL});
@@ -237,7 +250,7 @@ function buildSuggested(date) {
         items = [ride, dive, lunch, shop, toHotel, dinner, home];
     }
 
-    if (date === '2026-11-25' && items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title))) Object.assign(items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title)), {flight:true, textTime:'Add flight time', preferred:null, detail:'Sample arrival: 5:30 PM — add your actual flight time.'});
+    if (date === '2026-11-25' && items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title))) Object.assign(items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title)), {flight:true, locked:true, textTime:'Add flight time', preferred:null, detail:'Sample arrival: 5:30 PM — add your actual flight time.'});
 
     // The flight remains an unknown-time anchor until the traveler supplies a time.
     if (date === '2026-11-29') items.filter(item => /flight|HNL/i.test(item.title)).slice(-1).forEach(item => {
@@ -439,10 +452,12 @@ function sourceOf(item, date) {
     if (!sourceCache[date]) sourceCache[date] = new Map(buildSuggested(date).items.map(i => [i.id, i.sourceId]));
     return sourceCache[date].get(item.id) || item.id;
 }
+const fixedBooking = item => !!(item.booked || item.custom || item.flight || item.kind === 'flight' || item.fixedBooking);
 const lockable = item => !item.textTime && item.kind !== 'prep';
 const uidFor = (date, id) => (date + '-' + id).replace(/[^\w-]/g, '_');
 // Locking pins the shown start and end; unlocking restores the item's own preference.
 function toggleLock(item, shown) {
+    if (fixedBooking(item)) return !!item.locked;
     if (item.locked) {
         item.locked = false;
         if (item.userLocked) {
@@ -515,7 +530,7 @@ function importDays(data) {
             if(entry.rv){item.title=entry.rv;item.routeReview=true;}
             if(entry.ot){item.originalTitle=entry.ot;item.title=entry.tt;}
             item.id = entry.id; item.manualTime = !!entry.m; if (entry.e !== undefined) item.estimate = entry.e;
-            item.locked = !!entry.l;
+            item.locked = fixedBooking(item) || !!entry.l;
             if (minutes(entry.p) !== undefined) item.preferred = entry.p;
             if (minutes(entry.d)) item.duration = entry.d;
             if (entry.u && item.locked) Object.assign(item, {userLocked: true, basePreferred: minutes(entry.bp) ?? null, baseDuration: minutes(entry.bd) ?? item.duration});
@@ -676,13 +691,37 @@ function mount(root, ctx = {}) {
     function listFor(zone) {
         return zone === 'tray' ? current().unscheduled : current().items;
     }
+    function openSwap(id) {
+        const on=date, shown=dayResult(current(),on).items, index=shown.findIndex(i=>i.id===id), item=shown[index];
+        if(!item||item.locked||item.booked)return;
+        const catalog=ctx.swapCatalog();
+        const identify=i=>catalog.find(p=>p.id===i.sourceId||p.id===i.id||String(i.title||'').toLowerCase().includes(p.name.toLowerCase()));
+        const used=schedule().days.flatMap(d=>d.items.map(i=>identify(i)?.id||i.sourceId||i.id));
+        const origin=identify(shown[index-1]||{})||identify(item)||item;
+        const candidates=slotCandidates({item,previous:origin,next:shown[index+1],catalog,inPlan:used,date:on,mode:roadMode(item,{date:on},ctx)});
+        const sheet=document.createElement('dialog');sheet.setAttribute('data-testid','swap-sheet');sheet.className='swap-sheet';
+        sheet.innerHTML='<button type="button" data-close aria-label="Close">×</button><h2>Swap</h2><input type="search" aria-label="Search places" placeholder="Search places"><div data-results></div><button type="button" data-testid="swap-free">Remove, keep time free</button>';
+        const finish=choice=>{
+            const before=clone(days), restorePicks=ctx.swapPicks?.(identify(item),choice?.pick);
+            days[on]={...current(),chronological:true,items:shown.filter(i=>i.id!==id).map(i=>({...i,preferred:i.start,manualTime:true}))};
+            if(choice){const p=choice.pick;days[on].items.push({id:p.id,sourceId:p.id,custom:true,title:p.name,place:p.area||p.name,lat:p.lat,lng:p.lng,kind:'activity',preferred:item.start,duration:Math.min(choice.duration,choice.slot),manualTime:true,hours:p.hours,closed:choice.candidate.closed});}
+            days[on].items.sort((a,b)=>a.preferred-b.preferred);
+            sheet.close();sheet.remove();save();render();
+            ctx.undo?.('Swapped ·',()=>{Object.keys(days).forEach(k=>delete days[k]);Object.assign(days,before);restorePicks?.();save();render();});
+        };
+        const results=sheet.querySelector('[data-results]');
+        function filter(){const q=sheet.querySelector('input').value.toLowerCase();const rows=candidates.filter(r=>(r.pick.name+' '+r.pick.category).toLowerCase().includes(q)).slice(0,5);results.innerHTML=rows.map((r,n)=>'<button type="button" data-testid="swap-option" data-choice="'+n+'">'+esc(r.pick.name)+' · '+r.duration+' min · '+esc(r.travel.label)+'</button>').join('')||'<p>No matches</p>';results.querySelectorAll('button').forEach(b=>b.onclick=()=>finish(rows[+b.dataset.choice]));}
+        sheet.querySelector('input').oninput=filter;sheet.querySelector('[data-close]').onclick=()=>{sheet.close();sheet.remove();};sheet.querySelector('[data-testid=swap-free]').onclick=()=>finish(null);
+        root.appendChild(sheet);filter();sheet.showModal();
+    }
     function positionMessage(id, zone) {
         const list = zone === 'tray' ? current().unscheduled : visibleItems(current(), date);
         const index = list.findIndex(i => i.id === id);
         return `${list[index].title}, position ${index + 1} of ${list.length}.`;
     }
     function lockButton(i, title, uid) {
-        const label = i.locked ? 'Unlock time' : 'Lock time';
+        if (fixedBooking(i)) return `<span class="db-lock-toggle db-fixed-lock" data-testid="db-lock"><span data-testid="db-locked-tag">${icons.lock}<small>Locked</small></span></span>`;
+        const label = i.locked ? 'Unlock time' : 'Lock ' + title;
         return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(label)}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}${i.locked ? '<small>Locked</small>' : ''}</button>`;
     }
     function pair(i, tray, options = {}) {
@@ -696,7 +735,7 @@ function mount(root, ctx = {}) {
         const paths = {plane:'M2 13l8-3V3l2-1 2 1v7l8 3v2l-8-1v5l3 2v1l-5-1-5 1v-1l3-2v-5l-8 1Z',car:'M4 10l2-6h12l2 6M3 10h18v9H3ZM6 19v3m12-3v3M6 14h2m8 0h2',bus:'M5 3h14v16H5ZM5 11h14M8 19v3m8-3v3M8 15h1m6 0h1',shuttle:'M3 6h14l4 6v7H3ZM3 12h18M7 6v6m6-6v6M6 19v3m12-3v3'};
         const transportIcon = `<svg class="transport-icon" data-transport-icon="${transportType}" aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="${paths[transportType]}"/></svg>`;
         const hhmm = n => String(Math.floor(n / 60)).padStart(2,'0') + ':' + String(n % 60).padStart(2,'0');
-        const canEditTime = !ctx.shared && !tray && !print && !i.textTime && !i.flight && i.kind !== 'prep';
+        const canEditTime = !ctx.shared && !tray && !print && !i.textTime && i.kind !== 'prep';
         const travelTime = i.kind === 'travel';
         // Reuse persisted manualTime/estimate and duration; explicit arrival is start + duration.
         const arrivalEstimate = travelTime && (!i.manualTime || i.estimate);
@@ -707,7 +746,7 @@ function mount(root, ctx = {}) {
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
         const title = (!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
         const movable = !i.locked && i.kind !== 'prep' && !print;
-        const canLock = !tray && !print && lockable(i);
+        const canLock = !tray && !print && (lockable(i) || fixedBooking(i));
         const classes = ['db-pair', transport && 'db-transport', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
             i.kind === 'prep' && 'db-prep', i.flex && 'db-free', detail && 'db-expandable', open && 'is-open',
             picked?.id === i.id && picked.zone === (tray ? 'tray' : 'day') && 'db-picked'].filter(Boolean).join(' ');
@@ -717,7 +756,9 @@ function mount(root, ctx = {}) {
         const menuLabels = {handle: 'Drag to reorder', up: 'Move up', down: 'Move down', remove: 'Move to ideas', delete: 'Delete booking'};
         const menuMoves = (moves + (i.custom && !print ? button('delete', title) : '')).replace(/(<button[^>]*data-db-action="([^"]+)"[^>]*>)([\s\S]*?)(<\/button>)/g,
             (_, start, action, icon, end) => start + icon + '<span>' + menuLabels[action] + '</span>' + end);
-        const menuItems = (menuMoves + actions.replace('>Add it again', '><span aria-hidden="true">＋</span> Add it again').replace('>Move to another day', '><span aria-hidden="true">↗</span> Move to another day')).replace(/<button /g, '<button role="menuitem" ');
+        const swapAction = !tray && !print && !i.locked && !i.booked && !['prep','flight','travel'].includes(i.kind) && ctx.swapCatalog ? '<button data-testid="db-swap" data-db-action="swap">Swap</button>' : '';
+        const availableActions = actions;
+        const menuItems = (swapAction + menuMoves + availableActions.replace('>Add it again', '><span aria-hidden="true">＋</span> Add it again').replace('>Move to another day', '><span aria-hidden="true">↗</span> Move to another day')).replace(/<button /g, '<button role="menuitem" ');
         const hasMenu = !tray && !print && (i.custom || i.kind !== 'prep');
         const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}" aria-label="More actions for ${esc(title)}">⋯</button>` : '';
         const menu = hasMenu ? `<div hidden id="db-more-${uid}" data-testid="db-more-menu" role="menu">${menuItems}</div>` : '';
@@ -729,7 +770,7 @@ function mount(root, ctx = {}) {
         const heading = detail
             ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"><strong>${esc(title)}</strong><small>${placeText}</small><span class="db-expand-mark" aria-hidden="true">＋</span></button>`
             : `<strong id="db-title-${uid}">${esc(title)}</strong><small>${placeText}</small>`;
-        const lockedLabel = i.userLocked ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
+        const lockedLabel = !fixedBooking(i) ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
             ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight ? esc(cardFlightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
             ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt="">` : ''}
@@ -768,7 +809,10 @@ function mount(root, ctx = {}) {
         dialog.innerHTML = '<p>Unlock this item’s reserved time before changing it?</p><button data-testid="unlock-accept">Unlock this item</button><button data-testid="unlock-decline">Keep reserved time</button>';
         root.append(dialog); dialog.showModal();
         dialog.querySelector('[data-testid=unlock-decline]').onclick = () => dialog.remove();
-        dialog.querySelector('[data-testid=unlock-accept]').onclick = () => { toggleLock(item, lastResult.items.find(i => i.id === item.id)); save(); dialog.remove(); apply(); };
+        dialog.querySelector('[data-testid=unlock-accept]').onclick = () => { // Explicit move/time confirmation can release a reservation; the static tag cannot.
+            if (fixedBooking(item)) item.locked = false;
+            else toggleLock(item, lastResult.items.find(i => i.id === item.id));
+            save(); dialog.remove(); apply(); };
     }
     function reviewTransfers(day,item) {
         if(item.kind==='travel')return;
@@ -1061,9 +1105,9 @@ function mount(root, ctx = {}) {
     }
     function lock(id) {
         const item = current().items.find(i => i.id === id);
-        if (!item || !lockable(item)) return;
+        if (!item || !lockable(item) || fixedBooking(item)) return;
         const shown = lastResult.items.find(i => i.id === id);
-        if (item.locked) { confirmUnlock(item, () => { save(); render({id, zone:'day', action:'lock'}); announce('Unlocked ' + item.title + ' — it moves with the day again.'); }); return; }
+        if (item.locked && item.userLocked) { confirmUnlock(item, () => { save(); render({id, zone:'day', action:'lock'}); announce('Unlocked ' + item.title + ' — it moves with the day again.'); }); return; }
         const locked = toggleLock(item, shown);
         save();
         const result = render({id, zone: 'day', action: 'lock'});
@@ -1133,7 +1177,8 @@ function mount(root, ctx = {}) {
         const row = b.closest('[data-db-id]');
         if(action==='more'){ e.stopPropagation();const panel=b.closest('[data-db-id]').querySelector('[data-testid=db-more-menu]');const open=b.getAttribute('aria-expanded')!=='true';closeMenus();panel.hidden=!open;b.setAttribute('aria-expanded',String(open));if(open){positionMenu(b,panel);panel.querySelector('button')?.focus({preventScroll:true});}return;}
         if(action!=='handle')closeMenus();
-        if (['again','move-day','schedule'].includes(action)) { openTransfer(row.dataset.dbId, row.dataset.dbZone, action);
+        if(action==='swap'){openSwap(row.dataset.dbId);
+        } else if (['again','move-day','schedule'].includes(action)) { openTransfer(row.dataset.dbId, row.dataset.dbZone, action);
         } else if (action === 'edit-time') {
             openTime(date, row.dataset.dbId);
         } else if (action === 'close-time') {
@@ -1432,7 +1477,7 @@ function mount(root, ctx = {}) {
     return api;
 }
 const active = () => (session.active && session.active.root.isConnected ? session.active : null);
-window.DayBuilder = {convert,estimateTravel,parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+window.DayBuilder = {convert,slotCandidates,estimateTravel,parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
     toggleLock, exportDays, importDays, importForPlan, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
     openTime: (date, id) => active()?.openTime(date, id),

@@ -1629,7 +1629,9 @@
         function find(id,date){return model(date).items.find(function(it){return it.id===id;});}
         return {
             saveDraft:function(raw){if(state.shared||state.viewing==='finished')return;var list=readTrips(),t=list.find(function(t){return t.id===state.tripId;});if(t){t.builder=cloneData(raw);t.answers=cloneData(state.answers);writeTrips(list);}},
-            undo:function(message,restore){toast(message,restore);},
+            swapCatalog:function(){var c=pickCatalog();return c?(c.activities||[]).concat(c.restaurants||[]):[];},
+            swapPicks:function(oldPick,newPick){var before=cloneData(state.answers.picks||{activities:[],restaurants:[]});state.answers.picks=cloneData(before);var c=pickCatalog();[oldPick,newPick].forEach(function(p,index){if(!p)return;var key=c.restaurants.some(function(x){return x.id===p.id;})?'restaurants':'activities';state.answers.picks[key]=(state.answers.picks[key]||[]).filter(function(id){return id!==p.id;});if(index)state.answers.picks[key].push(p.id);});save();return function(){state.answers.picks=before;save();};},
+            undo:function(message,restore){toast(message,restore);toastEl.setAttribute('data-testid','plan-toast');toastEl.querySelector('button').setAttribute('data-testid','plan-undo');},
             ages:state.answers.ages, shared:!!state.shared||state.viewing==='finished', initial:(state.viewing==='finished'&&currentTrip()&&currentTrip().snapshot)?(currentTrip().snapshot.builder||null):(state.sharedBuilder||null),
             dayHead:function(date){var x=day(date);return x.d?dayHeadHTML(x.d,x.i,dayModel(x.d,x.i)):'';},
             dayFooter:function(date){var x=day(date);return x.d?dayFooterHTML(x.d,x.i,dayModel(x.d,x.i)):'';},
