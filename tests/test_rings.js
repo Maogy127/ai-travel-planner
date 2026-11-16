@@ -77,3 +77,7 @@ assert(/<div hidden[^>]*data-testid="ring-breakdown"/.test(compactDay));
 assert(!compactDay.includes('<figcaption>'));
 assert(!compactDay.includes('class="ring-values"'));
 console.log('PASS one compact, keyboard-accessible day ring summary with collapsed breakdown');
+// Polish 1: omit the empty recovery segment in every compact summary.
+const {summary}=require('../js/rings.js');
+assert(!summary({sleep:8,move:30,rec:0}).includes('Recover 0 min'));
+assert(summary({sleep:8,move:30,rec:15}).includes('Recover 15 min'));

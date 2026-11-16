@@ -73,3 +73,15 @@ const shuttle = B.reflow(B.buildSuggested('2026-11-28')).items.find(i => i.id ==
 assert.equal(shuttle.duration, 60, 'shuttle uses existing 60-minute default');
 assert(shuttle.duration > 0 && shuttle.duration <= 60);
 assert.deepEqual([shuttle.start, shuttle.end], [1245, 1305]);
+
+// Connector mode follows trip advice, with item overrides and close walks.
+const modeDay = {date:'2026-11-26',car:{level:'Not needed'},items:[
+ {id:'a',place:'A',preferred:600,duration:30,lat:21,lng:-158},
+ {id:'b',place:'B',preferred:700,duration:30,lat:21.1,lng:-158}
+]};
+assert.match(B.reflow(modeDay).items[1].travel.label,/^Uber ~/);
+assert.match(B.reflow({...modeDay,car:{level:'Required'}}).items[1].travel.label,/^Drive ~/);
+modeDay.items[1].transportMode='rideshare';
+assert.match(B.reflow({...modeDay,car:{level:'Required'}}).items[1].travel.label,/^Uber ~/);
+modeDay.items[1].lat=21.001;
+assert.match(B.reflow(modeDay).items[1].travel.label,/^Walk ~/);

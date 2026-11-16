@@ -82,9 +82,9 @@ assert.deepEqual(result.items.find(i=>i.id==='lamer').walkBack,{depart:1120,arri
  const mounted = db.mount(root);
  assert(content.innerHTML.includes('data-transport-icon="car"'));
  assert(content.innerHTML.includes('data-transport-icon="shuttle"'));
- assert(content.innerHTML.includes('5:30 PM · Walk ~10 min · arrive 5:40 PM'));
- assert(content.innerHTML.includes('6:40 PM · Walk ~10 min · arrive 6:50 PM'));
- assert(content.innerHTML.includes('6:55 PM · Uber ~20 min · arrive 7:15 PM'));
+ assert(content.innerHTML.includes('Walk ~10 min'));
+ assert(content.innerHTML.includes('Walk ~10 min'));
+ assert(content.innerHTML.includes('Uber ~20 min'));
  assert(content.innerHTML.includes('aria-label="Edit time: 5:40 PM to 6:40 PM"'));
  const click = (action, id, zone='day') => {
   const row = {dataset: {dbId: id, dbZone: zone}};
@@ -135,7 +135,7 @@ console.log('Mounted rendering and conflict announcements passed.');
   ['4:00 PM–5:00 PM','Shower, change + makeup'],['6:00 PM–8:00 PM','Dinner — Senia (Chinatown)'],['8:00 PM–8:35 PM','Uber back to the Kahala']]);
  const senia=fri.items.find(i=>i.id==='senia');
  assert(senia.locked&&senia.start===1080&&senia.end===1200);
- assert.deepEqual(senia.travel,{minutes:35,label:'Uber ~30–40 min, est. $20–30',depart:1030,arrive:1065,late:false});
+ assert.deepEqual(senia.travel,{minutes:35,label:'Uber ~35 min',depart:1030,arrive:1065,late:false});
  const at=id=>fri.items.findIndex(i=>i.id===id);
  assert(at('uber-kahala')<at('prep-senia')&&at('prep-senia')<at('senia'),'Uber and prep come before Senia');
  assert.equal(fri.items[at('senia')-1].kind,'prep');

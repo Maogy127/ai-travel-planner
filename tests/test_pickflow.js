@@ -9,7 +9,7 @@ const result=ctx.PickScheduler.schedule(a,c);assert.equal(result.unfit.length,0,
 const all=result.days.flatMap(d=>d.items);assert.equal(all.filter(i=>i.pick).length,7);assert.equal(all.find(i=>i.id==='diamond-head').time,'6:00 AM');assert.equal(all.find(i=>i.id==='lamer').time,'7:30 PM');assert.equal(all.find(i=>i.id==='senia').time,'6:00 PM');
 for(const d of result.days)for(const i of d.items)assert(!ctx.DayBuilder.closedOn(i,d.date));
 assert.equal(result.days.find(d=>d.items.some(i=>i.id==='waimea')).date,result.days.find(d=>d.items.some(i=>i.id==='laniakea')).date);
-const crowded={...a,end:'2026-11-26',picks:{activities:c.activities.map(i=>i.id),restaurants:c.restaurants.map(i=>i.id)}};const big=ctx.PickScheduler.schedule(crowded,c);assert(big.unfit.length);assert.equal(new Set([...big.days.flatMap(d=>d.items.filter(i=>i.pick).map(i=>i.id)),...big.unfit.map(i=>i.id)]).size,c.activities.length+c.restaurants.length);
+const crowded={...a,picks:{activities:c.activities.map(i=>i.id),restaurants:c.restaurants.map(i=>i.id)}};const big=ctx.PickScheduler.schedule(crowded,c);assert(big.unfit.length);assert.equal(new Set([...big.days.flatMap(d=>d.items.filter(i=>i.pick).map(i=>i.id)),...big.unfit.map(i=>i.id)]).size,c.activities.length+c.restaurants.length);
 const id=big.unfit[0].id;ctx.PickScheduler.remove(crowded,id);assert(!Object.values(crowded.picks).flat().includes(id));ctx.PickScheduler.swap(a,'bishop-museum',c);
 console.log('PASS pick catalog, matching, filters, scheduling, closures, reservations, clustering, unfit and helpers');
 for(const i of c.activities){
@@ -48,7 +48,7 @@ assert.equal(ctx.PickCatalog.duration(45),'45 min');assert.equal(ctx.PickCatalog
 assert.equal(ctx.PickCatalog.count(0,0,420),'Picked 0');
 assert.equal(ctx.PickCatalog.count(1,90,420),'Picked 1 · about 1 day');
 assert.equal(ctx.PickCatalog.count(5,850,420),'Picked 5 · about 3 days');
-assert(result.days.every(d=>d.theme===''));
+assert(result.days.every(d=>d.theme&&d.theme!=='Your picks')); // Derived one-line day subtitles.
 assert(all.find(i=>i.id==='diamond-head').wellness.type==='movement');
 assert(all.find(i=>i.id==='diamond-head').movementMinutes>0);
 assert.equal(ctx.PickScheduler.reason(c.restaurants.find(i=>i.id==='senia'),{start:'2026-11-25',end:'2026-11-26'}),'Booked Fri · outside your dates');
@@ -60,9 +60,9 @@ assert(app.includes('canSwap=!i.reservation&&PickScheduler.swap'));
 assert(!db.includes("${canLock ? lockChip : ''}"));
 console.log('PASS unique credited photos, count/duration copy, fork, pick themes, movement, single lock and unfit reasons/actions');
 // A booking on a conservative departure day needs a booking-specific explanation.
-assert.equal(ctx.PickScheduler.reason(c.restaurants.find(i=>i.id==='lamer'),crowded),'Booked Thu · on your travel day');
+assert.equal(ctx.PickScheduler.reason(c.restaurants.find(i=>i.id==='lamer'),{...crowded,end:'2026-11-26'}),'Booked Thu · on your travel day');
 assert.equal(JSON.stringify(ctx.PickScheduler.schedule(a,c)),JSON.stringify(ctx.PickScheduler.schedule(JSON.parse(JSON.stringify(a)),c)),'same picks rebuild deterministically');
-const pccOnly={...a,end:'2026-11-26',picks:{activities:['pcc'],restaurants:[]}};
+const pccOnly={...a,flightTime:'4:00 PM',end:'2026-11-26',picks:{activities:['pcc'],restaurants:[]}};
 assert(ctx.PickScheduler.schedule(pccOnly,c).unfit.some(i=>i.id==='pcc'));
 const fitting=ctx.PickScheduler.swap(pccOnly,'pcc',c);assert(fitting);
 assert(!ctx.PickScheduler.schedule(pccOnly,c).unfit.some(i=>i.id===fitting.id));
@@ -73,7 +73,7 @@ const exportIds=JSON.parse(exportFixture.replace(/'/g,'"'));
 const exportAnswers={...a,level:'unsure',picks:{activities:exportIds.filter(id=>c.activities.some(i=>i.id===id)),restaurants:['lamer','senia',...exportIds.filter(id=>c.restaurants.some(i=>i.id===id))]}};
 const exportPlan=ctx.PickScheduler.schedule(exportAnswers,c);
 assert.equal(exportPlan.unfit.length,0,JSON.stringify(exportPlan.unfit));
-assert.equal(exportPlan.days.flatMap(d=>d.items).length,17,'16 picks plus check-in; >=15 after removing one');
+assert.equal(exportPlan.days.flatMap(d=>d.items).length,16,'13 picks plus check-in, arrival meal and airport transfer');
 assert.deepEqual(exportPlan.days.map(d=>d.date),['2026-11-25','2026-11-26','2026-11-27','2026-11-28','2026-11-29']);
 console.log('PASS Python ICS fixture schedules every pick across Nov 25–29 with 16 stops after removal');
 
@@ -138,3 +138,45 @@ assert(app.includes("state.answers.pickBack=['fork'].concat(extra).includes(stat
 assert(app.includes("on('change-answers', function() {\n            go('dates');"));
 assert(app.includes('No matches · try another word'));
 console.log('PASS normalized search across all fields, fork/personalized Back and Draft answer editing');
+
+// Polish 1: early sample departure, fallback cutoff, shared pace and protected bookings.
+assert.equal(ctx.PickScheduler.departure(a).flight,480);
+assert.equal(result.leaveTime,295);
+assert(result.days.at(-1).items.every(i=>!i.pick));
+assert(result.days.at(-1).items.some(i=>i.id==='pick-airport'&&i.start===295));
+assert.equal(result.days.find(d=>d.items.some(i=>i.id==='lamer')).date,'2026-11-26');
+assert(big.unfit.every(i=>!i.reservation&&!i.locked&&!i.booked));
+const short=ctx.PickScheduler.schedule({...a,end:'2026-11-26'},c);
+assert(short.bookingIssues.some(i=>i.id==='senia'));
+assert(!short.unfit.some(i=>i.reservation));
+assert.equal(ctx.PickScheduler.pace({level:'gentle',pace:'Full-on'}),'gentle');
+assert.equal(ctx.PickScheduler.pace({level:'unsure',pace:'Easy'}),'gentle');
+assert.equal(ctx.PickScheduler.pace({level:'unsure'}),'active');
+assert.equal(ctx.PickScheduler.capacity({pace:'Easy'}),300);
+const fallback=ctx.PickScheduler.schedule({...a,start:'2026-12-01',end:'2026-12-02',picks:{activities:['diamond-head'],restaurants:['leonards']}},c);
+assert.equal(fallback.leaveTime,600);
+assert(fallback.unfit.some(i=>i.id==='diamond-head'));
+assert(ctx.PickScheduler.reason(fallback.unfit[0],{...a,start:'2026-12-01',end:'2026-12-02'}));
+assert(fallback.days.at(-1).items.filter(i=>i.pick).every(i=>i.kind==='meal'&&i.start>=420&&i.start+i.duration<=600));
+const breakfast=ctx.PickScheduler.schedule({...a,picks:{activities:['diamond-head','hanauma'],restaurants:['leonards','lamer','senia']}},c);
+const leonards=breakfast.days.flatMap(d=>d.items).find(i=>i.id==='leonards');
+assert(leonards&&leonards.start>=420&&leonards.start+leonards.duration<=600);
+for(const d of breakfast.days)for(const i of d.items.filter(i=>i.pick?.meals&&!i.locked)){
+ const windows={breakfast:[420,600],lunch:[690,810],dinner:[1080,1200],snack:[870,1020]};
+ assert(i.pick.meals.some(m=>i.start>=windows[m][0]&&i.start+i.duration<=windows[m][1]));
+}
+console.log('PASS polish departure/default cutoff, no silent losses, protected bookings, pace and morning bakery');
+
+const shortIds=new Set([...short.days.flatMap(d=>d.items.filter(i=>i.pick).map(i=>i.id)),...short.unfit.map(i=>i.id),...short.bookingIssues.map(i=>i.id)]);
+assert.equal(shortIds.size,7,'every pick is scheduled or explained, including bookings');
+assert.equal(ctx.PickScheduler.departure({...a,builderFlightTime:'11:00 AM'}).leave,475);
+assert.equal(ctx.PickScheduler.departure({...a,flightTime:'9:00 AM',builderFlightTime:'11:00 AM'}).leave,355);
+
+// Restaurants reserve meal windows before long activities in the full-catalog stress case.
+const stressMeals=big.days.flatMap(d=>d.items).filter(i=>i.pick?.meals);
+assert(stressMeals.length>=8,`Only ${stressMeals.length} restaurants fit`);
+for(const i of stressMeals){
+ const windows={breakfast:[420,600],lunch:[690,810],snack:[870,1020],dinner:[1080,1200]};
+ assert(i.pick.meals.some(m=>i.start>=windows[m][0]&&(i.locked?i.start:i.start+i.duration)<=windows[m][1]),i.id+' outside meal windows');
+}
+console.log('PASS full-catalog stress fits '+stressMeals.length+' restaurants in meal windows');

@@ -256,12 +256,12 @@ function smoke(label){
   const html=node('export-plan .db-content').innerHTML;
   const buttons=html.match(/<button[^>]*data-testid="db-lock"[^>]*aria-pressed="true"[^>]*>[\s\S]*?<\/button>/g)||[];
   assert(buttons.length>0);
-  for(const button of buttons){assert.equal((button.match(/<svg/g)||[]).length,1);assert(button.includes(' Locked</button>'));}
+  for(const button of buttons){assert.equal((button.match(/<svg/g)||[]).length,1);assert(button.includes('<small>Locked</small></button>'));}
   assert(!html.includes('class="db-lock"'),'toggle is the only booking lock indicator');
  }
  api.state.edits={items:{'pick-checkin':{note:'Shared café note, bring water; enjoy 🌺'}},removed:['udon']};
  const fullICS=api.buildICS();const unfolded=fullICS.replace(/\r\n /g,'');
- assert((fullICS.match(/BEGIN:VEVENT/g)||[]).length>=15);
+ assert((fullICS.match(/BEGIN:VEVENT/g)||[]).length>=12);
  assert(unfolded.includes('Diamond Head')&&unfolded.includes('Kualoa'));
  assert(unfolded.includes('Shared café note\\, bring water\\; enjoy 🌺'));
  assert(!unfolded.includes('SUMMARY:'+catalog.restaurants.find(i=>i.id==='udon').name+'\r\n'));

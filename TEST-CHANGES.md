@@ -844,7 +844,7 @@ COPY-AUDIT additions/corrections for this review (all visible changes; runtime s
 | Too many picks · {N} didn't fit | Unfit summary |
 | No time left / Closed those days | Unfit row reason |
 | Booked {weekday} · outside your dates | Unfit reservation reason |
-| Booked {weekday} · on your travel day / conflicts with your schedule | In-range unfit reservation reasons; never “No time left” |
+| Booked {weekday} · on your travel day / time conflict | In-range unfit reservation reasons; never “No time left” |
 | 🌿 GoNow Pick / 🔒 Booked {weekday} {time} | Separate tag and booking lines in locked mixed-result cards; name is line one |
 | Remove / Swap | Small outline row actions; Swap only if fitting |
 | About {minutes} min. {intro} | Existing scheduled pick description retained behind tap |
@@ -1086,3 +1086,73 @@ COPY-AUDIT: original string → final text. These are implementation estimates, 
 | {stars} ★ · {review} | {stars} ★ · {review} | 1 expected; verify |
 | ʻIolani Palace tour | ʻIolani Palace tour | 1 expected; verify |
 | 🌿 GoNow Pick | 🌿 GoNow Pick | 1 expected; verify |
+
+## pick-flow polish 1
+
+1. Departure uses the supplied flight time (answers, then saved builder), minus 3 h 05. The Nov 25–29 Oahu sample inherits the curated demo's **8:00 AM** flight / **4:55 AM** airport departure. Unknown flights elsewhere leave by 10:00 AM, with breakfast-length picks only; early departures exclude activities. An airport card remains in the plan. Unplaced picks retain a reason; the 24-hour dive buffer remains enforced.
+2. One shared pace resolver drives capacity and the existing plain day pace line: explicit gentle/active/athlete first, then legacy Easy/Moderate/Full-on, then active (the legacy Moderate default). Skipping the optional questions therefore never leaves pick-day pace unset.
+3. Reservations and other locked/booked catalog picks schedule first and never enter unfit. Unplaced bookings get one separate notice with Fix opening dates. Normal Thursday Nov 26 retains La Mer at 7:30 PM. Overflow now uses all picks on normal dates; a separate shortened-trip scenario checks Senia's outside-dates notice.
+4. Picked restaurants reserve meal windows before activities; full days are preferred before the arrival evening. Activities then fill remaining geographic clusters. Restaurant tags and operating hours constrain breakfast to 7–10, lunch to 11:30–13:30, dinner to 18–20, and snacks to the afternoon. Breakfast-tagged bakery picks, including Leonard's, stay in the morning. No additional meal placeholders were introduced.
+5. Normal day travel connectors show `Uber ~N min`, `Drive ~N min` or `Walk ~N min`. Coordinate pairs use a local distance estimate, 35 km/h driving or 4.5 km/h walking below 800 m, rounded to five minutes. Demo routes without coordinates retain their existing route estimates, using the same compact labels. Late connectors retain a compact leave-by warning.
+6. Locked toggles retain their testids and pressed state, use the normal compact icon control with colored fill, and expose Unlock time plus small Locked metadata.
+7. Pick dialogs hide the fixed pick footer while open. Add is primary, Remove outlined; both span the sheet width with an opaque sticky background. Reservations display booked metadata without a selection button.
+8. Both pick pages use white card backgrounds throughout hover, focus, selected and toggle-off states. Selected cards use the green border and checked circle; keyboard focus keeps an outline.
+9. Every pick day has a derived area subtitle, with arrival/departure fallbacks. Zero recovery is omitted from shared ring summaries, including demo summaries.
+
+Tests added/updated:
+
+- Node: `test_pickflow.js` covers the sample and unknown departure cutoff, airport anchor, non-silent overflow, booking separation, Thursday La Mer, shared pace/capacity, and morning Leonard's; `test_rings.js` covers zero/nonzero recovery copy.
+- Existing builder/render tests now assert compact travel and small Locked metadata. The export fixture has 13 picks rather than 16 because Sunday is no longer an activity day; calendar checks still require every selected pick to fit and at least 12 events after removal.
+- Supervisor Playwright: `test_pick_polish.py` (8866) checks sheets, exact Add/Remove labels/styles, reserved-sheet actions, footer visibility/button geometry, selection after hover/toggle-off, departure picks, pace, subtitles, compact travel regex/width, and recovery copy at 1280 and 390. `test_checkout.py` (8862) separates normal-date unlocked overflow from out-of-dates bookings and exercises Fix.
+- Existing Python travel expectations were updated to the compact labels. No screenshot helper contained a shortened-trip overflow fixture.
+
+Proofread checklist for supervisor (both 1280 + 390; browser verification pending):
+
+- [ ] Activity and restaurant titles/meta remain readable; unticked cards stay plain after hover and toggle-off.
+- [ ] Dialog Add/Remove is fully visible, opaque and full width; pick footer is hidden; booked dialog has no Add/Remove.
+- [ ] Day title, area subtitle and single plain pace line; no generic Your picks or Recover 0 min.
+- [ ] Travel connectors fit on one line; lock icons match other small controls.
+- [ ] Normal Nov 26 La Mer 7:30 PM; Sunday airport 4:55 AM with no activities.
+- [ ] Normal-date overflow has only unlocked picks with reasons; shortened dates show Senia's separate Fix notice and Fix opens dates.
+- [ ] Bakery/breakfast morning, lunch midday, dinner evening; inspect nearby clustering.
+
+COPY-AUDIT (dynamic strings are templates; existing Add/Remove/Locked wording is listed where its presentation changed):
+
+| Visible string/template | Location / purpose | 390px review |
+| --- | --- | --- |
+| Uber to HNL | Departure card title | Short |
+| Leave for the airport. | Departure card detail | Short |
+| Pace: Gentle / Active / Athlete · change | Existing pace line, now resolved on pick path | One line |
+| {venue} booked {weekday} · outside your dates Fix | Separate booking notice | Short venue name; one line |
+| {venue} booked {weekday} · on your travel day Fix | Travel-day booking notice | Short venue name; one line |
+| {venue} booked {weekday} · time conflict Fix | Conflicting booking notice | Short venue name; one line |
+| {venue} booked · time conflict Fix | Locked booking without reservation metadata | Short venue name; one line |
+| Fix | Opens dates editor | Small button |
+| Uber ~{N} min / Drive ~{N} min / Walk ~{N} min | Normal travel connector labels, replacing times/ranges/route caveat | One line |
+| Unlock time | Locked toggle accessible label | Screen reader label |
+| Locked | Small toggle metadata | Small inline text |
+| Add / Remove | Full-width dialog action | Exact label; no extra copy |
+| 🔒 Booked {date} {time} | Reservation dialog metadata | Details behind tap |
+| {area} / {area} & {area} | Day subtitle derived from picks | At most two areas |
+| Arrive & settle in | Empty arrival/day subtitle fallback | One line |
+| Fly home | Empty departure subtitle fallback | One line |
+| Sleep {H}h{MM} · Move {N} min | Summary when recovery rounds to zero | Removed empty Recover segment |
+
+Validation is local/offline: Node suites and Python compilation only. Chromium/Playwright and screenshots are reserved for the supervisor.
+
+Polish 1 supervisor follow-up:
+
+- Restored exact Lock time / Unlock time accessible labels and 44px transparent lock hit areas; both icons remain 18px with optional small Locked metadata.
+- Late connectors show `Uber ~{N} min · leave by {time}` (or Drive/Walk); normal connectors stay compact. COPY-AUDIT: this warning is one short line for the supervisor to review at 390px.
+- Added an opaque sticky sheet footer with top border/shadow and bottom safe-area padding; its normal-flow footprint and content gap keep the final review above the action.
+- Restaurants schedule before activities after protected bookings. Full-catalog Nov 25–29 stress fits all 13 restaurants; new assertions require at least 8, with meal-window checks (fixed bookings may finish after the window).
+- Removed the trailing dot separator before booking Fix. COPY-AUDIT booking templates above reflect this change.
+- Validation: all 26 Node suites and Python compilation; browser/screenshot review remains with supervisor. No existing assertion was weakened; the render assertion now requires the restored exact Unlock time label.
+
+Polish 1 remaining supervisor fixes:
+
+- Checkout asserts the booking text and same-line Fix button separately, including one-line geometry at 390.
+- Travel labels follow item/plan transport mode or daily car advice: Uber for the Oahu couple, Drive with a car, Walk nearby. Pick days retain template car advice. Both original late-connector expectations are restored exactly; width checks accept the optional leave-by suffix.
+- Print hides editing-only day options, add panels, item/trip menus, pace, overflow, check-in and booking search controls deterministically.
+- COPY-AUDIT correction: normal `Uber ~{N} min / Drive ~{N} min / Walk ~{N} min`; late `{mode} ~{N} min · leave by {time}`. Both target one line at 390.
+- Validation: all 26 Node suites passed; `py_compile` passed for all test Python files; `git diff --check` passed. Chromium remains supervisor-only. No network, commit, push or remote operations.

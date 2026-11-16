@@ -88,14 +88,20 @@ function commuteMinutes(from, to) {
     if (from === to) return 0;
     return routes[from + '|' + to] ?? routes[to + '|' + from] ?? 30;
 }
-function leg(from, to) {
+function roadMode(item = {}, day = {}, ctx = {}) {
+    const plan = sourcePlan(), sourceDay = plan.days.find(d => d.date === day.date) || {};
+    const mode = item.transportMode || item.pick?.transportMode || ctx.transportMode || day.transportMode || plan.transportMode;
+    if (/uber|rideshare|lyft|taxi/i.test(mode || '')) return 'Uber';
+    if (/walk/i.test(mode || '')) return 'Walk';
+    if (/drive|car/i.test(mode || '')) return 'Drive';
+    const car = day.car || sourceDay.car || plan.car;
+    const level = typeof car === 'string' ? car : car?.level || '';
+    if (/required|recommended|needed/i.test(level) && !/not needed/i.test(level)) return 'Drive';
+    return /not needed|no car|rideshare|uber/i.test(level + ' ' + (car?.note || '')) ? 'Uber' : 'Drive';
+}
+function leg(from, to, mode = 'Drive') {
     const minutes = from === to ? 5 : commuteMinutes(from, to);
-    let label = '~15–30 min, check route';
-    if (from === to) label = 'short walk, est.';
-    else if (minutes === 10) label = 'Walk ~10 min';
-    else if (isWalk(from, to)) label = 'Walk ~' + minutes + ' min';
-    else if (minutes === 60 && [from, to].includes('Kualoa Ranch')) label = 'Shuttle ~60 min';
-    else if (routes[from + '|' + to] || routes[to + '|' + from]) label = 'Uber ~' + minutes + ' min';
+    const label = (from === to || minutes === 10 || isWalk(from,to) ? 'Walk' : mode) + ' ~' + Math.max(5,Math.round(minutes/5)*5) + ' min';
     return {minutes, label};
 }
 // Reservation windows and booking lead times are not activity durations.
@@ -119,7 +125,7 @@ function duration(item) {
 }
 function convert(item = {}) {
     return {
-        locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
+        transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
         duration: item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
@@ -311,13 +317,19 @@ function reflow(day, ctx = {}) {
             output.push(item);
             continue;
         }
-        let travel = previous ? leg(previous.to || previous.place, item.place) : {minutes: 0, label: ''};
+        const mode = roadMode(item, day, ctx);
+        let travel = previous ? leg(previous.to || previous.place, item.place, mode) : {minutes: 0, label: ''};
+        if(previous&&[previous.lat,previous.lng,item.lat,item.lng].every(Number.isFinite)){
+            const km=Math.hypot((previous.lat-item.lat)*111,(previous.lng-item.lng)*111*Math.cos(item.lat*Math.PI/180));
+            const walking=km<0.8,minutes=Math.max(5,Math.round(km/(walking?4.5:35)*60/5)*5);
+            travel={minutes,label:(walking?'Walk':mode)+' ~'+minutes+' min'};
+        }
         if (previous?.place === 'Kahala palms' && item.place === WAIKIKI) {
             item.walkBack = {depart: previous.end, arrive: previous.end + 10};
-            travel = leg(HOTEL, WAIKIKI);
-            if (item.inboundRide) travel = {minutes: item.inboundRide.duration, label: 'Uber ~' + item.inboundRide.duration + ' min'};
+            travel = leg(HOTEL, WAIKIKI, mode);
+            if (item.inboundRide) travel = {minutes: item.inboundRide.duration, label: mode + ' ~' + item.inboundRide.duration + ' min'};
         } else if (item.inboundRide?.label && previous && (previous.to || previous.place) === item.inboundRide.place) {
-            travel = {minutes: item.inboundRide.duration, label: item.inboundRide.label};
+            travel = {minutes: item.inboundRide.duration, label: mode + ' ~' + item.inboundRide.duration + ' min'};
         }
         // Explicit rides already include arrival travel; free time and prep share a hotel room.
         if ((previous?.kind === 'travel' && previous.to === item.place) || (previous?.flex && item.kind === 'prep')) travel = {minutes: 0, label: ''};
@@ -351,6 +363,7 @@ function reflow(day, ctx = {}) {
             const buffer = item.dressy ? 15 : 0;
             const depart = item.locked && !item.textTime ? item.start - buffer - travel.minutes : previous.end;
             item.travel = {...travel, depart, arrive: depart + travel.minutes, late: item.locked && earliest + buffer > item.start};
+            if (item.travel.late) item.travel.label += ' · leave by ' + clock(depart);
             if (item.locked && !item.textTime && earliest + buffer > item.start) {
                 warn(previous, 'Ends ' + clock(previous.end) + " — you'd miss " + venue(item), undefined, 0);
             }
@@ -659,7 +672,7 @@ function mount(root, ctx = {}) {
     }
     function lockButton(i, title, uid) {
         const label = i.locked ? 'Unlock time' : 'Lock time';
-        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(i.locked ? 'Unlock time' : 'Lock time')}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}${i.locked ? ' Locked' : ''}</button>`;
+        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(label)}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}${i.locked ? '<small>Locked</small>' : ''}</button>`;
     }
     function pair(i, tray, options = {}) {
         const on = options.date || date;
@@ -872,8 +885,8 @@ function mount(root, ctx = {}) {
     }
     function timelineHTML(result, options) {
         return result.items.map(i => {
-            const travel = i.travel ? `<div class="db-travel${i.travel.late ? ' db-travel-late' : ''}" data-testid="db-travel">${i.travel.late ? esc(i.travel.label) + ' · leave by ' + clock(i.travel.depart) : clock(i.travel.depart) + ' · ' + esc(i.travel.label) + (i.travel.minutes ? ' · arrive ' + clock(i.travel.arrive) : '')}</div>` : '';
-            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">${clock(i.walkBack.depart)} · Walk ~10 min · arrive ${clock(i.walkBack.arrive)}</div>` : '') + (travel ? '<div data-testid="travel-chip">'+travel+'</div>' : '') + pair(i, false, options);
+            const travel = i.travel?.label ? `<div class="db-travel${i.travel.late ? ' db-travel-late' : ''}" data-testid="db-travel">${esc(i.travel.label)}</div>` : '';
+            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">Walk ~10 min</div>` : '') + (travel ? '<div data-testid="travel-chip">'+travel+'</div>' : '') + pair(i, false, options);
         }).join('');
     }
     function dayIndex(on) {

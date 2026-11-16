@@ -1612,3 +1612,32 @@ html{scroll-padding-bottom:var(--question-footer-clearance)}
 #sheet[data-testid=pick-details]{position:fixed;padding-top:56px}#pick-close{position:absolute;right:8px;top:8px;width:44px;height:44px;font-size:28px;border:0;background:transparent}
 .pick-photo-credit{display:block;font-size:11px;color:#687269;margin:5px 0 12px}.pick-photo-credit a{color:inherit}#pick-detail-toggle{width:100%;margin-top:16px}
 .unfit-notice summary{font-size:14px;cursor:pointer}.unfit-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:12px;align-items:center;padding:12px 0;border-top:1px solid #ccd6cc}.unfit-row small{display:block;font-size:12px}.unfit-actions{display:flex;gap:6px}.unfit-actions button{font-size:12px;padding:8px 10px;min-height:36px}
+
+/* Pick-flow polish: selection is border/check only; dialog owns its controls. */
+.pick-card.picked,.pick-card:hover,.pick-card:focus-within,.pick-toggle:hover,.pick-toggle:focus,.pick-toggle:active{background:#fff}
+.pick-toggle:focus-visible{outline:3px solid #b65923;outline-offset:-3px}
+body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;pointer-events:none}
+#sheet[data-testid=pick-details]{background:var(--surface,#fff);padding-bottom:24px}
+#pick-detail-toggle{position:sticky;bottom:0;box-sizing:border-box;min-height:48px;background:var(--accent-text);color:white}
+#pick-detail-toggle.outline{background:var(--surface,#fff);color:var(--ink);border:1px solid currentColor}
+.db-root .db-lock-toggle,.db-root .db-lock-toggle[aria-pressed=true],.db-root .db-lock-toggle[aria-pressed=true]:hover{display:inline-flex;align-items:center;justify-content:center;gap:4px;padding:4px;min-width:44px;min-height:44px;background:transparent;color:var(--ink-2);border:0;font-size:11px}
+.db-root .db-lock-toggle[aria-pressed=true] svg{fill:var(--accent-text);color:var(--accent-text)}
+.db-lock-toggle small{font-size:11px}.pace-control summary{font-weight:400;font-size:13px}
+.db-travel{white-space:nowrap}.day-title p{font-size:14px}.booking-issue{font-size:12px;display:flex;align-items:center;gap:4px}.booking-issue button{font-size:12px;padding:4px;min-height:32px}
+/* Override the global button:hover:not(:disabled) specificity on pick toggles. */
+.pick-card .pick-toggle:hover:not(:disabled),.pick-card .pick-toggle:focus,.pick-card .pick-toggle:active{background:#fff}
+
+/* Opaque sheet action surface keeps scrolling reviews behind the footer. */
+#sheet[data-testid=pick-details]{padding-bottom:calc(24px + env(safe-area-inset-bottom))}
+.pick-detail-footer{position:sticky;bottom:-1px;z-index:2;box-sizing:border-box;margin-top:24px;padding:12px 0 calc(12px + env(safe-area-inset-bottom));background:var(--surface,#fff);border-top:1px solid var(--line,#ccd6cc);box-shadow:0 -6px 12px var(--surface,#fff)}
+.pick-detail-footer #pick-detail-toggle{position:static;margin:0}
+.db-root .db-lock-toggle svg{width:18px;height:18px;flex-shrink:0}
+
+/* Editing controls never belong to the printed itinerary. */
+@media print {
+ main details.day-options, main details.day-add-panel, main details.item-more,
+ main details.trip-menu, main details.pace-control, main details.unfit-notice,
+ main details[data-testid="morning-checkin"], main details[data-testid="booking-searches"] {
+  display:none!important;
+ }
+}

@@ -82,7 +82,7 @@
   function sleepGoal(h){return Number.isInteger(h)?h+' h':sleepTime(h);}
   let sequence=0;
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  function summary(v){var m=Math.round(v.sleep*60);return 'Sleep '+Math.floor(m/60)+'h'+String(m%60).padStart(2,'0')+' · Move '+Math.round(v.move)+' min · Recover '+Math.round(v.rec)+' min';}
+  function summary(v){var m=Math.round(v.sleep*60);return 'Sleep '+Math.floor(m/60)+'h'+String(m%60).padStart(2,'0')+' · Move '+Math.round(v.move)+' min'+(Math.round(v.rec)>0?' · Recover '+Math.round(v.rec)+' min':'');}
   function render(result,options){
     options=options||{};
     const id='ring-breakdown-'+(++sequence);
