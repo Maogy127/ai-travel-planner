@@ -88,14 +88,31 @@ function commuteMinutes(from, to) {
     if (from === to) return 0;
     return routes[from + '|' + to] ?? routes[to + '|' + from] ?? 30;
 }
-function leg(from, to) {
+function roadMode(item = {}, day = {}, ctx = {}) {
+    const plan = sourcePlan(), sourceDay = plan.days.find(d => d.date === day.date) || {};
+    const mode = item.transportMode || item.pick?.transportMode || ctx.transportMode || day.transportMode || plan.transportMode;
+    if (/uber|rideshare|lyft|taxi/i.test(mode || '')) return 'Uber';
+    if (/walk/i.test(mode || '')) return 'Walk';
+    if (/drive|car/i.test(mode || '')) return 'Drive';
+    const car = day.car || sourceDay.car || plan.car;
+    const level = typeof car === 'string' ? car : car?.level || '';
+    if (/required|recommended|needed/i.test(level) && !/not needed/i.test(level)) return 'Drive';
+    return /not needed|no car|rideshare|uber/i.test(level + ' ' + (car?.note || '')) ? 'Uber' : 'Drive';
+}
+// Shared road estimate for coordinate legs and pick scheduling.
+function estimateTravel(a,b,mode='Uber') {
+    if(![a?.lat,a?.lng,b?.lat,b?.lng].every(Number.isFinite)) {
+        const minutes=a?.area&&a.area===b?.area?10:30;
+        return {minutes,label:mode+' ~'+minutes+' min'};
+    }
+    const roadKm=1.4*Math.hypot((a.lat-b.lat)*111,(a.lng-b.lng)*111*Math.cos(b.lat*Math.PI/180));
+    const walking=roadKm<=0.8;
+    const minutes=Math.max(walking?5:10,Math.round(roadKm/(walking?4.5:roadKm>10?35:25)*60/5)*5);
+    return {roadKm,minutes,label:(walking?'Walk':mode==='Walk'?'Uber':mode)+' ~'+minutes+' min'};
+}
+function leg(from, to, mode = 'Drive') {
     const minutes = from === to ? 5 : commuteMinutes(from, to);
-    let label = '~15–30 min, check route';
-    if (from === to) label = 'short walk, est.';
-    else if (minutes === 10) label = 'Walk ~10 min';
-    else if (isWalk(from, to)) label = 'Walk ~' + minutes + ' min';
-    else if (minutes === 60 && [from, to].includes('Kualoa Ranch')) label = 'Shuttle ~60 min';
-    else if (routes[from + '|' + to] || routes[to + '|' + from]) label = 'Uber ~' + minutes + ' min';
+    const label = (from === to || minutes === 10 || isWalk(from,to) ? 'Walk' : mode) + ' ~' + Math.max(5,Math.round(minutes/5)*5) + ' min';
     return {minutes, label};
 }
 // Reservation windows and booking lead times are not activity durations.
@@ -119,8 +136,8 @@ function duration(item) {
 }
 function convert(item = {}) {
     return {
-        closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: place(item.title || 'Activity'), preferred: parse(item.time),
-        duration: duration(item), walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
+        flight:item.flight, airport:item.airport, inboundRide:item.inboundRide, transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
+        duration: item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: item.tags || (/intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : []),
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
     };
@@ -311,13 +328,17 @@ function reflow(day, ctx = {}) {
             output.push(item);
             continue;
         }
-        let travel = previous ? leg(previous.to || previous.place, item.place) : {minutes: 0, label: ''};
+        const mode = roadMode(item, day, ctx);
+        let travel = previous ? leg(previous.to || previous.place, item.place, mode) : {minutes: 0, label: ''};
+        if(previous&&[previous.lat,previous.lng,item.lat,item.lng].every(Number.isFinite)){
+            travel=estimateTravel(previous,item,mode);
+        }
         if (previous?.place === 'Kahala palms' && item.place === WAIKIKI) {
             item.walkBack = {depart: previous.end, arrive: previous.end + 10};
-            travel = leg(HOTEL, WAIKIKI);
-            if (item.inboundRide) travel = {minutes: item.inboundRide.duration, label: 'Uber ~' + item.inboundRide.duration + ' min'};
+            travel = leg(HOTEL, WAIKIKI, mode);
+            if (item.inboundRide) travel = {minutes: item.inboundRide.duration, label: mode + ' ~' + item.inboundRide.duration + ' min'};
         } else if (item.inboundRide?.label && previous && (previous.to || previous.place) === item.inboundRide.place) {
-            travel = {minutes: item.inboundRide.duration, label: item.inboundRide.label};
+            travel = {minutes: item.inboundRide.duration, label: mode + ' ~' + item.inboundRide.duration + ' min'};
         }
         // Explicit rides already include arrival travel; free time and prep share a hotel room.
         if ((previous?.kind === 'travel' && previous.to === item.place) || (previous?.flex && item.kind === 'prep')) travel = {minutes: 0, label: ''};
@@ -351,6 +372,7 @@ function reflow(day, ctx = {}) {
             const buffer = item.dressy ? 15 : 0;
             const depart = item.locked && !item.textTime ? item.start - buffer - travel.minutes : previous.end;
             item.travel = {...travel, depart, arrive: depart + travel.minutes, late: item.locked && earliest + buffer > item.start};
+            if (item.travel.late) item.travel.label += ' · leave by ' + clock(depart);
             if (item.locked && !item.textTime && earliest + buffer > item.start) {
                 warn(previous, 'Ends ' + clock(previous.end) + " — you'd miss " + venue(item), undefined, 0);
             }
@@ -529,7 +551,8 @@ function mount(root, ctx = {}) {
     }
     const days = saved.days || {};
     if (ctx.shared) saved.days = days;
-    let flightTime = saved.flightTime || '';
+    let flightTime = saved.flightTime || sourcePlan().flightTime || '';
+    if(/^\d{1,2}:\d{2}$/.test(flightTime)){const parts=flightTime.split(':').map(Number);flightTime=clock(parts[0]*60+parts[1]);}
     if (ctx.dock) root.classList.add('db-dock');
     root.innerHTML = ctx.dock
         ? '<div class="db-workspace"><div class="db-content"></div><aside class="db-dock-tray" id="activity-tray" data-testid="activity-tray"></aside></div><div class="db-print-all"></div><div class="db-sr" role="status" aria-live="polite" data-testid="db-live"></div>'
@@ -658,7 +681,7 @@ function mount(root, ctx = {}) {
     }
     function lockButton(i, title, uid) {
         const label = i.locked ? 'Unlock time' : 'Lock time';
-        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(i.locked ? 'Unlock time' : 'Lock time')}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}</button>`;
+        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(label)}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}${i.locked ? '<small>Locked</small>' : ''}</button>`;
     }
     function pair(i, tray, options = {}) {
         const on = options.date || date;
@@ -696,7 +719,7 @@ function mount(root, ctx = {}) {
         const hasMenu = !tray && !print && (i.custom || i.kind !== 'prep');
         const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}" aria-label="More actions for ${esc(title)}">⋯</button>` : '';
         const menu = hasMenu ? `<div hidden id="db-more-${uid}" data-testid="db-more-menu" role="menu">${menuItems}</div>` : '';
-        const controls = moves || canLock || hasMenu ? `<div class="db-controls">${canLock ? lockChip : ''}${tray ? moves : menuButton}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
+        const controls = moves || canLock || hasMenu ? `<div class="db-controls">${tray ? moves : menuButton}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
         const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
         const noteId = 'db-note-' + uid;
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
@@ -871,8 +894,8 @@ function mount(root, ctx = {}) {
     }
     function timelineHTML(result, options) {
         return result.items.map(i => {
-            const travel = i.travel ? `<div class="db-travel${i.travel.late ? ' db-travel-late' : ''}" data-testid="db-travel">${i.travel.late ? esc(i.travel.label) + ' · leave by ' + clock(i.travel.depart) : clock(i.travel.depart) + ' · ' + esc(i.travel.label) + (i.travel.minutes ? ' · arrive ' + clock(i.travel.arrive) : '')}</div>` : '';
-            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">${clock(i.walkBack.depart)} · Walk ~10 min · arrive ${clock(i.walkBack.arrive)}</div>` : '') + (travel ? '<div data-testid="travel-chip">'+travel+'</div>' : '') + pair(i, false, options);
+            const travel = i.travel?.label ? `<div class="db-travel${i.travel.late ? ' db-travel-late' : ''}" data-testid="db-travel">${esc(i.travel.label)}</div>` : '';
+            return (i.walkBack ? `<div class="db-travel" data-testid="db-travel">Walk ~10 min</div>` : '') + (travel ? '<div data-testid="travel-chip">'+travel+'</div>' : '') + pair(i, false, options);
         }).join('');
     }
     function dayIndex(on) {
@@ -1407,7 +1430,7 @@ function mount(root, ctx = {}) {
     return api;
 }
 const active = () => (session.active && session.active.root.isConnected ? session.active : null);
-window.DayBuilder = {parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+window.DayBuilder = {estimateTravel,parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
     toggleLock, exportDays, importDays, importForPlan, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
     openTime: (date, id) => active()?.openTime(date, id),

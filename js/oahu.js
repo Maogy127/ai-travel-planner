@@ -6,7 +6,11 @@ window.OAHU_SAMPLE.days.forEach(function(d){d.items.forEach(function(i){if(/Blac
 
 // Curated operating rules; logistics are enforced by DayBuilder.
 window.OAHU_PLACE_RULES = [
-  ...['Pearl Harbor','Bishop Museum','Polynesian Cultural Center','Ala Moana Center','Black Friday shopping','Rainbow Drive-In'].map(name => ({name,closed:[{date:'2026-11-26',reason:'Thanksgiving'}]})),
+  {name:'Hanauma Bay',closed:[{weekdays:[1,2],reason:'Weekly closure'}]},
+  {name:'Polynesian Cultural Center',closed:[{weekdays:[0],reason:'Sunday'},{date:'2026-11-26',reason:'Thanksgiving'}]},
+  {name:'ʻIolani Palace',closed:[{weekdays:[0,1],reason:'Weekly closure'}]},
+  {name:'Helena',closed:[{weekdays:[0,1,6],reason:'Sample weekly hours'}],hours:{open:600,close:1170}},
+  ...['Pearl Harbor','Bishop Museum','Ala Moana Center','Black Friday shopping','Rainbow Drive-In'].map(name => ({name,closed:[{date:'2026-11-26',reason:'Thanksgiving'}]})),
   {name:'Ala Moana Center',hours:{date:'2026-11-27',open:480,close:1260}},
   {name:'Black Friday shopping',hours:{date:'2026-11-27',open:480,close:1260}},
   {name:'Diamond Head',titleStart:true,hours:{open:360,close:1080}},

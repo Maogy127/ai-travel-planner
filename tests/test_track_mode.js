@@ -98,9 +98,9 @@ function smoke(label){
    for(const [i,day] of api.state.plan.days.entries()){
     const html=h.dayHeadHTML(day,i,h.dayModel(day,i));
     assert(!/Sleep timing|Suggestions|day-guidance|Transport &amp; conditions|Typical conditions|Staying at/.test(html));
-    assert.equal((html.match(/<summary>Getting around<\/summary>/g)||[]).length,day.car&&(day.car.level||day.car.note)?1:0);
+    assert.equal((html.match(/Getting around · /g)||[]).length,day.car&&(day.car.level||day.car.note)?1:0);
     const noTransport=h.dayHeadHTML({...day,car:{}},i,h.dayModel(day,i));
-    assert(!noTransport.includes('data-testid="day-info"'));
+    assert.equal(noTransport.includes('data-testid="day-info"'),api.state.plan.id.startsWith('template-')&&day.items.length>1); // Template routes are real content.
     for(const id of ['traveler-name','traveler-pace','group-section'])assert.equal(html.includes('data-testid="'+id+'"'),track==='each');
     assert.equal((html.match(/data-testid="traveler-name"/g)||[]).length,track==='each'?n:0);
     assert.equal((html.match(/<summary[^>]*>Pace/g)||[]).length,1);
@@ -118,6 +118,11 @@ function smoke(label){
  assert(nudge.includes('Short night · 5h45 sleep'));
  assert(nudge.includes('sleep-nudge-keep') && nudge.includes('sleep-nudge-accept'));
  assert(nudge.includes('reserved times') && !nudge.includes('data-testid="sleep-proposal-apply"'));
+ // Airport-first and fixed-flight mornings never offer a later start.
+ for(const flags of [{kind:'flight'},{id:'pick-airport'},{kind:'travel',title:'Uber to HNL'},{locked:true,airport:true},{locked:true,tags:['flight']}]){
+  assert.equal(h.sleepNudgeHTML(nudgeDay,[{...reserved[0],...flags}],nudgeContext),'');
+ }
+ assert(nudge.includes('>Later start</button>')&&nudge.includes('>Keep</button>')); // Short labels retain existing actions.
  const proposal={hidden:true}, buttons={};let nudgeRemoved=false;
  const box={dataset:{date:nudgeDay.date},remove(){nudgeRemoved=true},querySelector(selector){
   if(selector==='[data-testid=sleep-proposal]')return proposal;

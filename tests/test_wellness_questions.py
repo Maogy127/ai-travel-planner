@@ -27,6 +27,21 @@ async def checks(browser):
             await show_day(pg, 1)
             await open_guidance(pg)
             assert await pg.locator('#day-1').get_by_test_id('wind-down').count() == 0
+            # The curated demo has different items. Establish the baseline from picks,
+            # using the real personalized fork; later rebuilds must preserve these rings.
+            await pg.evaluate("window.__gonow.go('fork')")
+            await pg.get_by_test_id('fork-yes').click()
+            await pg.get_by_test_id('q-skip').click()  # food
+            await pg.get_by_test_id('q-continue').click()  # sleep
+            await pg.get_by_test_id('q-continue').click()  # stay -> picks
+            await expect(pg.get_by_test_id('pick-activities')).to_be_visible()
+            await pg.get_by_test_id('pick-next').click()
+            await expect(pg.get_by_test_id('pick-food')).to_be_visible()
+            await pg.get_by_test_id('pick-next').click()
+            await expect(pg.get_by_test_id('confirm-plan')).to_be_visible()
+            await wait_plan(pg)
+            await show_day(pg, 1)
+            await open_guidance(pg)
             baseline = await pg.locator('#day-1 .day-head > .wellness-rings svg').get_attribute('aria-label')
             await personalize(pg)
             await expect(pg.get_by_test_id('diet-notes')).to_have_value('')

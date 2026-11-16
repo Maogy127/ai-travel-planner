@@ -4,7 +4,7 @@ from test_full import reopen_dashboard
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
 from playwright.async_api import expect
-from test_full import new
+from test_full import new, through_picks
 from test_wellness_home import serve_checks
 
 async def checks(browser):
@@ -31,6 +31,9 @@ async def checks(browser):
             # Personalized template avoids the curated sample's booked hotel.
             await pg.evaluate('window.__gonow.state.answers.templateOahu=true')
             await pg.get_by_test_id('q-continue').click()
+            # Stay answers now lead through activities and restaurants to the draft.
+            await through_picks(pg)
+            await expect(pg.get_by_test_id('confirm-plan')).to_be_visible()
             await pg.get_by_test_id('trip-add-hotel').wait_for(timeout=45000)
             await expect(pg.get_by_test_id('stay-later-note')).to_contain_text('Waikiki')
             print('PASS test_stay.py check line 35')

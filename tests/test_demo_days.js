@@ -49,7 +49,7 @@ const click=id=>node(`[data-testid="${id}"]`).click();
  const credits=JSON.parse(fs.readFileSync(`${__dirname}/../credits.json`,'utf8'));
  const expectedPhotos={
   '2026-11-25-0':'hnl','2026-11-25-1':'kahala-hotel',
-  '2026-11-26-1':'waikiki-sunset','2026-11-26-5':'kualoa',
+  '2026-11-26-1':'diamond-head-summit','2026-11-26-5':'kualoa',
   '2026-11-26-8':'kahala-lagoon','2026-11-26-11':'halekulani',
   '2026-11-27-1':'kewalo','2026-11-28-1':'lanikai',
   '2026-11-28-4':'makapuu','2026-11-28-9':'waikiki-sunset','2026-11-29-0':'hnl'
@@ -74,7 +74,7 @@ const click=id=>node(`[data-testid="${id}"]`).click();
     if(day.date==='2026-11-26'){
      const diamond=result.items.find(i=>/Diamond Head —/.test(i.title));
      assert(diamond.locked);assert.equal(diamond.start,360);assert.equal(diamond.end,450);
-     assert(/waikiki-sunset/.test(context.photoFor(diamond.sourceId)));
+     assert(/diamond-head-summit/.test(context.photoFor(diamond.sourceId)));
      assert(!/kualoa/.test(context.photoFor(diamond.sourceId)));
      assert(result.items.find(i=>i.to==='Diamond Head').end<=diamond.start);
     }
