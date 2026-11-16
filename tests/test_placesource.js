@@ -54,7 +54,7 @@ const memory=()=>{const map=new Map();return {getItem:k=>map.get(k)||null,setIte
  ctx.readTrips=()=>[];ctx.ITEM_PHOTOS={};ctx.showPlan=p=>ctx.state.plan=p;
  vm.runInContext(app.slice(app.indexOf('    function checkoutPicks('),app.indexOf('    function pickScreen(')),ctx);
  for(const [city,cat] of [['Seattle',c],['Tokyo',tokyo.catalog]]){
-  ctx.state={answers:{...a,destination:city,ages:[18,19]},tripId:null};ctx.pickCatalog=()=>cat;ctx.checkoutPicks();
+  ctx.state={answers:{...a,destination:city,ages:[18,19]},tripId:null};ctx.pickCatalog=()=>cat;/* Fresh checkout fixture: editing has a separate incremental path. */ctx.editingPicks=null;ctx.pickLocked=()=>false;ctx.checkoutPicks();
   assert.equal(ctx.state.plan.id,city.toLowerCase()+'-picks-'+a.start);assert(ctx.state.plan.days.some(d=>d.items.some(i=>i.pick)));
  }
  // Exercise loading, rejected lookup and loaded rendering with the real app function.

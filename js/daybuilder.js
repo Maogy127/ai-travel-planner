@@ -1432,7 +1432,7 @@ function mount(root, ctx = {}) {
     return api;
 }
 const active = () => (session.active && session.active.root.isConnected ? session.active : null);
-window.DayBuilder = {estimateTravel,parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+window.DayBuilder = {convert,estimateTravel,parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
     toggleLock, exportDays, importDays, importForPlan, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
     openTime: (date, id) => active()?.openTime(date, id),

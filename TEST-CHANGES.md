@@ -1274,3 +1274,24 @@ Tests:
 
 COPY-AUDIT:
 - No visible strings added or changed. Existing `Finding places near {city}…`, `Couldn’t load places`, and `Plan without picks` now reliably appear in their intended states. Existing card/detail/attribution copy remains unchanged; new testids are invisible.
+
+### Item B — Edit picks
+
+Changes:
+- Added a compact Edit picks header action for Draft and Ready pick plans, including any-city plans. Both pick pages reuse current selections. Builder locks and bookings stay selected, have a Locked tag and an inert aria-disabled toggle; detail sheets cannot remove them. Back from the first edit page cancels selection changes.
+- Added deterministic `PickScheduler.update`: reads exported or raw DayBuilder state, removes deselected unlocked picks, preserves locks/custom bookings/manual times, and tries free slots before releasing movable existing picks. Retries constrained ordering before reporting additions that cannot fit; locked items never enter the overflow warning.
+- Updates retain confirmation and Trip prep checks, refresh booking tasks/counts, and preserve raw builder entries for surviving times. Undo restores the previous plan, picks, builder storage, and Trip prep state.
+- No assets added or renamed; existing version tags/count stay unchanged.
+
+Tests:
+- `tests/test_edit_picks.js`: locked and booked times/days unchanged, manually edited time retained, removed pick absent, additions scheduled, existing unlocked slot retained when free space exists, deterministic results.
+- `tests/test_edit_picks.py`: supervisor-only port 8872 using `test_full.new` and `test_wellness_home.serve_checks`; Oahu at 1280/390, two real day-view locks, Draft and Ready updates, immutable ticked Locked cards, add two/remove one, confirmation retained, toast fit, exact serialized plan/builder/picks/prep Undo; mocked Seattle edit smoke reuses `test_any_city.routes`.
+- Updated fresh-checkout VM fixtures in `test_pickflow.js` and `test_placesource.js` to supply the new editing-session state/lock predicate; assertions remain intact with explanatory comments.
+- Local validation: every `tests/*.js` and `tests/*.cjs` suite passes, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. Python tests compile. Browser suites/screenshots require the supervisor and were not run here.
+
+COPY-AUDIT (every added/changed visible string):
+- “Edit picks”: compact header button; one line at 390px.
+- “Locked”: small card tag replaces the booking summary during editing, avoiding duplicate lock status; selected toggle is aria-disabled.
+- “Update plan”: last pick page primary action during editing only; one line.
+- “Plan updated · Undo”: existing toast with actionable Undo; explicitly nowrap and sized for 390px. No technical language or extra heading.
+- Existing booking task text and “N left” counts are reused without new wording. All remaining card/details copy is unchanged.

@@ -8,10 +8,11 @@ const capacity=a=>({gentle:300,active:420,athlete:540}[pace(a)]);
 function departure(a){const sample=!a.generic&&a.start==='2026-11-25'&&a.end==='2026-11-29';const flight=minute(a.flightTime||a.builderFlightTime)??(sample?480:null);return {flight,leave:flight===null?600:Math.max(0,flight-185)};}
 
 const travel=(a,b)=>!a||!b?0:window.DayBuilder.estimateTravel(a,b).minutes;
-function scheduleOnce(a,catalog,attempt=0){
+function scheduleOnce(a,catalog,attempt=0,seed){
  const start=a.start||'2026-11-25',end=a.end||'2026-11-29',days=[];
  for(let t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z')&&days.length<31;t+=86400000)days.push({date:new Date(t).toISOString().slice(0,10),theme:'',items:[],prep:[],unscheduled:[]});
  const picks=a.picks||{},all=[...catalog.activities,...catalog.restaurants].map(p=>catalog.generic?{...p,area:p.area||'',duration:p.duration||60,price:p.price||'',intro:p.intro||'',closed:p.closed||[],hours:p.parsedHours||p.hours||{}}:p),selected=all.filter(i=>i.reservation||i.locked||i.booked||(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id));
+ if(seed)days.forEach(d=>{d.items=JSON.parse(JSON.stringify(seed[d.date]||[]));});
  const unfit=[],bookingIssues=[];const {flight,leave}=departure({...a,start,end,generic:catalog.generic});
  function fits(p,d,t){
   const length=p.duration||60,close=d.date===end?Math.min(1320,leave):1320;
@@ -23,15 +24,16 @@ function scheduleOnce(a,catalog,attempt=0){
   if(window.DayBuilder.closedOn({...p,title:p.name},d.date))return false;
   if(window.DayBuilder.blockedOn({...p,title:p.name,preferred:t,duration:length},d.date,{departureDate:end,flightTime:flight?window.DayBuilder.clock(flight):''}))return false;
   if(d.items.reduce((s,i)=>s+i.duration,0)+length>capacity(a))return false;
-  return !d.items.some(i=>t<i.start+i.duration+travel(p,i.pick)+((i.tags||[]).includes('dive')?30:0)&&t+length+travel(p,i.pick)+((p.tags||[]).includes('dive')?30:0)>i.start);
+  return !d.items.some(i=>t<i.start+i.duration+travel(p,i.pick||i)+((i.tags||[]).includes('dive')?30:0)&&t+length+travel(p,i.pick||i)+((p.tags||[]).includes('dive')?30:0)>i.start);
  }
  const ordered=selected.slice().sort((x,y)=>Number(!!(y.reservation||y.locked||y.booked))-Number(!!(x.reservation||x.locked||x.booked))||Number(!!y.meals)-Number(!!x.meals)||Number(y.fixed!=null)-Number(x.fixed!=null)||(attempt%2?y.area.localeCompare(x.area):x.area.localeCompare(y.area))||(attempt%3?x.duration-y.duration:y.duration-x.duration));
  for(const p of ordered){
+  if(days.some(d=>d.items.some(i=>(i.sourceId||i.id)===p.id)))continue;
   if(p.minAge&&(a.ages||[]).some(age=>String(age).trim()!==''&&Number(age)<p.minAge)){((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);continue;}
   let placed=false;
   const rotated=days.slice(attempt%days.length).concat(days.slice(0,attempt%days.length));
-  const proximity=d=>{const activities=d.items.filter(i=>i.kind==='activity');return activities.length?Math.min(...activities.map(i=>travel(p,i.pick))):999;};
-  const candidates=rotated.sort((x,y)=>p.meals?Number(x.date===start)-Number(y.date===start)||proximity(x)-proximity(y):y.items.filter(i=>i.pick.area===p.area).length-x.items.filter(i=>i.pick.area===p.area).length);
+  const proximity=d=>{const activities=d.items.filter(i=>i.kind==='activity');return activities.length?Math.min(...activities.map(i=>travel(p,i.pick||i))):999;};
+  const candidates=rotated.sort((x,y)=>p.meals?Number(x.date===start)-Number(y.date===start)||proximity(x)-proximity(y):y.items.filter(i=>i.pick&&i.pick.area===p.area).length-x.items.filter(i=>i.pick&&i.pick.area===p.area).length);
   for(const d of candidates){
    if(p.reservation&&d.date!==p.reservation.date)continue;
    let slots=[];
@@ -42,9 +44,9 @@ function scheduleOnce(a,catalog,attempt=0){
   if(!placed)((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);
  }
  for(const d of days){d.items.sort((a,b)=>a.start-b.start);const names=[...new Set(d.items.filter(i=>i.kind==='activity').map(i=>i.area))];d.theme=names.slice(0,2).join(' & ')||[...new Set(d.items.map(i=>i.area))].slice(0,1).join('')||(d.date===end?'Fly home':'Arrive & settle in');}
- if(days.length)days[days.length-1].items.push({id:'pick-airport',title:catalog.generic?'Leave for the airport':'Uber to HNL',kind:'travel',time:window.DayBuilder.clock(leave),start:leave,duration:35,locked:true,desc:'Leave for the airport.',prep:[],bring:[],sources:[]});
- if(days[0]){days[0].unscheduled=unfit.map(p=>({id:p.id,title:p.name,place:p.area,duration:p.duration,kind:p.meals?'meal':'activity',custom:true,tags:p.tags||[],closed:p.closed,hours:p.hours}));if(!days[0].items.some(i=>i.start<1140))days[0].items.unshift({id:'pick-checkin',title:'Hotel check-in',kind:'stay',time:'6:00 PM',desc:'About 30 min. Settle in.',duration:30,prep:[],bring:[],sources:[]});}
- if(days[0]&&!days[0].items.some(i=>i.kind==='meal'||i.start>=1110))days[0].items.push({id:'pick-arrival-meal',title:'Evening meal near hotel',kind:'meal',time:'7:30 PM',desc:'About 60 min. Choose nearby.',duration:60,prep:[],bring:[],sources:[]});
+ if(!seed&&days.length)days[days.length-1].items.push({id:'pick-airport',title:catalog.generic?'Leave for the airport':'Uber to HNL',kind:'travel',time:window.DayBuilder.clock(leave),start:leave,duration:35,locked:true,desc:'Leave for the airport.',prep:[],bring:[],sources:[]});
+ if(days[0]){days[0].unscheduled=unfit.map(p=>({id:p.id,title:p.name,place:p.area,duration:p.duration,kind:p.meals?'meal':'activity',custom:true,tags:p.tags||[],closed:p.closed,hours:p.hours}));if(!seed&&!days[0].items.some(i=>i.start<1140))days[0].items.unshift({id:'pick-checkin',title:'Hotel check-in',kind:'stay',time:'6:00 PM',desc:'About 30 min. Settle in.',duration:30,prep:[],bring:[],sources:[]});}
+ if(!seed&&days[0]&&!days[0].items.some(i=>i.kind==='meal'||i.start>=1110))days[0].items.push({id:'pick-arrival-meal',title:'Evening meal near hotel',kind:'meal',time:'7:30 PM',desc:'About 60 min. Choose nearby.',duration:60,prep:[],bring:[],sources:[]});
  return {days,unfit:unfit.map(p=>({...p,reason:reason(p,{...a,start,end})})),bookingIssues,flightTime:flight===null?'':window.DayBuilder.clock(flight),leaveTime:leave,pace:pace(a)};
 }
 function schedule(a,catalog){
@@ -55,6 +57,32 @@ function schedule(a,catalog){
   if(candidate.bookingIssues.length<best.bookingIssues.length||candidate.bookingIssues.length===best.bookingIssues.length&&candidate.unfit.length<best.unfit.length)best=candidate;
  }
  return best;
+}
+// Builder times and locks are authoritative; keep all surviving slots first.
+function update(prevPlan,builderState,newPicks,answers,catalog){
+ const copy=x=>JSON.parse(JSON.stringify(x)),a={...answers,picks:copy(newPicks),start:prevPlan.start,end:prevPlan.end};
+ catalog=catalog||answers.catalog||(window.GONOW_PICKS&&(window.GONOW_PICKS[prevPlan.destinationId]||window.GONOW_PICKS.oahu))||{activities:[],restaurants:[]};
+ const selected=new Set([...(newPicks.activities||[]),...(newPicks.restaurants||[])]),old=new Set(prevPlan.days.flatMap(d=>d.items.filter(i=>i.pick).map(i=>i.id)));
+ const raw=builderState&&builderState.d?window.DayBuilder.importForPlan(builderState,prevPlan):builderState||{},seed={};
+ for(const d of prevPlan.days){
+  seed[d.date]=(raw.days&&raw.days[d.date]?raw.days[d.date].items:d.items).filter(i=>!old.has(i.sourceId||i.id)||selected.has(i.sourceId||i.id)||i.locked||i.booked).map(i=>{
+   const original=d.items.find(p=>p.id===(i.sourceId||i.id))||prevPlan.days.flatMap(d=>d.items).find(p=>p.id===(i.sourceId||i.id))||{};
+   const start=i.preferred!==undefined?i.preferred:minute(i.time);
+   return {...copy(original),...copy(i),start,time:start===null?i.time:window.DayBuilder.clock(start),pick:original.pick};
+  });
+ }
+ let result=scheduleOnce(a,catalog,0,seed);
+ for(let attempt=1;result.unfit.length&&attempt<18;attempt++){const trial=scheduleOnce(a,catalog,attempt,seed);if(trial.unfit.length<result.unfit.length)result=trial;}
+ // Only additions may overflow. Retry by releasing movable picks if necessary.
+ if(result.unfit.length){
+  const fixed={};for(const [date,items] of Object.entries(seed))fixed[date]=items.filter(i=>!i.pick||i.locked||i.booked||i.manualTime);
+  for(let attempt=0;result.unfit.length&&attempt<18;attempt++){
+   const retry=scheduleOnce(a,catalog,attempt,fixed);
+   if(retry.unfit.length<result.unfit.length&&!retry.unfit.some(i=>old.has(i.id)))result=retry;
+  }
+ }
+ result.unfit=result.unfit.filter(i=>!old.has(i.id)&&!i.locked&&!i.booked&&!i.reservation);
+ return result;
 }
 function reason(p,a){
  if(p.reservation){
@@ -67,5 +95,5 @@ function reason(p,a){
 function remove(a,id){for(const key of ['activities','restaurants'])a.picks[key]=(a.picks[key]||[]).filter(x=>x!==id);return a;}
 // Generic food also has a category; use meal membership for its selection list.
 function swap(a,id,catalog){const all=[...catalog.activities,...catalog.restaurants],old=all.find(i=>i.id===id);if(!old)return null;for(const next of all.filter(i=>i.id!==id&&(old.meals?!!i.meals&&(old.generic?i.category===old.category:i.section===old.section):!i.meals&&i.category===old.category)&&!Object.values(a.picks).flat().includes(i.id))){const copy=JSON.parse(JSON.stringify(a));remove(copy,id);copy.picks[old.meals?'restaurants':'activities'].push(next.id);if(!schedule(copy,catalog).unfit.some(i=>i.id===next.id)){a.picks=copy.picks;return next;}}return null;}
-window.PickScheduler={schedule,remove,swap,capacity,travel,reason,pace,departure};
+window.PickScheduler={schedule,update,remove,swap,capacity,travel,reason,pace,departure};
 })();

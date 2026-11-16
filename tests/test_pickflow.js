@@ -83,7 +83,8 @@ for(const name of ['styles','catalog','engine','diet'])vm.runInContext(fs.readFi
 function appFunction(name,next){const start=app.indexOf('    function '+name+'(');const end=app.indexOf('    function '+next+'(',start);assert(start>=0&&end>start);vm.runInContext(app.slice(start,end),ctx);}
 vm.runInContext(app.slice(app.indexOf('    function isPickPlan('),app.indexOf('    var KEY=')),ctx);
 ctx.state={answers:{...exportAnswers,destination:'Oahu',mode:'trip',styles:[]},edits:{items:{'diamond-head':{note:'Meet, then hike; together'}}},tripId:null};
-ctx.readTrips=()=>[];ctx.pickCatalog=()=>c;ctx.ITEM_PHOTOS={};ctx.showPlan=p=>{ctx.state.plan=p;};
+// Checkout now also dispatches editing sessions; this fixture covers fresh checkout.
+ctx.editingPicks=null;ctx.readTrips=()=>[];ctx.pickCatalog=()=>c;ctx.ITEM_PHOTOS={};ctx.showPlan=p=>{ctx.state.plan=p;};
 appFunction('checkoutPicks','pickScreen');ctx.checkoutPicks();
 const pickedPlan=ctx.state.plan;
 assert.equal(pickedPlan.id,'oahu-picks-2026-11-25');ctx.checkoutPicks();assert.equal(ctx.state.plan.id,pickedPlan.id);
