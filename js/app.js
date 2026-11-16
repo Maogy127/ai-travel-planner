@@ -534,7 +534,7 @@
         return (entry.rules||[]).map(function(r){
             var tag=r.unconfirmed?'Unconfirmed':(r.optional?'Optional — does not block this outing':(entry.blocked?'Not a match':'Requirement'));
             return '<p class="library-rule" data-testid="activity-restriction"><strong>'+esc(tag)+'.</strong> '+esc(r.text)+(r.url?' <a href="'+esc(r.url)+'" target="_blank" rel="noopener">'+esc(r.source||'Source')+'</a>':(r.source?' <span>'+esc(r.source)+'</span>':''))+'</p>';
-        }).join('')+(entry.blocked?'<p data-testid="activity-block">'+esc(entry.blocked)+'</p>':'');
+        }).join('');
     }
     function bindLibrary(aside){
         if(aside.dataset.bound)return;
@@ -550,7 +550,7 @@
                 var timeEntry=libraryEntries().find(function(item){return item.id===timeCard.dataset.id;});
                 var instances=window.DayBuilder.timeInstances(timeEntry.sourceId||timeEntry.id);
                 if(instances.length===1)window.DayBuilder.openTime(instances[0].date,instances[0].id);
-                else timeCard.querySelector('[data-time-choices]').innerHTML='<p>Choose a scheduled instance:</p>'+instances.map(function(i){return '<button type="button" data-testid="activity-time-choice" data-date="'+esc(i.date)+'" data-instance="'+esc(i.id)+'">'+esc(dateLabel(i.date))+' · '+esc(i.time)+'</button>';}).join('');
+                else timeCard.querySelector('[data-time-choices]').innerHTML='<p>Choose a time:</p>'+instances.map(function(i){return '<button type="button" data-testid="activity-time-choice" data-date="'+esc(i.date)+'" data-instance="'+esc(i.id)+'">'+esc(dateLabel(i.date))+' · '+esc(i.time)+'</button>';}).join('');
                 return;
             }
             var add=e.target.closest('[data-testid=activity-add], [data-testid=activity-add-again]');
@@ -560,7 +560,9 @@
             if(!entry||entry.blocked)return;
             var day=card.querySelector('[data-testid=activity-day]').value;
             var result=window.DayBuilder.addToDay(day, {origin:card,chestId:entry.chestId, sourceId:entry.sourceId||entry.id, title:entry.title, place:entry.place, duration:entry.duration, time:card.querySelector('[data-testid=activity-add-time]').value, closed:entry.closed, hours:entry.hours, rules:entry.rules, tags:entry.tags});
-            var note=card.querySelector('[data-testid=activity-add-note]');
+            // Successful adds repaint results; write feedback into the current row.
+            var noteCard=Array.from(aside.querySelectorAll('[data-testid=activity-result]')).find(function(row){return row.dataset.id===entry.id;})||card;
+            var note=noteCard.querySelector('[data-testid=activity-add-note]');
             if(note){note.textContent=result&&result.ok?'Added · booking still needed':(result&&result.reason)||'Could not add';var blocked=document.querySelector('[data-testid=blocked-message]');if(result&&!result.ok&&blocked)note.replaceChildren(blocked);}
         });
         aside.addEventListener('dragstart', function(e){
@@ -579,21 +581,40 @@
         var host=aside.querySelector('[data-testid=activity-results]');
         if(!q){host.innerHTML='';return;}
         if(!list.length){
-            host.innerHTML='<p data-testid="activity-no-results">No matches in the on-device library. This is not a live worldwide search.</p>';
+            host.innerHTML='<p data-testid="activity-no-results">No sample places found</p>';
             return;
         }
         host.innerHTML=list.map(function(entry){
             var photoSrc=entry.sourceId&&ITEM_PHOTOS[entry.sourceId];
             var img=photoSrc?photo(photoSrc, entry.title, 'library-photo'):'<p class="activity-fallback">'+icon('info')+' '+esc(entry.title)+' in '+esc(entry.place)+'. No verified activity photo.</p>';
+            var trayTitles={
+                'Royal Hawaiian Center & International Market Place':'Waikiki shopping',
+                'Kahala Beach “Jennie” palms — sunset photos':'Kahala sunset photos',
+                'Waikiki Beach sunset with Diamond Head':'Waikiki sunset',
+                'Lanikai Pillbox (Kaʻiwa Ridge) sunrise':'Lanikai Pillbox sunrise',
+                'Hotel dinner with optional drinks':'Hotel dinner',
+                'Land at HNL (Daniel K. Inouye Intl).':'Arrive at HNL',
+                'Check in at The Kahala Hotel & Resort':'Kahala check-in',
+                'Uber to Twin Fin, 2570 Kalākaua (Kualoa shuttle stop)':'Uber to Twin Fin',
+                'Kualoa Ranch shuttle from Twin Fin':'Shuttle to Kualoa',
+                'Free time at the Kahala (pool / beach downtime)':'Kahala free time',
+                'Uber to Kewalo Basin (Dive Oʻahu)':'Uber to Kewalo Basin',
+                'Uber from Ala Moana to The Kahala':'Uber to Kahala',
+                'Uber Reserve to Kailua Beach Park':'Uber to Kailua Beach',
+                'Uber to the Makapuʻu Lighthouse Trail lot':'Uber to Makapuʻu',
+                'Free Kahala shuttle from International Market Place':'Kahala shuttle'
+            };
+            var shortTitle=trayTitles[entry.title]||entry.title.split(/ [—–] /)[0];
+            var ageRule=(entry.rules||[]).find(function(r){return r.minAge&&!r.optional&&!r.unconfirmed;});
             var exists=window.DayBuilder.draftItems().some(function(i){return (i.sourceId||i.id)===(entry.sourceId||entry.id);});
-            return '<article class="library-card" data-testid="activity-result" data-id="'+esc(entry.id)+'" draggable="'+(!entry.blocked)+'"><h3>'+esc(entry.title)+'</h3>'+(entry.blocked?'<p>'+esc(entry.blocked)+'</p>':'')+dietTag(entry)+'<details><summary>Details</summary>'+img+restrictionHTML(entry)+'</details><label>Day <select data-testid="activity-day">'+dayOpts+'</select></label><label>Optional clock time (AM/PM)<input type="time" data-testid="activity-add-time"></label><button type="button" data-testid="activity-add"'+(entry.blocked?' disabled':'')+'>Add to trip</button>'+(exists?'<button type="button" data-testid="activity-edit-time">Edit scheduled time</button><div data-time-choices></div><button type="button" data-testid="activity-add-again"'+(entry.blocked?' disabled':'')+'>Add again</button>':'')+'<p data-testid="activity-add-note"></p></article>';
+            return '<article class="library-card" data-testid="activity-result" data-id="'+esc(entry.id)+'" draggable="'+(!entry.blocked)+'"><h3>'+esc(shortTitle)+'</h3>'+(entry.blocked?'<p data-testid="activity-age-notice">Requires age '+esc(ageRule?ageRule.minAge:21)+'+</p>':'')+'<details><summary>Details</summary>'+dietTag(entry)+(shortTitle!==entry.title?'<p>'+esc(entry.title)+'</p>':'')+img+restrictionHTML(entry)+'</details><label>Day <select data-testid="activity-day">'+dayOpts+'</select></label><label>Time (optional)<input type="time" data-testid="activity-add-time"></label><div class="library-actions"><button type="button" data-testid="activity-add"'+(entry.blocked?' disabled':'')+'>Add</button>'+(exists?'<button type="button" data-testid="activity-edit-time">Edit time</button><button type="button" data-testid="activity-add-again"'+(entry.blocked?' disabled':'')+'>Add again</button>':'')+'</div>'+(exists?'<div data-time-choices></div>':'')+'<p data-testid="activity-add-note"></p></article>';
 
         }).join('');
         host.querySelectorAll('[data-testid=activity-day]').forEach(function(select){select.value=window.DayBuilder.selectedDate();});
     }
     function ensureLibrary(aside){
         if(!aside.querySelector('[data-testid=activity-search]')){
-            aside.insertAdjacentHTML('afterbegin','<div class="library-search"><p data-testid="search-honesty">Search this device’s activity library for your destination. It is not a live worldwide place search. That would need a places provider and an API key, which this page does not use.</p><label>Search activities<input data-testid="activity-search" type="search" placeholder="Try dive, sunset, walk"></label><div data-testid="activity-results"></div></div>');
+            aside.insertAdjacentHTML('afterbegin','<div class="library-search"><p data-testid="search-honesty">Sample places for now</p><label>Search activities<input data-testid="activity-search" type="search" placeholder="Try dive, sunset, walk"></label><div data-testid="activity-results"></div></div>');
             bindLibrary(aside);
         }
         // The builder replaces the day's tray on every render. Keep its Schedule

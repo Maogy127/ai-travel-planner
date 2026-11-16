@@ -28,7 +28,7 @@ async def flow(b, base):
   ok('desktop tray visible', await tray.is_visible())
   sticky = await tray.evaluate('e=>getComputedStyle(e).position')
   ok('desktop tray sticky', sticky=='sticky', sticky)
-  ok('search is on-device', 'not a live worldwide' in (await pg.get_by_test_id('search-honesty').inner_text()).lower())
+  ok('search is on-device', await pg.get_by_test_id('search-honesty').inner_text() == 'Sample places for now')
   ok('initial library empty', await tray.get_by_test_id('activity-result').count()==0)
   await pg.get_by_test_id('activity-search').fill('zzzz-not-a-place')
   ok('no results stays honest', await pg.get_by_test_id('activity-no-results').is_visible())

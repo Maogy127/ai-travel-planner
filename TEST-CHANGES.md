@@ -703,3 +703,73 @@ Validation: all 24 Node suites pass; syntax checks pass for 42 JavaScript and 39
 Changed lines use short one-line copy (about eight words or fewer); long transport/cost information stays behind a tap. Inline feedback uses compact controls and prevents wrapping at mobile width. Pixel geometry remains for supervisor verification.
 
 Validation: **24 Node scripts pass**, `node --check` passes for **42 JS files**, Python syntax parsing passes for **40 Python files**, and `git diff --check` passes. No network, Chromium/Playwright execution, commit or push.
+
+### Preview polish 6
+
+- r23 follow-up validation: **19 top-level Node test scripts pass**, syntax passes for **53 JS/CJS and 41 Python files**, and `git diff --check` passes. No Chromium, network, commit or push. Viewport geometry awaits supervisor verification.
+- r23 follow-up: the failing y-coordinate assertion measures Add / Edit time / Add again, before blocked feedback exists. Their flex row was already centered; the mobile sheet’s 200ms transform transition could shift sequential bounding-box samples. Removed that positional transition so controls have stable tops immediately on opening. Kept actions and compact blocked feedback on one line, and normalized buttons to centered inline-flex, 44px border-box height, identical padding/border/line-height and zero margins.
+- Removed the search-to-results blank gap from the relocated empty `.db-tray` (70px minimum plus padding/margins). Empty trays now occupy zero height; empty library aria-live regions also retain their DOM/accessibility attributes with zero box height. Populated scheduling controls remain available.
+
+- Activity search uses one muted honesty line. Results use a shared 44px action row: Add, plus Edit time/Add again for activities already in the draft. Day and time inputs retain their behavior. Empty note/instance containers are hidden.
+- Library blocked feedback puts the full short reason, suggestion and adjacent × on one line when space permits; controls share the action buttons' height, padding and font. No truncation. This override is scoped to library rows; existing day-list/move feedback stays unchanged.
+- Long sample headings get concise names, with their full names behind Details. Requirements, Unconfirmed/Optional text, sources, photo information and dietary details stay behind that tap. Age blocking has one short visible summary; removed the duplicated detailed age paragraph. Age/add/suggestion behavior is preserved. Success feedback targets the current result row after the builder repaints it.
+- Updated the search-honesty assertion in `test_flow.py`. Grepped all Node/Python tests for the old search, Add and time-label copy; no other obsolete assertions found. Existing planner-rules checks cover day-list feedback and remain applicable.
+- Added `tests/test_activity_sheet.js`: real app/library renderer in the offline DOM harness; sample title lengths, empty/no-result search, existing-only actions, age restriction and optional-alcohol behavior. Added supervisor-only `tests/test_activity_sheet.py`, port **8855**, real **1280×844 / 390×844** viewports, PASS/FAIL lines: open desktop dock/mobile Activities, search Ala Moana, select Nov 26, Add, assert closed reason/suggestion/dismiss centers within 4px, one-row notice height, dismiss gap under 24px, equal-height action controls, one-line honesty/audited selectors, no-results, age summary, success note and no horizontal overflow. Browser tests were edited only, not run.
+
+#### COPY-AUDIT
+
+Lines at 390 are expected layout counts for supervisor verification; this agent did not run Chromium. Expanded Details content is intentionally behind a tap and may wrap. Search is initially empty without a repeated instruction.
+
+| String → final text | Lines at 390 |
+| --- | --- |
+| Activities → Activities (open button) | 1 |
+| Close activities → Close activities | 1 |
+| Search this device’s activity library…not a live worldwide…places provider…API key → Sample places for now | 1 |
+| Search activities → Search activities | 1 |
+| Try dive, sunset, walk → Try dive, sunset, walk | 1 |
+| No matches in the on-device library… → No sample places found | 1 |
+| Add to trip → Add | 1 |
+| Edit scheduled time → Edit time | 1 |
+| Add again → Add again (existing activity only) | 1 |
+| Day → Day | 1 |
+| Optional clock time (AM/PM) → Time (optional) | 1 |
+| Details → Details | 1 |
+| Requirement / Unconfirmed / Optional — does not block this outing / Not a match → retained inside Details | Behind tap |
+| Your party includes age… + repeated requirement → Requires age N+ | 1 |
+| Added · booking still needed → Added · booking still needed | 1 |
+| Could not add → Could not add | 1 |
+| Choose a scheduled instance: → Choose a time: | 1 |
+| Scheduled instance date/time → existing date · time | 1 |
+| Ala Moana closed Thu → Ala Moana closed Thu | 1 |
+| Ala Moana outside hours → Ala Moana outside hours | 1 |
+| Dive too close to flight → Dive too close to flight | 1 |
+| Add to Fri / other suggested weekday → unchanged | 1 |
+| × (Dismiss) → × (Dismiss) | 1 |
+| Beginner intro dive — Dive Oʻahu, Kewalo Basin → Beginner intro dive | 1 |
+| Waikiki parasail — X-Treme Parasail → Waikiki parasail | 1 |
+| Kualoa Ranch — Jurassic Adventure (not UTV) → Kualoa Ranch | 1 |
+| Black Friday shopping — Ala Moana Center → Black Friday shopping | 1 |
+| Royal Hawaiian Center & International Market Place → Waikiki shopping | 1 |
+| Kahala Beach “Jennie” palms — sunset photos → Kahala sunset photos | 1 |
+| Waikiki Beach sunset with Diamond Head → Waikiki sunset | 1 |
+| Lanikai Pillbox (Kaʻiwa Ridge) sunrise → Lanikai Pillbox sunrise | 1 |
+| Diamond Head — 6:00 AM entry slot → Diamond Head | 1 |
+| Hotel dinner with optional drinks → Hotel dinner | 1 |
+| Local market food stalls — pick a vendor near your stay → Local market food stalls | 1 |
+| City history museum — check opening hours → City history museum | 1 |
+| Land at HNL (Daniel K. Inouye Intl). → Arrive at HNL | 1 |
+| Check in at The Kahala Hotel & Resort → Kahala check-in | 1 |
+| Uber to Twin Fin, 2570 Kalākaua (Kualoa shuttle stop) → Uber to Twin Fin | 1 |
+| Kualoa Ranch shuttle from Twin Fin → Shuttle to Kualoa | 1 |
+| Free time at the Kahala (pool / beach downtime) → Kahala free time | 1 |
+| Birthday dinner — La Mer at Halekulani → Birthday dinner | 1 |
+| Uber to Kewalo Basin (Dive Oʻahu) → Uber to Kewalo Basin | 1 |
+| Uber from Ala Moana to The Kahala → Uber to Kahala | 1 |
+| Uber Reserve to Kailua Beach Park → Uber to Kailua Beach | 1 |
+| Kailua breakfast — Kalapawai Market or Over Easy → Kailua breakfast | 1 |
+| Uber to the Makapuʻu Lighthouse Trail lot → Uber to Makapuʻu | 1 |
+| Free Kahala shuttle from International Market Place → Kahala shuttle | 1 |
+| Other short result names → unchanged; offline sample headings ≤32 characters | 1 |
+| Full venue titles, photo fallback/credit, restriction explanations and dietary reasons → Details | Behind tap |
+
+Validation: **25 Node scripts pass**; syntax checks pass for **43 JavaScript/CJS and 41 Python files**; `git diff --check` passes. No network, browser execution, commit or push.

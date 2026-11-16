@@ -1588,3 +1588,20 @@ html{scroll-padding-bottom:var(--question-footer-clearance)}
 [data-testid=blocked-reason]{display:block;min-width:0;white-space:normal;overflow-wrap:anywhere}
 [data-testid=blocked-message] button{flex-shrink:0}
 .db-item [data-testid=blocked-message]{grid-column:1/-1}
+
+/* Preview polish 6: compact library actions and inline blocked feedback. */
+.library-actions{display:flex;align-items:center;gap:8px;flex-wrap:nowrap;margin-top:8px}
+.library-actions button,.library-card [data-testid=blocked-message] button{display:inline-flex;align-items:center;justify-content:center;flex:0 0 auto;box-sizing:border-box;height:44px;min-height:44px;padding:8px;border:1px solid var(--boundary);font-size:12px;line-height:20px;white-space:nowrap;margin:0}
+.library-search [data-testid=search-honesty]{color:var(--ink-2);font-size:13px;line-height:20px}
+.library-card [data-testid=activity-add-note]:empty,.library-card [data-time-choices]:empty{display:none}
+.library-card [data-testid=blocked-message]{display:inline-flex;flex-direction:row;align-items:center;flex-wrap:nowrap;gap:6px;line-height:20px}
+.library-card [data-testid=blocked-reason]{white-space:nowrap;overflow-wrap:normal}
+.library-card .db-blocked-actions{display:inline-flex;align-items:center;gap:6px}
+.library-card [data-testid=blocked-dismiss]{margin-left:0;min-width:44px}
+.library-card [data-testid=activity-add-note]{font-size:13px;line-height:20px}
+
+/* Opening the sheet must not move controls while they are being used/measured. */
+.db-root.db-dock .db-dock-tray{transition:none}
+/* The relocated scheduling tray has no box when there is nothing to schedule. */
+.library-search > .db-tray:empty{min-height:0;height:0;padding:0;margin:0;border:0;gap:0}
+.library-search [aria-live]:empty{min-height:0;height:0;padding:0;margin:0;border:0}
