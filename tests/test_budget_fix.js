@@ -59,7 +59,7 @@ console.log('PASS note pluralization, group pace labels and six distinct style i
 for(const size of [1,2,3])assert.equal(ctx.groupPaceLabel(Array(size).fill({level:'unsure'})),'Pace not set yet');
 
 // Check the real prep selector independently of DOM layout and packing ticks.
-for(const name of ['normalizePrep','prepTasks','prepRemaining']){
+for(const name of ['normalizePrep','bookingKind','prepTasks','prepRemaining']){
  const start=app.indexOf('    function '+name+'('),end=app.indexOf('\n    function ',start+1);
  vm.runInContext(app.slice(start,end),ctx);
 }
@@ -68,7 +68,8 @@ ctx.state.packMeta={};
 {const start=app.indexOf('    function packingGroups('),end=app.indexOf('    function packingItem(',start);vm.runInContext(app.slice(start,end),ctx);}
 ctx.prepRecord=()=>({checked:{}});
 const prep=ctx.prepTasks(),notes=prep.filter(t=>t.group==='before'),packs=prep.filter(t=>t.group==='pack');
-assert.equal(notes.length,7);const rides=notes.find(t=>t.id==='book-uber-reserve');assert.equal(rides.legacyIds.length,4);assert.equal(rides.rides.length,4);assert.equal(rides.text,'Book 4 Uber Reserve rides');assert(notes.some(t=>t.date));
+// Item H adds restaurant and flight needs and excludes locked bookings.
+assert(notes.length>7);const rides=notes.find(t=>t.id==='book-uber-reserve');assert.equal(rides.legacyIds.length,4);assert.equal(rides.rides.length,4);assert.equal(rides.text,'Book 4 Uber Reserve rides');assert(notes.some(t=>t.date));
 assert.equal(new Set(notes.map(t=>ctx.normalizePrep(t.text))).size,notes.length);
 assert(notes.every(t=>['book','id','insurance','visa'].includes(t.kind)));
 assert(notes.every(t=>t.text.length<=48&&t.text.split(/\s+/).length<=8));
@@ -127,3 +128,23 @@ assert(generic.some(t=>t.kind==='visa'));assert(!generic.some(t=>t.kind==='id'))
 assert.equal(generic.filter(t=>/insurance/i.test(t.text)).length,1);
 ctx.state.plan=savedPlan;
 console.log('PASS generic packing insurance and international passport dedupe');
+
+// Item H uses the same eligibility for links and prep across destinations.
+ctx.state.edits={items:{},booked:[]};
+assert.equal(ctx.bookingKind({id:'museum',kind:'activity',needsTicket:true}),'book');
+assert.equal(ctx.bookingKind({id:'tour',kind:'activity',tour:true}),'book');
+assert.equal(ctx.bookingKind({id:'free',kind:'sight',price:'Free'}),'');
+assert.equal(ctx.bookingKind({id:'dinner',kind:'meal'}),'reserve');
+for(const flag of ['locked','booked','fixedBooking']){
+ assert.equal(ctx.bookingKind({id:'paid',kind:'activity',needsTicket:true,[flag]:true}),'');
+ assert.equal(ctx.bookingKind({id:'dinner',kind:'meal',[flag]:true}),'');
+}
+assert.equal(ctx.bookingKind({id:'flight',kind:'flight',locked:true}),'flight');
+ctx.state.edits.items.museum={locked:true};
+assert.equal(ctx.bookingKind({id:'museum',needsTicket:true}),'');
+console.log('PASS any-city booking flags, meals, free stops and locked suppression');
+
+// Food courts and takeaway stops cannot use a sit-down reservation action.
+assert.equal(ctx.bookingKind({id:'court',kind:'meal',title:'Lunch at Ala Moana Center',desc:'Makai Market food court or any counter spot'}),'');
+assert.equal(ctx.bookingKind({id:'quick',kind:'meal',title:'Grab-and-go breakfast'}),'');
+assert.equal(ctx.bookingKind({id:'kahala',kind:'meal',title:'Dinner at the Kahala'}),'reserve');

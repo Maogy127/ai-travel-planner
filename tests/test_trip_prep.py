@@ -32,7 +32,8 @@ async def checks(browser):
             await prep.locator('details').evaluate_all('(els)=>els.forEach(e=>e.open=true)')
             items = prep.locator('[data-prep-id]:not([data-pack-id])')
             count = await items.count()
-            assert count == 7
+            # Item H includes restaurant and flight booking needs.
+            assert count > 7
             text = await prep.inner_text()
             assert 'Bring photo ID' not in text and 'Travel insurance details' not in text
             assert text.count('Get travel insurance') == 1

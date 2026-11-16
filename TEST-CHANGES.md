@@ -1603,3 +1603,51 @@ Tests:
 
 COPY-AUDIT — every visible string added/changed:
 - No product UI copy added or changed. The temporary browser-test fixture `A long trip title with plenty of room to explore Oahu` exercises truncation and is restored immediately afterward; it is not shipped UI copy.
+
+
+### Item H — Good to know + book links
+
+Changes:
+- Moved local guidance out of the plan footer into one collapsed Good to know row in Trip prep, with an aria-expanded toggle. Long static facts expand individually; added an official entry-guidance link and destination emergency numbers.
+- Removed Booking searches, Book this, secondary search blocks, the redundant Bookable badge and the dead demo booking modal. Contextual links reuse the partner URL builder with target="_blank" and rel="noopener sponsored". The single fee disclosure is inside Good to know.
+- Added Book flights to the flights step and arrival/return item details; Find a hotel beside the hotel control only without a hotel; Book for ticketed activities and Reserve for meals. Locked/booked stops have no Book/Reserve action. Flight searches remain available on fixed flight anchors.
+- Unified booking eligibility with persisted Trip prep checks, deduplicated venue labels and retained checked rows. Removed or locked/booked stops drop out of prep; checking a need keeps its plan link. Ticket flags survive any-city place results, scheduling and builder conversion. Existing ride checklist migration remains covered.
+- No assets added or renamed; index cache tags and the travel-time asset count are unchanged.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 55 Python test files.
+- Added tests/test_book_links.py using test_full.new and test_wellness_home.serve_checks, port 8878, at 1280 and 390: collapsed/expanded guidance, footer removal, Kualoa Book, restaurant Reserve, locked La Mer suppression, flight links and step, conditional hotel link/checklist, checked-state reload persistence, unique prep rows, safe external links and overflow checks.
+- Updated prior affiliate/local-guidance checks for the single prep disclosure and distributed links; updated fixed checklist counts with comments explaining the new needs. Added Node eligibility checks for ticket flags, tours, free stops, meals and locked/booked suppression.
+- Chromium/Playwright and screenshots remain supervisor-run. No browser, network, commits, pushes or remote changes performed.
+
+COPY-AUDIT — every visible string added/changed:
+- `Good to know` replaces `Travel info`; one collapsed row in Trip prep.
+- `We may earn a fee` replaces the old long partner disclosure; appears once behind Good to know.
+- `Book flights`, `Find a hotel`, `Book`, `Reserve`: concise contextual link labels, one line at 390px.
+- `Book <activity>` and `Reserve <restaurant>`: dynamic checklist labels use existing venue/booking names, limited to eight words and 48 characters; long labels stay on one line. Existing Kualoa Jurassic Adventure, intro dive, Waikiki parasail and grouped Uber Reserve labels remain.
+- `Entry rules · Check official guidance`: one official-guidance link inside Good to know.
+- `Emergency: 911` (Oahu, Cancun, Banff, Costa Rica, New York), `Emergency: 112` (Lisbon, Reykjavik, Bali, Barcelona), `Emergency: 110 police · 119 ambulance` (Kyoto), `Emergency: 112 from mobile` (Cape Town): one destination fact, expandable if long.
+- Removed visible `Booking searches`, `Book this`, `Find/Book this · Secondary search options`, `Bookable`, partner headings and footer booking instructions. Removed the unused demo booking modal's title, explanation and buttons; no replacement dead UI.
+- Existing local time, currency, languages, plugs, voltage, tipping, weather/rate status and source copy are unchanged; static fact text now expands in place on tap without duplicating it.
+
+
+### Item H follow-up — Booking detail targets and guidance facts
+
+Changes:
+- Target the Kualoa Jurassic Adventure card by its exact data-db-id, rather than the locked shuttle. Assert Book inside its expanded DayBuilder detail panel; retain locked La Mer suppression and add Senia/food-court suppression checks. Use Dinner at the Kahala for the unlocked sit-down reservation check.
+- Carry ticket/tour booking metadata from the current DayBuilder item into itemArticle; both builder details and legacy itemArticle reuse bookingLink. Exclude food courts, counter spots, food stalls and grab-and-go meals from reservation eligibility.
+- Render static local facts as paragraphs under one collapsed Good to know disclosure. Remove empty fact disclosures and their obsolete styles; retain full fact text, the live clock node and the single fee disclosure. Wire the toggle to its content region with aria-controls.
+- Fix the full-suite disclosure check to reset the helper-opened row before clicking it. Count attraction links across mounted days, including Lisbon; explicitly assert the locked Diamond Head card has no booking action and the unlocked Kualoa expanded panel does.
+- Preserve existing testids, assets, cache tags and asset count. Keep prior uncommitted changes.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 55 Python test files.
+- Extend existing tests/test_book_links.py (test_full.new + test_wellness_home.serve_checks, unique port 8878) and tests/test_full.py; add Node eligibility regressions for takeaway/food-court exclusion and sit-down dinner inclusion.
+- Browser execution and screenshots remain supervisor-run. No Chromium, network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- No visible strings added or rewritten. Existing Good to know, We may earn a fee, local facts, guidance/source/status copy, Book, Reserve and Book flights retain their text.
+- Static guidance, timezone, local time, currency/languages, plugs/voltage, emergency and tipping facts move from empty summary rows to paragraphs behind the single Good to know tap; no duplicate copy or empty fact headings remain. The collapsed row stays one line at 390px.
+- Reserve is removed from food-court/counter/grab-and-go stops; eligible sit-down restaurant and ticketed activity actions remain within their expanded detail panels.

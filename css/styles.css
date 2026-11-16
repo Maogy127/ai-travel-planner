@@ -1707,3 +1707,8 @@ body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;
 .plan-title [role="menuitem"]{display:block;width:100%;text-align:left;white-space:nowrap;font-size:14px;padding:12px 10px;margin:0;border:0;background:transparent;border-radius:6px}
 .plan-title [role="menuitem"]:hover,.plan-title [role="menuitem"]:focus{background:var(--soft)}
 @media print{.share-controls,[data-testid="share-menu"]{display:none!important}.plan-heading-row h1{white-space:normal;overflow:visible}}
+
+/* Local facts share the single collapsed Good to know row. */
+[data-testid="good-to-know"] { min-width:0; margin-block:16px; }
+[data-testid="trip-prep"] .checkrow span { min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.partner-link { white-space:nowrap; }

@@ -165,7 +165,7 @@
         document.addEventListener('keydown',keys,true);
         shareMenuCleanup=function(){document.removeEventListener('click',outside);document.removeEventListener('keydown',keys,true);};
     }
-    function hotelControls(){if(state.answers.mode==='local')return '';var d=Engine.matchDestination(state.answers.destination);return (state.answers.stayUnsure?'<p data-testid="stay-later-note">Planning around '+esc(window.GoNowJetlag.center(d))+" for now. Add your hotel later and we’ll re-plan around it.</p>":'')+'<button type="button" data-testid="trip-add-hotel">'+(state.answers.stayUnsure?'Add your hotel':'Edit your hotel')+'</button><form data-testid="trip-hotel-form" hidden><label>Hotel name<input data-testid="trip-hotel-name" value="'+esc(state.answers.stay)+'" required></label><button data-testid="trip-hotel-save">Save</button></form>';}
+    function hotelControls(){if(state.answers.mode==='local')return '';var d=Engine.matchDestination(state.answers.destination);return (state.answers.stayUnsure?'<p data-testid="stay-later-note">Planning around '+esc(window.GoNowJetlag.center(d))+" for now. Add your hotel later and we’ll re-plan around it.</p>":'')+(!state.answers.stay||state.answers.stayUnsure?partnerLink('booking','',false,'Find a hotel','find-hotel'):'')+'<button type="button" data-testid="trip-add-hotel">'+(state.answers.stayUnsure?'Add your hotel':'Edit your hotel')+'</button><form data-testid="trip-hotel-form" hidden><label>Hotel name<input data-testid="trip-hotel-name" value="'+esc(state.answers.stay)+'" required></label><button data-testid="trip-hotel-save">Save</button></form>';}
     function applyStay(){var name=state.answers.stayUnsure||!state.answers.stay?window.GoNowJetlag.center(Engine.matchDestination(state.answers.destination)):state.answers.stay;var old=state.plan.stay;state.plan.stay=name;window.DayBuilder.setStay(name);state.plan.days.forEach(function(d){if(!mergedPlan())d.items=window.DayBuilder.replanStay(d.items,old,name);d.items.forEach(function(it,i){['place','from','to','desc','title'].forEach(function(k){if(typeof it[k]==='string'&&old)it[k]=it[k].split(old).join(name);});if(it.kind==='stay')it.desc=name;if(i<d.items.length-1){var next=d.items[i+1];it.travelToNext='approx. '+window.DayBuilder.commuteMinutes(it.place||name,next.place||next.title)+' min from '+(it.kind==='stay'?name:it.place||it.title)+' — confirm route';}});});}
     function bindHotel(){on('track-toggle',function(){state.answers.track=eachPerson()?'together':'each';checkinSelected={};save();rememberTrip();render();});on('trip-add-hotel',function(){get('trip-hotel-form').hidden=false;get('trip-hotel-name').focus();});var form=get('trip-hotel-form');if(form)form.onsubmit=function(e){e.preventDefault();var name=get('trip-hotel-name').value.trim();if(!name)return;state.answers.stay=name;state.answers.stayUnsure=false;state.answers.hotelEdited=true;applyStay();save();rememberTrip();write(KEY+'lastTrip',{answers:state.answers});render();};}
     function planNotices(p) {
@@ -860,6 +860,7 @@
                 return btn(v, 'must-chip-'+i, 'outline', 'data-chip="'+v+'"');
             }).join('')+'</div><label>Where are you staying?<input data-testid="stay" value="'+esc(a.stay)+'" '+(a.stayUnsure?'disabled aria-disabled="true"':'aria-disabled="false"')+'></label><button type="button" class="outline stay-pill" data-testid="stay-unsure" aria-pressed="'+!!a.stayUnsure+'">Not sure yet</button>';
         }
+        if(s==='flights')content+=partnerLink('skyscanner','',false,'Book flights','book-flights');
         if(s==='pace')content+=sleepQuestion();
         if(a.mode==='local'){if(s==='style')copy[0]='What kind of day do you want?';if(s==='food')copy[1]="Pick any. We’ll suggest places that fit.";}
         view.innerHTML='<section class="question" data-topic="'+({style:'styles',pace:'sleep'}[s]||s)+'"><p>Step '+(idx+1)+' of '+total+'</p><div class="progress" role="progressbar" aria-label="Step '+(idx+1)+' of '+total+'" aria-valuenow="'+(idx+1)+'" aria-valuemin="0" aria-valuemax="'+total+'"><span style="width:'+((idx+1)/total*100)+'%"></span></div>'+heading(copy[0], copy[1])+(s==='food'||s==='pace'||s==='flights'?'':'<fieldset><legend'+(s==='ages'?' class="sr-only"':'')+'>'+({
@@ -1046,20 +1047,21 @@
         var trip=typeof currentTrip==='function'?currentTrip():null,rawDays=trip&&trip.builder&&trip.builder.days;
         if(state.viewing==='finished'&&trip&&trip.snapshot)rawDays=trip.snapshot.builder&&window.DayBuilder?window.DayBuilder.importForPlan(trip.snapshot.builder,state.plan).days:null;
         var originals=state.plan.days.flatMap(function(d){return d.items;});
-        function add(id,text,kind,date){if(seen.has(id))return;seen.add(id);tasks.push({id:id,text:text,kind:kind,group:'before',date:date||''});}
+        function add(id,text,kind,date){if(seen.has(id)||seen.has(normalizePrep(text)))return;seen.add(id);seen.add(normalizePrep(text));tasks.push({id:id,text:text,kind:kind,group:'before',date:date||''});}
         state.plan.days.forEach(function(d){
             var items=typeof dayModel==='function'?dayModel(d,state.plan.days.indexOf(d)).items:d.items;
             if(rawDays&&rawDays[d.date])items=rawDays[d.date].items.map(function(it){return Object.assign({},originals.find(function(o){return o.id===(it.sourceId||it.id);})||{},it);}).filter(function(it){return !(edits.removed||[]).includes(it.sourceId||it.id);});
             items.forEach(function(it){
-                if(!it.bookable||it.booked||(edits.booked||[]).includes(it.id))return;
+                var kind=bookingKind(it);if(!kind||kind==='flight')return;
                 var title=String(it.bookingLabel||it.title).replace(/\p{Extended_Pictographic}/gu,'').split(/ [—–] /)[0].trim();
                 if(/Jurassic Adventure/i.test(it.title))title='Kualoa Jurassic Adventure';
                 if(/intro dive/i.test(title))title='intro dive';
                 if(/parasail/i.test(title))title='Waikiki parasail';
-                var text=('Book '+title).split(/\s+/).slice(0,8).join(' ').trim();while(text.length>48)text=text.split(' ').slice(0,-1).join(' ');
+                var text=((kind==='reserve'?'Reserve ':'Book ')+title).split(/\s+/).slice(0,8).join(' ').trim();while(text.length>48)text=text.split(' ').slice(0,-1).join(' ');
                 add('book-'+(it.sourceId||it.id),text,'book',d.date);
             });
         });
+        if(a.mode!=='local'){add('book-flights','Book flights','book');if(!a.stay||a.stayUnsure)add('book-hotel','Find a hotel','book');}
         var rides=tasks.filter(function(t){return /Book Uber Reserve/i.test(t.text);});
         if(rides.length){tasks=tasks.filter(function(t){return !rides.includes(t);});tasks.unshift({id:'book-uber-reserve',text:'Book '+rides.length+' Uber Reserve ride'+(rides.length===1?'':'s'),kind:'book',group:'before',legacyIds:rides.map(function(t){return t.id;}),rides:rides.map(function(t){return t.text.replace(/^Book /,'');})});}
         if(a.mode!=='local'){
@@ -1080,9 +1082,11 @@
         state.screen='prep';if(toastEl.classList.contains('plan-ready')){clearTimeout(toastTimer);toastEl.innerHTML='';toastEl.classList.remove('plan-ready');}var r=prepRecord();r.seen=true;savePrep(r);
         var packing=packingHTML().replace(/<h2/g,'<h3').replace(/<\/h2>/g,'</h3>').replace(/data-testid="pack-item" data-pack-id="([^"]+)"/g,'data-testid="prep-item" data-prep-id="pack-$1" data-pack-id="$1"').replace(/<div class="checkrow"><input type="checkbox" data-testid="prep-item"/g,'<div class="checkrow" data-testid="pack-item"><input type="checkbox" data-testid="prep-item"');
         function tasks(){return prepTasks().filter(function(t){return t.group==='before';}).map(function(t){return '<label class="checkrow" data-action-kind="'+esc(t.kind)+'"><input type="checkbox" data-testid="prep-item" data-prep-id="'+esc(t.id)+'" '+(r.checked[t.id]?'checked':'')+'><span>'+esc(t.text)+'</span></label>'+(t.rides?'<details class="prep-rides"><summary>Ride details</summary>'+t.rides.map(function(ride){return '<p>'+esc(ride)+'</p>';}).join('')+'</details>':'')+(t.sources?sources(t.sources):'');}).join('');}
-        view.innerHTML='<div class="shell" data-testid="trip-prep">'+'<h1 tabindex="-1">Trip prep</h1><section data-testid="prep-section"><h2>'+icon('budget')+' Budget</h2><p>Estimates</p><details><summary>Budget breakdown</summary>'+budgetHTML().replace('<h2>Budget</h2>','<h3>Estimates</h3>')+(state.plan.costs||[]).map(function(c){return '<p>'+esc(c.item)+' · '+esc(c.price)+sources(c.sources)+'</p>';}).join('')+'</details></section>' +(prepTasks().some(function(t){return t.group==='before';})?'<details data-testid="prep-section" id="trip-essentials"><summary data-testid="trip-essentials">Before you go · '+prepRemaining()+' to do</summary>'+tasks()+'</details>':'')+'<section data-testid="prep-section"><h2>'+icon('bring')+' What to bring</h2><div data-testid="packing-list">'+packing+'</div>'+'</section>'+btn('Continue to my plan','prep-continue','primary')+'</div>';
+        view.innerHTML='<div class="shell" data-testid="trip-prep">'+'<h1 tabindex="-1">Trip prep</h1><section data-testid="prep-section"><h2>'+icon('budget')+' Budget</h2><p>Estimates</p><details><summary>Budget breakdown</summary>'+budgetHTML().replace('<h2>Budget</h2>','<h3>Estimates</h3>')+(state.plan.costs||[]).map(function(c){return '<p>'+esc(c.item)+' · '+esc(c.price)+sources(c.sources)+'</p>';}).join('')+'</details></section>' +(prepTasks().some(function(t){return t.group==='before';})?'<details data-testid="prep-section" id="trip-essentials"><summary data-testid="trip-essentials">Before you go · '+prepRemaining()+' to do</summary>'+tasks()+'</details>':'')+'<section data-testid="prep-section"><h2>'+icon('bring')+' What to bring</h2><div data-testid="packing-list">'+packing+'</div>'+'</section><details data-testid="good-to-know"><summary data-testid="good-to-know-toggle" aria-expanded="false" aria-controls="good-to-know-content">Good to know</summary><div id="good-to-know-content"><p data-testid="affiliate-disclosure">We may earn a fee</p><div data-testid="local-info" id="local-info"></div></div></details>'+btn('Continue to my plan','prep-continue','primary')+'</div>';
 
         view.querySelectorAll('[data-prep-id]').forEach(function(el){el.onchange=function(){var r=prepRecord();r.checked[el.dataset.prepId]=el.checked;if(el.dataset.prepId.startsWith('pack-')){state.packed[el.dataset.prepId.slice(5)]=el.checked;write(KEY+'packing:'+state.plan.id,state.packed);}savePrep(r);if(get('trip-prep-button'))get('trip-prep-button').textContent='Trip prep · '+(prepRemaining()?prepRemaining()+' left':'All set');var essentials=get('trip-essentials');if(essentials)essentials.textContent='Before you go · '+prepRemaining()+' to do';if(el.dataset.packId)tick(el.dataset.packId,el.checked);};});
+        var good=get('good-to-know'),mounted=false;
+        if(good)good.ontoggle=function(){get('good-to-know-toggle').setAttribute('aria-expanded',String(good.open));if(good.open&&!mounted){mounted=true;LocalInfo.mount(get('local-info'),isOahuPlan(state.plan)?'oahu':Engine.matchDestination(state.answers.destination).id,state.plan.start,state.plan.end)();}};
         bindPacking();
         on('trip-prep-button',function(){view.querySelector('h1').focus();});
         on('prep-continue',function(){state.tab='plan';go('plan');rememberTrip();var h=view.querySelector('h1');if(h){h.tabIndex=-1;h.focus();}});
@@ -1394,8 +1398,8 @@
     function checkHTML(it, test) {
         return'<label class="checkrow"><input type="checkbox" data-testid="'+test+'" data-pack-id="'+esc(it.id)+'" '+(state.packed[it.id]?'checked':'')+'><span>'+esc(it.name)+' <small>×'+it.qty+'</small></span></label>';
     }
-    function partnerLink(key, title, activity) {
-        var a=state.answers, p=state.plan;
+    function partnerLink(key, title, activity, label, testid) {
+        var a=state.answers, p=state.plan||{start:a.start,end:a.end};
         var destination=isOahuPlan(p)?'Oahu, Hawaii':Engine.matchDestination(a.destination).name;
         // Only explicit airport choices are accepted; ambiguous city/region names fall back.
         var airports={'los angeles (lax)':'LAX','los angeles':'LAX','lax':'LAX','hnl':'HNL','honolulu':'HNL','oahu':'HNL','oahu, hawaii':'HNL'};
@@ -1404,11 +1408,21 @@
             query:(title?String(title).split(/\s+[—–-]\s+/)[0].replace(/\s*\([^)]*\)/g,'').trim()+' ':'')+destination,
             fromIata:airports[(a.origin||'').trim().toLowerCase()],toIata:airports[destination.toLowerCase()],
             yymmdd_start:(p.start||'').slice(2).replace(/-/g,''),yymmdd_end:(p.end||'').slice(2).replace(/-/g,'')};
-        return '<a class="partner-link" data-partner="'+key+'"'+(activity?' data-testid="book-this"':'')+' href="'+esc(window.gonowPartnerURL(key,values))+'" target="_blank" rel="noopener noreferrer sponsored">Search on '+esc(window.GONOW_AFFILIATES.partners[key].name)+' ↗</a>';
+        return '<a class="partner-link" data-partner="'+key+'"'+(testid?' data-testid="'+testid+'"':activity?' data-testid="book-this"':'')+' href="'+esc(window.gonowPartnerURL(key,values))+'" target="_blank" rel="noopener sponsored">'+esc(label||'Search on '+window.GONOW_AFFILIATES.partners[key].name)+'</a>';
     }
-    function bookLinksHTML() {
-        return '<h2>Book this</h2><p data-testid="affiliate-disclosure">'+esc(window.GONOW_AFFILIATES.disclosure)+'</p><p>Hotels</p><div class="row">'+partnerLink('booking')+partnerLink('expedia')+'</div><p>Flights</p><div class="row">'+partnerLink('skyscanner')+'</div><p>Activities</p><div class="row">'+partnerLink('getyourguide','',true)+partnerLink('viator','',true)+'</div><small>Choose airports on Skyscanner if your route is unknown. Confirm dates and travelers on every partner site.</small>';
+    // Keep checklist needs and item links in sync; flights remain useful even with fixed times.
+    function bookingKind(it){
+        if(it.kind==='flight'||it.flight||it.flightDirection)return 'flight';
+        var edit=((state.edits||{}).items||{})[it.sourceId||it.id]||{};
+        if(it.booked||it.fixedBooking||it.locked||edit.locked||((state.edits||{}).booked||[]).includes(it.sourceId||it.id))return '';
+        if(it.kind==='meal'||it.category==='restaurant'){
+            if(/food court|grab.and.go|counter spot|food stalls/i.test((it.title||'')+' '+(it.desc||'')))return '';
+            return 'reserve';
+        }
+        if(it.bookable||it.needsTicket||it.booking||it.tour||(['activity','sight'].includes(it.kind)&&it.price&&!/free|^\$?0\b/i.test(it.price)))return 'book';
+        return '';
     }
+    function bookingLink(it){var kind=bookingKind(it);return kind==='flight'?partnerLink('skyscanner','',false,'Book flights','book-flights'):kind?partnerLink('getyourguide',it.title,true,kind==='reserve'?'Reserve':'Book',kind==='reserve'?'item-reserve':'item-book'):'';}
     function itemHTML(it, dayIndex) {
         var edit=state.edits.items&&state.edits.items[it.id]|| {}, time=edit.time||it.time;
         return'<li data-item-id="'+esc(it.id)+'" id="item-'+esc(it.id)+'"><time>'+esc(time)+'</time>'+itemArticle(it)+'</li>';
@@ -1443,9 +1457,9 @@
         if(edit.swapped)it=Object.assign( {}, it,  {
             sources:[], bring:[], prep:[], tips:[], price:'', bestTime:'', bookable:false
         });
-        return'<article class="item '+esc(it.kind)+'">'+(['travel','flight'].includes(it.kind)?icon('transport'):'')+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped&&!it.dietReplacement?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):(opts.photo?'<p class="activity-fallback">'+icon('info')+' No verified activity photo.</p>':''))+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.bookable?'<span class="badge">Bookable</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+dietTag(it)+personalNotes(it)+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+(it.bookable&&!/\bspa\b/i.test(title||'')?'<p class="partner-search"><small>Find/Book this · Secondary search options</small><br>'+partnerLink('getyourguide',title,true)+' · '+partnerLink('viator',title,true)+'</p>':'')+(it.tips?it.tips.map(function(t) {
+        return'<article class="item '+esc(it.kind)+'">'+(['travel','flight'].includes(it.kind)?icon('transport'):'')+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped&&!it.dietReplacement?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):(opts.photo?'<p class="activity-fallback">'+icon('info')+' No verified activity photo.</p>':''))+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+dietTag(it)+personalNotes(it)+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+bookingLink(it)+(it.tips?it.tips.map(function(t) {
             return'<a class="badge tip-chip" data-testid="activity-tip" href="'+esc(t.url)+'" target="_blank" rel="noopener noreferrer">'+esc(t.sourceType)+' · '+esc(t.text)+' ↗</a>';
-        }).join(''):'')+(opts.noActions?'':'<div class="row"><details class="item-more"><summary aria-label="More actions for '+esc(title)+'">⋯</summary>'+(it.bookable?btn('Book this', 'item-book', 'outline', 'data-book="'+esc(it.id)+'"'):'')+btn('Edit', 'item-edit', '', 'data-edit="'+esc(it.id)+'"')+btn('Swap', 'item-swap', '', 'data-swap="'+esc(it.id)+'"')+btn('Remove', 'item-remove', '', 'data-remove="'+esc(it.id)+'"')+'</details>'+(opts.noLock?'':btn((edit.locked||it.locked)?icon('lock'):icon('unlock'),'item-lock','icon-button','aria-label="'+((edit.locked||it.locked)?'Unlock ':'Lock ')+esc(title)+'" data-lock="'+esc(it.id)+'"'))+'</div><div id="edit-'+esc(it.id)+'"></div>')+(opts.travel&&it.travelToNext?'<p class="travel-chip db-next" data-testid="travel-chip">'+travelIcon(it.travelToNext)+' <strong>Getting to the next stop:</strong> '+esc(it.travelToNext)+'</p>':'')+'</article>';
+        }).join(''):'')+(opts.noActions?'':'<div class="row"><details class="item-more"><summary aria-label="More actions for '+esc(title)+'">⋯</summary>'+btn('Edit', 'item-edit', '', 'data-edit="'+esc(it.id)+'"')+btn('Swap', 'item-swap', '', 'data-swap="'+esc(it.id)+'"')+btn('Remove', 'item-remove', '', 'data-remove="'+esc(it.id)+'"')+'</details>'+(opts.noLock?'':btn((edit.locked||it.locked)?icon('lock'):icon('unlock'),'item-lock','icon-button','aria-label="'+((edit.locked||it.locked)?'Unlock ':'Lock ')+esc(title)+'" data-lock="'+esc(it.id)+'"'))+'</div><div id="edit-'+esc(it.id)+'"></div>')+(opts.travel&&it.travelToNext?'<p class="travel-chip db-next" data-testid="travel-chip">'+travelIcon(it.travelToNext)+' <strong>Getting to the next stop:</strong> '+esc(it.travelToNext)+'</p>':'')+'</article>';
     }
     function noteCount(count){return count+' '+(count===1?'note':'notes');}
     function dayBookings(items) {
@@ -1729,8 +1743,9 @@
             detail:function(src,date,item){
                 if(item&&item.checkinSwap)return '<p>'+esc(item.title)+' · A gentler option at the same time.</p>';
                 var chest=item&&(/^(chest-|instance-)/.test(item.id)||item.sourceId!==item.id);
-                var it=find(src,date)||p.days.flatMap(function(d){return d.items;}).find(function(o){return o.id===src;});if(!it)return '<p>'+icon('info')+' '+esc(item.title)+' in '+esc(item.place)+'. No verified activity photo.</p>';
+                var it=find(src,date)||p.days.flatMap(function(d){return d.items;}).find(function(o){return o.id===src;});if(!it&&item&&(item.flight||item.flightDirection))it=item;if(!it)return '<p>'+icon('info')+' '+esc(item.title)+' in '+esc(item.place)+'. No verified activity photo.</p>';
                 if(item&&item.locked){var booked=p.days.flatMap(function(d){return d.items;}).find(function(o){return o.id===src;});if(booked)it=Object.assign({},booked,{locked:true});}
+                if(item)it=Object.assign({},it,{bookable:item.bookable||it.bookable,needsTicket:item.needsTicket||it.needsTicket,booking:item.booking||it.booking,tour:item.tour||it.tour,booked:item.booked,fixedBooking:item.fixedBooking,locked:item.locked,flight:item.flight,flightDirection:item.flightDirection});
                 if(item&&item.originalTitle)it=Object.assign({},it,{title:item.title,time:item.start!=null?window.DayBuilder.range(item.start,item.end):it.time});
                 var html='<div class="db-item" data-item-id="'+esc(it.id)+'"'+(chest?'':' id="item-'+esc(it.id)+'"')+'>'+itemArticle(it,{photo:!['travel','flight'].includes(item.kind),travel:!chest,noActions:chest,noLock:true})+'</div>';
                 (item&&item.extraSources||[]).forEach(function(id){var ride=find(id,date);if(ride)html+='<div class="db-item db-item-ride" data-item-id="'+esc(ride.id)+'" id="item-'+esc(ride.id)+'"><p class="section-label">Getting there and back</p>'+itemArticle(ride,{travel:true})+'</div>';});
@@ -1751,7 +1766,7 @@
         }
         if(state.answers.mode!=='local'&&(state.answers.stayUnsure||state.answers.hotelEdited))applyStay();
         state.tab='plan';
-        view.innerHTML='<div class="shell">'+(state.viewing==='finished'?'<div data-testid="finished-banner"><p>Saved finished plan</p>'+(currentTrip()&&currentTrip().snapshot&&currentTrip().snapshot.weather?'<p data-testid="snapshot-weather">'+esc(currentTrip().snapshot.weather.label)+' '+esc(currentTrip().snapshot.weather.text)+'</p>':'')+'</div>':'')+planBanner(p)+planNotices(p)+'<div id="tab-content">'+(mergedPlan()?'':'<nav class="daynav" aria-label="Jump to day">'+p.days.map(function(d,i){return '<a href="#day-'+i+'" data-testid="day-nav-'+i+'">Day '+(i+1)+' · '+esc(dateLabel(d.date,{weekday:'short'})+' '+dateLabel(d.date,{day:'numeric'}))+'</a>';}).join('')+'</nav><div class="itinerary-days">'+p.days.map(dayHTML).join('')+'</div>')+'</div><details data-testid="travel-info"><summary>Travel info</summary><div data-testid="local-info" id="local-info"><p>Open for local details.</p></div></details><details data-testid="booking-searches"><summary>Booking searches</summary><div data-testid="book-links">'+bookLinksHTML().replace('<h2>Book this</h2>','')+'</div></details><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
+        view.innerHTML='<div class="shell">'+(state.viewing==='finished'?'<div data-testid="finished-banner"><p>Saved finished plan</p>'+(currentTrip()&&currentTrip().snapshot&&currentTrip().snapshot.weather?'<p data-testid="snapshot-weather">'+esc(currentTrip().snapshot.weather.label)+' '+esc(currentTrip().snapshot.weather.text)+'</p>':'')+'</div>':'')+planBanner(p)+planNotices(p)+'<div id="tab-content">'+(mergedPlan()?'':'<nav class="daynav" aria-label="Jump to day">'+p.days.map(function(d,i){return '<a href="#day-'+i+'" data-testid="day-nav-'+i+'">Day '+(i+1)+' · '+esc(dateLabel(d.date,{weekday:'short'})+' '+dateLabel(d.date,{day:'numeric'}))+'</a>';}).join('')+'</nav><div class="itinerary-days">'+p.days.map(dayHTML).join('')+'</div>')+'</div><p class="footer-note">Made for your kind of travel. Saved on this device.</p></div>';
         if(p.bookingIssues&&p.bookingIssues.length){
             view.querySelector('.shell').insertAdjacentHTML('afterbegin',p.bookingIssues.map(function(i){return '<p class="booking-issue" data-testid="booking-issue">'+esc(i.id==='lamer'?'La Mer':i.name.replace(/ Chinatown$/, ''))+' '+esc(PickScheduler.reason(i,state.answers).replace(/^Booked/,'booked'))+' <button class="outline" data-booking-fix="'+i.id+'">Fix</button></p>';}).join(''));
             view.querySelectorAll('[data-booking-fix]').forEach(function(b){b.onclick=function(){go('dates');};});
@@ -1770,8 +1785,6 @@
             var built=builderContext();
             built.plan=p;window.DayBuilder.mount(db,built);
         }
-        var travelInfo=get('travel-info'),infoMounted=false;
-        if(travelInfo)travelInfo.ontoggle=function(){if(travelInfo.open&&!infoMounted){infoMounted=true;LocalInfo.mount(get('local-info'),isOahuPlan(p)?'oahu':Engine.matchDestination(state.answers.destination).id,p.start,p.end)();}};
         // Apply the persisted view only after the builder exists. List is the default.
         expeditionUI();
         on('build-template', function() {
@@ -1889,21 +1902,7 @@
                 ]);
             };
         });
-        scope.querySelectorAll('[data-book]').forEach(function(el) {
-            el.onclick=function() {
-                showModal('Book this', 'Booking links are not live in this demo. In the full version this opens the operator’s booking page.', [ {
-                    text:'Got it'
-                },  {
-                    text:'Add to my to-do', action:function() {
-                        state.edits.todos=state.edits.todos||[];
-                        if(state.edits.todos.indexOf(el.dataset.book)<0)state.edits.todos.push(el.dataset.book);
-                        persistEdits();
-                        toast('Added to your booking to-do.');
-                    }
-                }
-                ]);
-            };
-        });
+
 
     }
     function editItem(id) {
