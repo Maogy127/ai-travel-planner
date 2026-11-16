@@ -101,12 +101,15 @@ function smoke(label){
   assert(!html.includes('data-testid="day-pace-link"'));
   return header;
  }
- assert(assertFlyHome(lastDay).includes('Short night · 5h55 before your flight'));
+ // Final audit: sleep duration appears once outside the accessible SVG label.
+ const flyHeader=assertFlyHome(lastDay);
+ assert(flyHeader.includes('Wind down early tonight'));
+ assert.equal((flyHeader.replace(/<svg[\s\S]*?<\/svg>/g,'').match(/5h55/g)||[]).length,1);
  const savedItems=lastDay.items;
  lastDay.items=[{kind:'travel',title:'Uber Reserve to HNL',time:'4:55 AM'}];
  ctx.DayBuilder.resetSession();
  // Preceding sleep ends 30 minutes before the 4:55 AM airport ride.
- assert(assertFlyHome(lastDay).includes('before your flight'));
+ assert(assertFlyHome(lastDay).includes('Wind down early tonight'));
  lastDay.items=savedItems;
 
  assert.equal(api.state.plan.id,'oahu-demo-2026-11');
@@ -134,9 +137,23 @@ function smoke(label){
  const flight=departure.find(i=>i.flight);
  assert.equal(renderContext.titleFor(flight.sourceId||flight.id,'2026-11-29',flight),'Flight (add your time)');
  defaultBuilder.selectDay('2026-11-29',false);
- // The untouched demo now labels its sample time and offers one shared editor.
- assert(node('default-regression .db-content').innerHTML.includes('Sample departure'));
+ // Final audit: the Return column supplies direction; sample time is explicit.
+ const flightMarkup=node('default-regression .db-content').innerHTML;
+ assert(flightMarkup.includes('Sample ~10:00 AM'));
+ assert(flightMarkup.includes('aria-label="Sample departs ~10:00 AM"'));
+ assert(flightMarkup.includes('db-flight-card'));
  assert.equal((node('default-regression .db-content').innerHTML.match(/data-testid="edit-flight"/g)||[]).length,1);
+ // Final audit: real renderer preserves number/time and accessible direction for
+ // provided flights; the scheduler/export label remains fully explanatory.
+ const compactPlan=JSON.parse(JSON.stringify(api.state.plan));
+ const compactRoot=node('compact-flight-regression');
+ const compactBuilder=ctx.DayBuilder.mount(compactRoot,{plan:compactPlan,
+   flightAnswers:{...api.state.answers,flightsStep:true,arrivalFlight:'HA 11',arrivalTime:'17:30',returnTime:'20:00'}});
+ compactBuilder.selectDay('2026-11-25',false);
+ const compactMarkup=node('compact-flight-regression .db-content').innerHTML;
+ assert(compactMarkup.includes('>HA 11 · 5:30 PM</strong>'));
+ assert(compactMarkup.includes('aria-label="HA 11 · lands 5:30 PM"'));
+ defaultBuilder=ctx.DayBuilder.mount(defaultRoot,{...ctx.__renderHelpers.builderContext(),plan:api.state.plan});
  defaultBuilder.selectDay('2026-11-26',false);
  const priorEdits=api.state.edits;
  api.state.edits={items:{'2026-11-26-0':{note:'Calendar note'}},removed:['2026-11-26-2']};

@@ -788,10 +788,12 @@ function mount(root, ctx = {}) {
         const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number).some(age => age < r.minAge)) : null;
         const detail = (ctx.detail ? ctx.detail(src, on, i) : '') + (tray ? (i.rules || []).map(r => `<p>${esc(r.text || r)}</p>`).join('') : '');
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
-        const title = i.flight&&!ctx.flightAnswers?.flightsStep?(flightDirection==='arrival'?'Sample lands ~5:30 PM':'Sample departure'):(!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
+        const title = i.flight&&!ctx.flightAnswers?.flightsStep?(flightDirection==='arrival'?'Sample lands ~5:30 PM':'Sample departs ~10:00 AM'):(!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
+        // Arrival/Return supplies direction; retain full wording for assistive technology.
+        const cardTitle = flightDirection ? title.replace(/\b(?:lands|departs)\s*/i, '') : title;
         const movable = !i.locked && i.kind !== 'prep' && !print;
         const canLock = !tray && !print && (lockable(i) || fixedBooking(i));
-        const classes = ['db-pair', transport && 'db-transport', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
+        const classes = ['db-pair', transport && 'db-transport', flightDirection && 'db-flight-card', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
             i.kind === 'prep' && 'db-prep', i.flex && 'db-free', detail && 'db-expandable', open && 'is-open',
             picked?.id === i.id && picked.zone === (tray ? 'tray' : 'day') && 'db-picked'].filter(Boolean).join(' ');
         const moves = tray ? button('handle', title) + `<button type="button" data-testid="schedule-item" data-db-action="schedule">${i.needsTime ? 'Pick a time' : 'Schedule'}</button>${i.needsTime ? '<small>Needs a time</small>' : ''}` : (movable ? button('handle', title) + button('up', title) + button('down', title) + button('remove', title) : '');
@@ -814,8 +816,8 @@ function mount(root, ctx = {}) {
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
         const placeText = tray ? '' : `${esc(i.place)}${i.estimate ? ' · ' + durationText : ''}`;
         const heading = detail
-            ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"><strong>${esc(title)}</strong><small>${placeText}</small><span class="db-expand-mark" aria-hidden="true">＋</span></button>`
-            : `<strong id="db-title-${uid}">${esc(title)}</strong><small>${placeText}</small>`;
+            ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}><strong title="${esc(title)}">${esc(cardTitle)}</strong><small>${placeText}</small><span class="db-expand-mark" aria-hidden="true">＋</span></button>`
+            : `<strong id="db-title-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}>${esc(cardTitle)}</strong><small>${placeText}</small>`;
         const lockedLabel = !fixedBooking(i) ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
             ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight||i.flightDirection ? (flightDirection==='arrival'?'Arrival':'Return') : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}

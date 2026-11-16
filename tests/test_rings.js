@@ -95,7 +95,10 @@ for(const html of [emptyHtml,compactDay,flightHtml]){
 // Ring trim: short sleep takes precedence over rest and easy-day suggestions.
 const shortResult=scoreDay([],'active');shortResult.values.sleep=5+55/60;
 const shortHtml=render(shortResult,{compact:true,flyHome:true,flightLabel:'Flight 8:00 AM'});
-assert(shortHtml.includes('Short night · 5h55 before your flight'));
+// Final audit: duration belongs only to the compact summary; advice gives an action.
+assert(shortHtml.includes('Wind down early tonight'));
+assert(shortHtml.includes('aria-label="Sleep 5h55 · Flight 8:00 AM"'));
+assert.equal((shortHtml.replace(/<svg[\s\S]*?<\/svg>/g,'').match(/5h55/g)||[]).length,1);
 assert(!shortHtml.includes('ring-rest-break'));
 assert.equal((shortHtml.match(/class="ring-encouragement"/g)||[]).length,1);
 const easyHtml=render(scoreDay(day,'active'));

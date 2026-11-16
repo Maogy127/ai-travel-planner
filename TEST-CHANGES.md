@@ -1752,3 +1752,28 @@ Tests:
 
 COPY-AUDIT — every visible string added/changed:
 - None. Product copy, assets, cache tags and testids remain unchanged.
+
+### Final audit pass — ring deduplication, flight titles, reusable browser evidence
+
+Changes:
+- Fly-home rings show the sleep duration once in visible copy, retain the flight summary, and offer one concise wind-down action. The SVG label now includes meaningful sleep and flight information; no movement or goals return.
+- Flight cards keep the Arrival/Return row labels and shorten their visible titles to flight number plus time (or an explicit estimate/sample). Full direction, number and time remain accessible and in the existing expanded details. Flight-only phone layout reserves room for the time; unusually long manually entered identifiers can ellipsize while retaining their full accessible label. No global body text reduction.
+- Added `tests/test_batch_audit.py`, supervisor-only port 8894, using `test_full.new` and `test_wellness_home.serve_checks`. It captures full-page PNGs, adjacent visible-text files and `audit-records.json` at 1280/390, reports PASS/FAIL per capture, preserves failure evidence and continues independent cases. Default output is `/workspace/gonow-origin-fix/shots-batch/audit/`; `GONOW_AUDIT_DIR` overrides it.
+- Audit covers both home modes; origin start; every reachable question; fork-no and fork-yes paths; stay within musts; curated activity/food picks and details; estimated/provided/sample flights; confirm draft; prep collapsed/expanded and its booking checklist; normal/fly-home days; expanded attraction/restaurant/flight cards; flight/custom-item sheets; ring breakdown; Share; dashboard summary; draft and generated finished plan; November 28 check-in questions and saved state; sign-in/email and group name join/member suggestion/owner suggestion using local SDK fixtures.
+- The current app has no separate Moments/evening/completed-day routes. The evidence records explicitly document these unavailable states and capture the actual post-save day summary instead of inventing routes or completion data.
+- All SDK/auth data are explicitly labeled MOCKED local ESM fixtures; weather/local data use existing deterministic fixtures and Austin offline fallback. External requests are blocked before initial navigation; no real SDK, auth, email, accounts or cloud writes.
+- No assets added/renamed; index.html asset cache tags and travel-time asset count remain unchanged. No git writes, remotes, commits, pushes or deployment.
+
+Tests:
+- PASS all 33 top-level Node suites (`tests/*.js` and `tests/*.cjs`), including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS Python compilation: all 56 existing tests plus the new audit script (57 total).
+- Updated Node renderer/ring regressions and Python ring/flight/transport/full assertions with explanatory comments. Flight geometry checks compare real text-range height against computed line-height and full text width/scrollWidth against available width; standard HA 11, skipped estimates and curated samples must fit without clipping.
+- [ ] Supervisor: run relevant Python suites and `python3 tests/test_batch_audit.py`.
+- [ ] Supervisor: review generated desktop/390px images and JSON/text evidence, including failures. Browser execution, geometric fit and visual checklist completion remain PENDING; no supervisor images were reviewed here.
+
+COPY-AUDIT — every visible string added/changed:
+- Fly-home short-night advice: `Short night · 5h55 before your flight` (duration varies) → `Wind down early tonight`. The existing `Sleep 5h55 · Est. departs ~10:00 AM` summary remains the sole visible duration.
+- Provided flight titles: `HA 11 · lands 5:30 PM` → `HA 11 · 5:30 PM`; departure equivalents remove `departs` while preserving the provided identifier and full time. Arrival/Return supplies direction.
+- Estimated flight titles: `Est. lands ~11:30 AM` → `Est. ~11:30 AM`; `Est. departs ~10:00 AM` → `Est. ~10:00 AM` (times vary). `Est.` and `~` remain explicit.
+- Curated sample arrival: `Sample lands ~5:30 PM` → `Sample ~5:30 PM`. Curated sample return: `Sample departure` → `Sample ~10:00 AM`. Both retain their sample status and accessible direction.
+- Existing expanded explanatory wording remains available on tap. No other visible product strings added or changed; audit filenames, diagnostics and mock labels are test evidence only.

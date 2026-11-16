@@ -60,6 +60,20 @@ async def edit(pg, arrival=None, departure=None):
     await sheet.get_by_role('button', name='Save flights', exact=True).click()
     await expect(sheet).to_have_count(0)
 
+async def title_fits(pg):
+    # Final audit: nowrap alone can hide the time. Measure the actual text range,
+    # its line height AND unclipped width for standard/sample/estimated titles.
+    titles = pg.locator('.db-flight-card .db-activity strong')
+    assert await titles.count() > 0
+    for title in await titles.all():
+        geometry = await title.evaluate("""e=>{const r=document.createRange();r.selectNodeContents(e);
+            const b=r.getBoundingClientRect(),s=getComputedStyle(e);
+            return {text:e.textContent,height:b.height,line:parseFloat(s.lineHeight),
+                width:b.width,available:e.clientWidth,scroll:e.scrollWidth};}""")
+        assert geometry['height'] <= geometry['line'] + 1, geometry
+        assert geometry['width'] <= geometry['available'] + 1, geometry
+        assert geometry['scroll'] <= geometry['available'] + 1, geometry
+
 async def checks(browser):
     for width in (1280, 390):
         for destination in ('Oahu', 'Seattle'):
@@ -70,14 +84,17 @@ async def checks(browser):
                         await routes(pg, 'seattle')
                     await enter(pg, destination, skip)
                     await select(pg, 0)
+                    # Final audit: direction now lives in the Arrival/Return row label.
+                    await title_fits(pg)
                     if skip:
-                        await expect(pg.get_by_test_id('db-day-list')).to_contain_text('Est. lands ~')
+                        await expect(pg.get_by_test_id('db-day-list')).to_contain_text('Est. ~')
                         await select(pg, -1)
-                        await expect(pg.get_by_test_id('db-day-list')).to_contain_text('Est. departs ~')
+                        await title_fits(pg)
+                        await expect(pg.get_by_test_id('db-day-list')).to_contain_text('Est. ~')
                     else:
                         first = (await schedule(pg))[0]
                         assert all(i['start'] >= 1125 for i in first['items'] if i['kind'] not in ('flight', 'travel')), first
-                        await expect(pg.get_by_test_id('db-day-list')).to_contain_text('HA 11 · lands 5:30 PM')
+                        await expect(pg.get_by_test_id('db-day-list')).to_contain_text('HA 11 · 5:30 PM')
                         # A user lock stays at its exact time when a later landing conflicts.
                         row = pg.locator('[data-testid=db-day-list] [data-db-id=pick-checkin]')
                         await row.get_by_test_id('db-lock').click()
@@ -110,13 +127,17 @@ async def checks(browser):
             await pg.get_by_test_id('demo-oahu').click()
             await wait_plan(pg)
             await select(pg, -1)
+            await title_fits(pg)
+            await select(pg, 0)
+            await title_fits(pg)
+            await select(pg, -1)
             before = await schedule(pg)
             assert not await pg.evaluate('Boolean(__gonow.state.answers.flightsStep)')
             await edit(pg, departure='08:00')
             after = await schedule(pg)
             assert before[1:-1] == after[1:-1]
             assert all(i['kind'] in ('travel', 'flight') for i in after[-1]['items']), after[-1]
-            await expect(pg.get_by_test_id('db-day-list')).to_contain_text('departs 8:00 AM')
+            await expect(pg.get_by_test_id('db-day-list')).to_contain_text('8:00 AM')
             print('PASS curated demo flight edit', width)
         finally:
             await ctx.close()

@@ -1,6 +1,7 @@
 # Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 """Supervisor Chromium ring trim checks; unique port 8875."""
 import asyncio
+import re
 from playwright.async_api import expect
 from test_full import new, show_day, continue_prep
 from test_wellness_home import serve_checks
@@ -40,10 +41,12 @@ async def checks(browser):
             await pg.keyboard.press('Escape')
             await show_day(pg, 4)
             rings = pg.locator('.day-head > .wellness-rings')
+            assert (await rings.inner_text()).count('5h55') == 1
+            await expect(rings.locator('svg')).to_have_attribute('aria-label', re.compile(r'Sleep 5h55.*departs'))
             await audit(rings)
             await expect(rings.locator('.ring-move,.ring-rec,.ring-value-move,.ring-value-rec')).to_have_count(0)
-            # Item E follow-up: the departure uses the night before its airport ride.
-            await expect(rings.locator('.ring-encouragement')).to_have_text('Short night · 5h55 before your flight')
+            # Final audit: one visible duration, with separate actionable advice.
+            await expect(rings.locator('.ring-encouragement')).to_have_text('Wind down early tonight')
             await expect(rings.get_by_test_id('ring-rest-break')).to_have_count(0)
             assert 'goal' not in await rings.inner_text()
             await expect(rings.locator('.compact-values')).to_contain_text('departs')

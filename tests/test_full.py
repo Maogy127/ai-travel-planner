@@ -742,7 +742,8 @@ async def daybuilder_checks(b,base,label,shots):
     await pg.get_by_test_id('db-day-'+date).click()
     ok(label+' db clear '+date,await day.locator('.db-conflict').count()==0)
   # The default departure keeps its sample anchor and now offers the shared editor.
-  ok(label+' db flight anchor','Sample departure' in await day.inner_text() and await day.locator('.db-locked').count()==1)
+  # Final audit: Return supplies direction; show the sample time in the short title.
+  ok(label+' db flight anchor','Sample ~10:00 AM' in await day.inner_text() and await day.locator('.db-locked').count()==1)
   await pg.get_by_test_id('db-day-2026-11-26').click()
   async def ids():
     return await day.locator('[data-db-id]:not(.db-prep)').evaluate_all('es=>es.map(e=>e.dataset.dbId)')

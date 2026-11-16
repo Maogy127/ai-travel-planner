@@ -1728,3 +1728,8 @@ body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;
 .account-sheet details{margin-top:16px}.account-sheet summary{cursor:pointer;white-space:nowrap}
 .pick-footer>[data-testid=pick-next]:disabled{min-width:0;max-width:65%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #toast.cloud-notice{max-width:calc(100vw - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Flight direction lives in the time column; reserve one readable title line. */
+.db-flight-card .db-expand strong,.db-flight-card .db-activity>strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
+@media(max-width:600px){.db-flight-card .db-expand strong,.db-flight-card .db-activity>strong{font-size:16px}}
+@media(max-width:600px){.db-daycard .db-flight-card .db-time{flex-basis:64px}.db-flight-card>.transport-icon{margin-inline:4px}}

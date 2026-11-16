@@ -40,8 +40,8 @@ async def checks(browser):
                 await expect(pg.get_by_test_id('edit-flight')).to_have_count(1)
                 saved[date]=await pg.get_by_test_id('db-flight-time').input_value()
                 assert saved[date]==value
-                # The retained hidden value must agree with the visible flight anchor.
-                await expect(day).to_contain_text('lands 6:00 PM' if date.endswith('25') else 'departs 9:00 AM')
+                # Final audit: Arrival/Return supplies direction; title keeps the complete time.
+                await expect(day).to_contain_text('6:00 PM' if date.endswith('25') else '9:00 AM')
                 await no_placeholders(pg)
             await pg.reload()
             await reopen_dashboard(pg)
@@ -52,7 +52,7 @@ async def checks(browser):
                 await expect(pg.get_by_test_id('db-flight-time')).to_have_value(label)
                 direction='arrival' if date.endswith('25') else 'return'
                 assert await pg.evaluate('(key)=>__gonow.state.answers[key]',direction+'Time')==label
-                await expect(pg.get_by_test_id('db-day-list')).to_contain_text('lands 6:00 PM' if direction=='arrival' else 'departs 9:00 AM')
+                await expect(pg.get_by_test_id('db-day-list')).to_contain_text('6:00 PM' if direction=='arrival' else '9:00 AM')
                 await no_placeholders(pg)
             print('PASS transport cards',width)
         finally:
