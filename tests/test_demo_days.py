@@ -21,10 +21,11 @@ async def checks(browser):
                 diamond = day.locator('[data-db-zone="day"][data-db-source="2026-11-26-1"]')
                 await expect(diamond.get_by_test_id('db-time')).to_have_text('6:00 AM–7:30 AM')
                 await expect(diamond).to_contain_text('Diamond Head — 6:00 AM entry slot')
-                await expect(diamond.locator('img.db-thumb')).to_have_attribute('src', 'images/activity-waikiki-sunset.jpg')
+                # Diamond Head now uses its own summit photo, including expanded images.
+                await expect(diamond.locator('img.db-thumb')).to_have_attribute('src', 'images/activity-diamond-head-summit.jpg')
                 await diamond.get_by_test_id('db-expand').click()
                 images = await diamond.locator('img').evaluate_all('els=>els.map(e=>e.getAttribute("src"))')
-                assert images and all('waikiki-sunset' in src and 'kualoa' not in src for src in images), images
+                assert images and all('diamond-head-summit' in src and 'kualoa' not in src for src in images), images
                 await expect(day.locator('[data-testid="db-note"], .db-conflict')).to_have_count(0)
                 assert not errors, errors
                 assert not await pg.evaluate('document.documentElement.scrollWidth > innerWidth')

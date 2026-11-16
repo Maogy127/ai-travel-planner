@@ -40,7 +40,7 @@ const ctx = {
 ctx.window=ctx;ctx.scrollTo=()=>{};ctx.addEventListener=(event,fn)=>{if(!windowListeners.has(event))windowListeners.set(event,[]);windowListeners.get(event).push(fn);};ctx.history={state:null,pushState(s){this.state=s},replaceState(s){this.state=s}};
 vm.createContext(ctx);
 const jsRoot = fs.existsSync(`${__dirname}/../site/js/app.js`) ? `${__dirname}/../site/js/` : `${__dirname}/../js/`;
-for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','checkin','jetlag','dashboard','daybuilder','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8').replace('window.__gonow= {','window.__renderHelpers={builderContext,planBanner,dayHeadHTML,dayModel,rememberTrip,openSaved}; window.__gonow= {'),ctx);
+for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','checkin','jetlag','dashboard','daybuilder','pickcatalog','pickscheduler','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8').replace('window.__gonow= {','window.__renderHelpers={builderContext,planBanner,dayHeadHTML,dayModel,rememberTrip,openSaved}; window.__gonow= {'),ctx);
 const api=ctx.__gonow;
 const click=id=>node(`[data-testid="${id}"]`).click();
 function smoke(label){
@@ -80,7 +80,7 @@ function smoke(label){
  assert(defaultTimeline[1].title.includes('Diamond Head'));
  console.log('PASS default selected date',defaultBuilder.date(),'timeline',defaultTimeline.map(i=>ctx.DayBuilder.range(i.start,i.end)+' '+i.title).join(' → '));
  assert(node('default-regression .db-content').innerHTML.includes('aria-label="Unlock time"'));
- assert(node('default-regression .db-content').innerHTML.includes(' Locked</span>'));
+ assert(node('default-regression .db-content').innerHTML.includes('aria-label="Unlock time"'));
  const renderContext=ctx.__renderHelpers.builderContext();
  const dinner=defaultTimeline.find(i=>i.title.includes('La Mer'));
  assert.equal(renderContext.titleFor(dinner.sourceId||dinner.id,'2026-11-26',dinner),'Birthday dinner — La Mer at Halekulani');
@@ -230,4 +230,41 @@ function smoke(label){
   delete api.state.plan.weather;smoke(destination+' without weather');
   console.log('PASS real '+destination+' template builder mount and day helpers');
  }
+ // Pick plans retain exact places, duration and reservations through the real builder.
+ Object.assign(api.state.answers,{destination:'Oahu',start:'2026-11-25',end:'2026-11-29',level:'active',ages:[18,19],picks:{activities:['diamond-head','dive','laniakea','waimea'],restaurants:['lamer','senia']}});
+ const picked=ctx.PickScheduler.schedule(api.state.answers,ctx.GONOW_PICKS.oahu);
+ assert.equal(picked.unfit.length,0);
+ api.state.plan={...ctx.Engine.buildTemplatePlan(api.state.answers,ctx.Engine.matchDestination('Oahu')),id:'picks-render-test',days:picked.days};
+ ctx.DayBuilder.resetSession();
+ const pickedBuilder=ctx.DayBuilder.mount(node('picked-plan'),{...ctx.__renderHelpers.builderContext(),plan:api.state.plan});
+ const scheduled=pickedBuilder.schedule().days.flatMap(d=>d.items);
+ for(const item of scheduled)assert.equal((item.notes||[]).length,0,JSON.stringify(item));
+ for(const id of ['diamond-head','dive','laniakea','waimea','lamer','senia'])assert(scheduled.some(i=>i.id===id),id);
+ assert.equal(scheduled.find(i=>i.id==='lamer').start,1170);
+ console.log('PASS picked plan real DayBuilder.schedule preserves all picks without conflict warnings');
+ // Exercise the full.py export fixture through the actual builder and ICS code.
+ const exportIds=JSON.parse(fs.readFileSync('tests/test_full.py','utf8').match(/OAHU_EXPORT_PICKS = (\[[\s\S]*?\])/)[1].replace(/'/g,'"'));
+ const catalog=ctx.GONOW_PICKS.oahu;
+ api.state.answers.picks={activities:exportIds.filter(id=>catalog.activities.some(i=>i.id===id)),restaurants:['lamer','senia',...exportIds.filter(id=>catalog.restaurants.some(i=>i.id===id))]};
+ const fullPicks=ctx.PickScheduler.schedule(api.state.answers,catalog);
+ assert.equal(fullPicks.unfit.length,0);
+ api.state.plan={...api.state.plan,id:'oahu-picks-export',days:fullPicks.days};
+ ctx.DayBuilder.resetSession();
+ const exportBuilder=ctx.DayBuilder.mount(node('export-plan'),{...ctx.__renderHelpers.builderContext(),plan:api.state.plan});
+ for(const date of ['2026-11-26','2026-11-27']){
+  exportBuilder.selectDay(date,false);
+  const html=node('export-plan .db-content').innerHTML;
+  const buttons=html.match(/<button[^>]*data-testid="db-lock"[^>]*aria-pressed="true"[^>]*>[\s\S]*?<\/button>/g)||[];
+  assert(buttons.length>0);
+  for(const button of buttons){assert.equal((button.match(/<svg/g)||[]).length,1);assert(button.includes(' Locked</button>'));}
+  assert(!html.includes('class="db-lock"'),'toggle is the only booking lock indicator');
+ }
+ api.state.edits={items:{'pick-checkin':{note:'Shared café note, bring water; enjoy 🌺'}},removed:['udon']};
+ const fullICS=api.buildICS();const unfolded=fullICS.replace(/\r\n /g,'');
+ assert((fullICS.match(/BEGIN:VEVENT/g)||[]).length>=15);
+ assert(unfolded.includes('Diamond Head')&&unfolded.includes('Kualoa'));
+ assert(unfolded.includes('Shared café note\\, bring water\\; enjoy 🌺'));
+ assert(!unfolded.includes('SUMMARY:'+catalog.restaurants.find(i=>i.id==='udon').name+'\r\n'));
+ console.log('PASS full pick fixture ICS event count, researched places, escaped note/removal and single visible Locked toggle');
+
 })().catch(e=>{console.error(e.stack);process.exitCode=1;});

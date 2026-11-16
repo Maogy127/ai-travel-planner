@@ -119,8 +119,8 @@ function duration(item) {
 }
 function convert(item = {}) {
     return {
-        closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: place(item.title || 'Activity'), preferred: parse(item.time),
-        duration: duration(item), walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
+        locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
+        duration: item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: /intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : [],
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
     };
@@ -529,7 +529,8 @@ function mount(root, ctx = {}) {
     }
     const days = saved.days || {};
     if (ctx.shared) saved.days = days;
-    let flightTime = saved.flightTime || '';
+    let flightTime = saved.flightTime || sourcePlan().flightTime || '';
+    if(/^\d{1,2}:\d{2}$/.test(flightTime)){const parts=flightTime.split(':').map(Number);flightTime=clock(parts[0]*60+parts[1]);}
     if (ctx.dock) root.classList.add('db-dock');
     root.innerHTML = ctx.dock
         ? '<div class="db-workspace"><div class="db-content"></div><aside class="db-dock-tray" id="activity-tray" data-testid="activity-tray"></aside></div><div class="db-print-all"></div><div class="db-sr" role="status" aria-live="polite" data-testid="db-live"></div>'
@@ -658,7 +659,7 @@ function mount(root, ctx = {}) {
     }
     function lockButton(i, title, uid) {
         const label = i.locked ? 'Unlock time' : 'Lock time';
-        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(i.locked ? 'Unlock time' : 'Lock time')}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}</button>`;
+        return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(i.locked ? 'Unlock time' : 'Lock time')}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}${i.locked ? ' Locked' : ''}</button>`;
     }
     function pair(i, tray, options = {}) {
         const on = options.date || date;
@@ -696,7 +697,7 @@ function mount(root, ctx = {}) {
         const hasMenu = !tray && !print && (i.custom || i.kind !== 'prep');
         const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}" aria-label="More actions for ${esc(title)}">⋯</button>` : '';
         const menu = hasMenu ? `<div hidden id="db-more-${uid}" data-testid="db-more-menu" role="menu">${menuItems}</div>` : '';
-        const controls = moves || canLock || hasMenu ? `<div class="db-controls">${canLock ? lockChip : ''}${tray ? moves : menuButton}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
+        const controls = moves || canLock || hasMenu ? `<div class="db-controls">${tray ? moves : menuButton}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
         const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
         const noteId = 'db-note-' + uid;
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';

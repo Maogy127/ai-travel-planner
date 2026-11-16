@@ -26,7 +26,7 @@ for (const [item, file] of Object.entries(map)) {
   assert.ok(!/AI-generated|artificial intelligence/i.test(credit.alt + credit.photographer));
   assert.ok(credit.alt.length > 20, credit.alt);
 }
-assert.ok(map['2026-11-26-1'] === 'activity-waikiki-sunset.jpg');
+assert.ok(map['2026-11-26-1'] === 'activity-diamond-head-summit.jpg');
 assert.ok(/Diamond Head crater/.test(byId['activity-diamond-head'].alt));
 assert.ok(map['2026-11-28-9'] === 'activity-waikiki-sunset.jpg');
 assert.ok(/Waikiki Beach at sunset/.test(byId['activity-waikiki-sunset'].alt));
@@ -34,3 +34,9 @@ assert.ok(!Object.values(map).includes('oahu.jpg'));
 const jsCredits = fs.readFileSync(path.join(root, 'js/credits.js'), 'utf8');
 for (const credit of credits) assert.ok(jsCredits.includes(credit.photoUrl), credit.id);
 console.log('PASS photo provenance', Object.keys(map).length, 'activities', credits.length, 'credits');
+for (const entry of credits.filter(c=>c.file)) {
+ assert.ok(fs.existsSync(path.join(root,entry.file)),entry.file);
+ assert.ok(entry.license && entry.licenseUrl && entry.photoUrl,entry.id);
+ assert.ok(jsCredits.includes(entry.photoUrl),entry.id);
+}
+console.log('PASS supplied pick photo files and licenses');

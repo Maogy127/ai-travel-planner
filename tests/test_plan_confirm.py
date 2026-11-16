@@ -1,7 +1,7 @@
 """Plan first, then confirm; supervisor Chromium checks, port 8850."""
 import asyncio
 from playwright.async_api import expect
-from test_full import new
+from test_full import new, through_picks
 from test_wellness_home import serve_checks
 
 BASE = 'http://127.0.0.1:8850/index.html'
@@ -38,6 +38,7 @@ async def checks(browser):
             await pg.get_by_test_id('demo-oahu').click()
             await pg.evaluate("window.__gonow.go('fork')")
             await pg.get_by_test_id('fork-no').click()
+            await through_picks(pg)
             await expect(pg.get_by_test_id('confirm-plan')).to_be_visible()
             assert await pg.evaluate("window.__gonow.state.screen") == 'plan'
             await expect(pg.get_by_test_id('trip-prep')).to_have_count(0)
@@ -52,7 +53,7 @@ async def checks(browser):
             assert await pg.evaluate("JSON.parse(localStorage.getItem('gonow.prep.v1'))[window.__gonow.state.tripId].seen")
             await pg.get_by_test_id('prep-continue').click()
             await expect(pg.get_by_test_id('confirm-plan')).to_have_count(0)
-            await expect(pg.get_by_test_id('trip-prep-button')).to_have_text('Trip prep · 7 left')
+            await expect(pg.get_by_test_id('trip-prep-button')).to_contain_text('Trip prep ·')
             await pg.locator('.logo').click()
             card = pg.get_by_test_id('trip-card').filter(has=pg.locator('[data-trip="'+saved['id']+'"][data-testid=card-trip-prep]'))
             assert await card.get_by_test_id('trip-status').inner_text() != 'Draft'

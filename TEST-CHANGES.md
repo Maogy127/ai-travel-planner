@@ -773,3 +773,316 @@ Lines at 390 are expected layout counts for supervisor verification; this agent 
 | Full venue titles, photo fallback/credit, restriction explanations and dietary reasons → Details | Behind tap |
 
 Validation: **25 Node scripts pass**; syntax checks pass for **43 JavaScript/CJS and 41 Python files**; `git diff --check` passes. No network, browser execution, commit or push.
+
+## pick-flow
+
+Search/Back follow-up: normalized name, cuisine, area, category and tags for both catalogs; activities Back remembers its entry question or fork. Draft “Change my answers” still opens dates. Added Node search/navigation regressions and supervisor Playwright checks for poke, fork-no Back, empty-state wrapping and Draft answer editing.
+
+Validation for this follow-up: all 25 offline Node suites (19 `.js`, 6 `.cjs`) pass; all 44 Python test files pass `py_compile`; `git diff --check` passes. No Chromium run; known test_flow weather failures untouched.
+
+### Proofread checklist
+
+Checked below means source/copy review for both 1280 and 390 layouts, informed by the supervisor’s screenshot findings; it does **not** claim a new Chromium run. Actual viewport proofread and wrapping remain supervisor-run. For every row, looked for repeated questions, duplicate headings, empty headings, gaps, broken words, typos, leftover old copy and dead UI.
+
+| Reviewed surface | 1280 source review | 390 source review | Focus |
+|---|---|---|---|
+| Home | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Trip questions: dates, budget, who, ages, style, food, pace, musts | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Local questions: style, food, pace | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Fork | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Pick activities | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Activity details | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Search | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Pick restaurants: Popular and GoNow Picks | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Restaurant details | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Sticky bars | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Checkout → Draft plan | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Too-many notice | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Day view | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Cards | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Check-in | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Confirm plan | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Trip prep | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+| Summary | [x] | [x] | Question/heading uniqueness, copy completeness, spacing/wrapping rules and control bindings |
+
+### COPY-AUDIT — this follow-up batch
+
+| Added/changed visible string | Location | Characters | At 390 |
+|---|---|---:|---|
+| No matches · try another word | `js/app.js`, both pick search empty states | 28 | Targets one line; supervisor Playwright line-height assertion added. No over-one-line copy intended. |
+
+All other visible strings are unchanged in this follow-up. Search matching and Back routing add no visible copy. Earlier batch inventories below remain historical.
+
+
+- Export regression records the edited item's title and removes a different stop, preserving Diamond Head/Kualoa and all existing ICS/share note and removal assertions.
+- Fixed destination-aware stable pick IDs and Oahu classification, Honolulu ICS timezone, builder-authoritative removals, pick share state/restoration and map/dashboard schedules. Legacy saved pick IDs/storage keys remain unchanged. Added checkout/classification/ICS/share regressions; updated the checkout assertion to the exact destination-aware ID. All 26 offline Node suites pass; file/HTTP Chromium checks remain supervisor-run.
+
+- Full-suite export run now explicitly selects realistic Oahu activities and meals via optional `through_picks` picks; reservations stay preselected. All 16 picks fit Nov 25–29, plus check-in, leaving 16 events after removal; existing ICS/share/edit assertions remain intact.
+- Locked builder cards show one SVG + visible “Locked” in the existing toggle, preserving lock/unlock behavior, test IDs and aria attributes. No extra pill; read-only/print fallback remains singular.
+- Validation: all 26 Node suites pass; added real-builder ICS checks cover event count, Diamond Head/Kualoa, escaped note/removal and single visible lock toggles. Python syntax and diff whitespace checks pass. Chromium/Python browser checks remain supervisor-run; known seasonal-weather assertion untouched. No network, commit, push or remote operations.
+
+Supervisor regression fixes: DOM evaluation now uses valid CSS selectors and explicit visibility checks; Playwright locators retain `:visible`. Checkout stress tests use the constrained PCC case for a fitting swap. Locked unfit bookings always give a booking-specific reason (travel day, outside dates, or schedule conflict) and only Remove. Mixed locked GoNow Picks use three lines: name, GoNow Pick tag, booking (metadata yields its line). Diamond Head browser expectations now use the summit photo; existing Node provenance already agrees. All 24 stylesheet/script assets use `?v=20de649-budgetfix`. Stay tests traverse both pick pages before the Draft plan. Personalized fork coverage checks the same route. Wellness compares pick-plan rebuilds with the same picks and sleep settings, rather than the intentionally different curated demo. Deterministic scheduling is covered in Node.
+
+Validation: all 26 offline Node suites pass; Python sources compile. Chromium suites remain supervisor-run; no network, commits, pushes, or remote changes.
+
+Supervisor fixes: visible-only navigation waits; three supplied photos and credits; one catalog card per shopping place with inherited closures/special hours; unique-photo regression; singular/zero counts and shared duration formatting; scrolling chips, clear selection circles, accessible sheet close and compact attribution; corrected fork copy; pick-only banner/theme removal; scheduled pick movement, booking, location and cost fields; one lock toggle; styled unfit grid with reasons and fitting alternatives only. Node suites pass; Chromium is reserved for supervisor. Existing Python suites use ports 8860–8862.
+
+COPY-AUDIT additions/corrections for this review (all visible changes; runtime substitutions in braces):
+
+| Text | Where |
+|---|---|
+| Picked 0 | Empty activity/footer count; no day estimate |
+| Picked {N} · about 1 day / about {N} days | Activity footer |
+| {N} min / {N} h (e.g. 45 min, 1.5 h, 2 h) | Activity metadata and sheet How long |
+| No, pick places now | Fork card title |
+| Choose activities and food next. | Fork card body |
+| Pick places → | Fork button |
+| Food, sleep and must-dos. | Yes fork body |
+| Photo: {photographer} · {license} | Muted linked sheet caption |
+| Close / × | Sheet close label/control |
+| ✓ | Selected circle; unselected circle is empty |
+| Too many picks · {N} didn't fit | Unfit summary |
+| No time left / Closed those days | Unfit row reason |
+| Booked {weekday} · outside your dates | Unfit reservation reason |
+| Booked {weekday} · on your travel day / conflicts with your schedule | In-range unfit reservation reasons; never “No time left” |
+| 🌿 GoNow Pick / 🔒 Booked {weekday} {time} | Separate tag and booking lines in locked mixed-result cards; name is line one |
+| Remove / Swap | Small outline row actions; Swap only if fitting |
+| About {minutes} min. {intro} | Existing scheduled pick description retained behind tap |
+| Quick plan — answer 3 more questions to personalize / Personalize my plan | Removed on initialized picks; legacy only |
+| Your picks | Removed day theme; no empty theme element |
+| Locked | Removed duplicate pill when lock toggle is present |
+
+Photo attribution substitutions: Steven Pavlov · CC BY-SA 4.0 (Diamond Head summit), Shaosu Ren · CC BY 3.0 (parasail), Lahaina · CC BY-SA 4.0 (Kahala beach). Catalog removes Black Friday shopping and Royal Center & Market Place cards; retains Ala Moana Center and Royal Hawaiian Center. Sample menu, Example reviews, Example dish, Add and Remove remain unchanged in sheets.
+
+
+
+Preview only. No commits, pushes, network requests, or browser execution by the implementation agent.
+
+Changes: `js/pickcatalog.js` supplies 26 activities and 13 restaurants; `js/pickscheduler.js` schedules picks; `js/app.js`, `index.html`, and CSS provide the two pages and checkout. Credits include all 27 locally supplied photos. `oahu.js` owns weekly and holiday closures. DayBuilder preserves picked places, durations and explicit schedule times.
+
+Tests: added `test_pickflow.js` and supervisor-only `test_pick_activities.py` (8860), `test_pick_restaurants.py` (8861), `test_checkout.py` (8862). The existing `test_full.py` shared `through_picks` helper now feeds `wait_plan` and `continue_prep`, which are used by question, track and other flows. `test_plan_confirm.py` explicitly traverses picks. `check-ui.cjs` exercises both pages; `test_plan_render.cjs` calls the real DayBuilder.schedule on a picked plan and checks every pick and zero warnings. Photo provenance checks cover supplied files/licenses.
+
+Decisions: card bodies toggle; separate accessible ⓘ buttons open the native details dialog. Only must-do activity matches start selected. Exact numeric ages hide incompatible activities; saved incompatible selections become explicit unfit picks. Existing restaurant reservations always start selected and cannot be unticked. GoNow Pick tags appear in mixed search/meal results; sectioned results use the section heading alone. Reviews and menus always carry example/sample labels. Dish-example captions appear only in details. Sticky footer space includes safe-area padding.
+
+Scheduler: fixes reservations and timed entries first, groups by area, then searches 15-minute slots within hours, meal windows, pace capacity, travel buffers, arrival/departure limits and the shared dive rule. It tries 18 deterministic area/duration/day packing orders before reporting unfit picks. Dive rinse time is reserved. Arrival is limited to check-in and an evening meal. Unknown departure times use a conservative noon activity cutoff and midnight for dive safety. Every selected catalog ID is in days or the explicit unfit list; unfit picks also populate DayBuilder’s unscheduled tray. Remove changes saved picks; Swap searches for a fitting same-category alternative and rechecks the schedule.
+
+Limitations: bounded heuristic packing does not prove mathematical impossibility; unusually constrained combinations may still need manual changes. Travel is a distance-based estimate, with a conservative minimum connector buffer. Hours, prices, menus, seasonal conditions and reviews are local samples, not live information. Fixed reservations outside the chosen dates stay unfit and visible. Non-curated destinations retain the original generator. The home Oahu sample opens the fixed curated plan directly. Legacy generator fixtures remain in Node suites alongside explicit new-flow tests. No claims of browser validation: supervisor must run the Python suites and proofread actual mobile wrapping. The pre-existing seasonal snapshot-weather failure is untouched.
+
+New testids: `pick-activities`, `pick-food`, `pick-search`, `pick-card`, `pick-next`, `pick-back`, `pick-details`, `unfit-notice`. Per-item selectors: `data-pick-id`, `data-pick-toggle`, `data-pick-info`; unfit actions: `data-unfit-remove`, `data-unfit-swap`.
+
+Supervisor proofread checklist (pending):
+
+- [ ] Run three new Python suites at 1280 and real 390×844.
+- [ ] Verify card text, visible tick/lock state, keyboard dialog focus/return, and last-card clearance.
+- [ ] Verify all new photos, attribution, dish captions, and sample labels.
+- [ ] Verify back navigation/pick persistence and draft reload.
+- [ ] Verify blocked edits, exact ages, track modes, dashboard, local mode, confirmation and Trip prep.
+- [ ] Review crowded-plan Remove/Swap and unscheduled tray behavior.
+- [ ] Record measured copy wrapping below; resolve any unexpected multi-line primary copy.
+
+COPY-AUDIT: original string → final text. These are implementation estimates, not measured Chromium results. Short names/meta/controls target one line at 390; details may wrap behind a tap. Placeholders expand at runtime.
+
+| String | Final text | Lines at 390 |
+|---|---|---|
+| $ | $ | 1 expected; verify |
+| $$ | $$ | 1 expected; verify |
+| $$$$ | $$$$ | 1 expected; verify |
+| $100 pp | $100 pp | 1 expected; verify |
+| $15 pp | $15 pp | 1 expected; verify |
+| $150 pp | $150 pp | 1 expected; verify |
+| $25 pp | $25 pp | 1 expected; verify |
+| $30 pp | $30 pp | 1 expected; verify |
+| $34 pp | $34 pp | 1 expected; verify |
+| $5 pp | $5 pp | 1 expected; verify |
+| $90 pp | $90 pp | 1 expected; verify |
+| A memorable stop. | A memorable stop. | 1 expected; verify |
+| About 30 min. Settle in. | About 30 min. Settle in. | 1 expected; verify |
+| About 60 min. Choose nearby. | About 60 min. Choose nearby. | 1 expected; verify |
+| Active | Active | 1 expected; verify |
+| Add | Add | 1 expected; verify |
+| Ahi poke | Ahi poke | 1 expected; verify |
+| Ala Moana | Ala Moana | 1 expected; verify |
+| Ala Moana Center | Ala Moana Center | 1 expected; verify |
+| All | All | 1 expected; verify |
+| Allow extra travel time. | Allow extra travel time. | 1 expected; verify |
+| An enjoyable meal. | An enjoyable meal. | 1 expected; verify |
+| Azuki topping | Azuki topping | 1 expected; verify |
+| Açaí bowl | Açaí bowl | 1 expected; verify |
+| Açaí favorites. Hours and prices are samples. | Açaí favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Back | Back | 1 expected; verify |
+| Bishop Museum | Bishop Museum | 1 expected; verify |
+| Black Friday shopping | Merged into Ala Moana Center | 1 expected; verify |
+| Booked {weekday} {time} | Booked {weekday} {time} | 1 expected; verify |
+| Booked · {date} {time} | Booked · {date} {time} | 1 expected; verify |
+| Breakfast | Breakfast | 1 expected; verify |
+| Breakfast sandwich | Breakfast sandwich | 1 expected; verify |
+| Check out | Check out | 1 expected; verify |
+| Chili rice | Chili rice | 1 expected; verify |
+| Chill | Chill | 1 expected; verify |
+| Chinatown | Chinatown | 1 expected; verify |
+| Cinnamon malasada | Cinnamon malasada | 1 expected; verify |
+| Close | Close | 1 expected; verify |
+| Closed · {days or dates} | Closed · {days or dates} | 1 expected; verify |
+| Coffee | Coffee | 1 expected; verify |
+| Culture | Culture | 1 expected; verify |
+| Custard malasada | Custard malasada | 1 expected; verify |
+| Deli favorites. Hours and prices are samples. | Deli favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Deli sandwich | Deli sandwich | 1 expected; verify |
+| Dessert | Dessert | 1 expected; verify |
+| Details: {name} | Details: {name} | 1 expected; verify |
+| Diamond Head | Diamond Head | 1 expected; verify |
+| Dinner | Dinner | 1 expected; verify |
+| Dole Plantation | Dole Plantation | 1 expected; verify |
+| Downtown | Downtown | 1 expected; verify |
+| East Oahu | East Oahu | 1 expected; verify |
+| Easy | Easy | 1 expected; verify |
+| Egg musubi | Egg musubi | 1 expected; verify |
+| Evening meal near hotel | Evening meal near hotel | 1 expected; verify |
+| Example dish | Example dish | 1 expected; verify |
+| Example reviews | Example reviews | 1 expected; verify |
+| Explore Ala Moana Center. Allow time for the route. | Explore Ala Moana Center. Allow time for the route. | 1–2 expected; verify |
+| Explore Bishop Museum. Allow time for the route. | Explore Bishop Museum. Allow time for the route. | 1–2 expected; verify |
+| Explore Black Friday shopping. Allow time for the route. | Explore Black Friday shopping. Allow time for the route. | 1–2 expected; verify |
+| Explore Diamond Head. Allow time for the route. | Explore Diamond Head. Allow time for the route. | 1–2 expected; verify |
+| Explore Dole Plantation. Allow time for the route. | Explore Dole Plantation. Allow time for the route. | 1–2 expected; verify |
+| Explore Intro dive Kewalo. Allow time for the route. | Explore Intro dive Kewalo. Allow time for the route. | 1–2 expected; verify |
+| Explore Kahala sunset photos. Allow time for the route. | Explore Kahala sunset photos. Allow time for the route. | 1–2 expected; verify |
+| Explore Koko Crater. Allow time for the route. | Explore Koko Crater. Allow time for the route. | 1–2 expected; verify |
+| Explore Kualoa Jurassic Adventure. Allow time for the route. | Explore Kualoa Jurassic Adventure. Allow time for the route. | 1–2 expected; verify |
+| Explore Laniakea turtle beach. Allow time for the route. | Explore Laniakea turtle beach. Allow time for the route. | 1–2 expected; verify |
+| Explore Lanikai Pillbox sunrise. Allow time for the route. | Explore Lanikai Pillbox sunrise. Allow time for the route. | 1–2 expected; verify |
+| Explore Magic Island sunset. Allow time for the route. | Explore Magic Island sunset. Allow time for the route. | 1–2 expected; verify |
+| Explore Makapuʻu Lighthouse Trail. Allow time for the route. | Explore Makapuʻu Lighthouse Trail. Allow time for the route. | 1–2 expected; verify |
+| Explore Mānoa Falls hike. Allow time for the route. | Explore Mānoa Falls hike. Allow time for the route. | 1–2 expected; verify |
+| Explore Parasail Waikiki. Allow time for the route. | Explore Parasail Waikiki. Allow time for the route. | 1–2 expected; verify |
+| Explore Pearl Harbor / USS Arizona. Allow time for the route. | Explore Pearl Harbor / USS Arizona. Allow time for the route. | 1–2 expected; verify |
+| Explore Polynesian Cultural Center. Allow time for the route. | Explore Polynesian Cultural Center. Allow time for the route. | 1–2 expected; verify |
+| Explore Royal Center & Market Place. Allow time for the route. | Explore Royal Center & Market Place. Allow time for the route. | 1–2 expected; verify |
+| Explore Royal Hawaiian Center. Allow time for the route. | Explore Royal Hawaiian Center. Allow time for the route. | 1–2 expected; verify |
+| Explore Waikiki sunset. Allow time for the route. | Explore Waikiki sunset. Allow time for the route. | 1–2 expected; verify |
+| Explore Waikiki surf lesson. Allow time for the route. | Explore Waikiki surf lesson. Allow time for the route. | 1–2 expected; verify |
+| Explore Waimea Bay. Allow time for the route. | Explore Waimea Bay. Allow time for the route. | 1–2 expected; verify |
+| Explore ʻIolani Palace tour. Allow time for the route. | Explore ʻIolani Palace tour. Allow time for the route. | 1–2 expected; verify |
+| Free | Free | 1 expected; verify |
+| French favorites. Hours and prices are samples. | French favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Fruit bowl | Fruit bowl | 1 expected; verify |
+| Garlic shrimp | Garlic shrimp | 1 expected; verify |
+| Giovanni’s Shrimp Truck | Giovanni’s Shrimp Truck | 1 expected; verify |
+| GoNow Picks | GoNow Picks | 1 expected; verify |
+| Hanauma Bay snorkel | Hanauma Bay snorkel | 1 expected; verify |
+| Hawaiian favorites. Hours and prices are samples. | Hawaiian favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Hawaiian plate | Hawaiian plate | 1 expected; verify |
+| Helena’s Hawaiian Food | Helena’s Hawaiian Food | 1 expected; verify |
+| Highway Inn | Highway Inn | 1 expected; verify |
+| Hot shrimp | Hot shrimp | 1 expected; verify |
+| Hotel check-in | Hotel check-in | 1 expected; verify |
+| Hours · {open}–{close} | Hours · {open}–{close} | 1 expected; verify |
+| How long · {minutes} min | How long · {minutes} min | 1 expected; verify |
+| Ice cream | Ice cream | 1 expected; verify |
+| Intro dive Kewalo | Intro dive Kewalo | 1 expected; verify |
+| Island Vintage Coffee | Island Vintage Coffee | 1 expected; verify |
+| Kahala | Kahala | 1 expected; verify |
+| Kahala pool & beach | Kahala pool & beach | 1 expected; verify |
+| Kahala sunset photos | Kahala sunset photos | 1 expected; verify |
+| Kailua | Kailua | 1 expected; verify |
+| Kakaako | Kakaako | 1 expected; verify |
+| Kake udon | Kake udon | 1 expected; verify |
+| Kalapawai Market | Kalapawai Market | 1 expected; verify |
+| Kalihi | Kalihi | 1 expected; verify |
+| Kalua pig | Kalua pig | 1 expected; verify |
+| Kapahulu | Kapahulu | 1 expected; verify |
+| Kewalo Basin | Kewalo Basin | 1 expected; verify |
+| Kitsune udon | Kitsune udon | 1 expected; verify |
+| Koko Crater | Koko Crater | 1 expected; verify |
+| Kualoa Jurassic Adventure | Kualoa Jurassic Adventure | 1 expected; verify |
+| Kualoa Ranch | Kualoa Ranch | 1 expected; verify |
+| La Mer at Halekulani | La Mer at Halekulani | 1 expected; verify |
+| Laniakea turtle beach | Laniakea turtle beach | 1 expected; verify |
+| Lanikai Pillbox sunrise | Lanikai Pillbox sunrise | 1 expected; verify |
+| Laulau | Laulau | 1 expected; verify |
+| Lemon shrimp | Lemon shrimp | 1 expected; verify |
+| Leonard’s Bakery | Leonard’s Bakery | 1 expected; verify |
+| Loco moco | Loco moco | 1 expected; verify |
+| Lomi salmon | Lomi salmon | 1 expected; verify |
+| Lunch | Lunch | 1 expected; verify |
+| Magic Island sunset | Magic Island sunset | 1 expected; verify |
+| Makapuu | Makapuu | 1 expected; verify |
+| Makapuʻu Lighthouse Trail | Makapuʻu Lighthouse Trail | 1 expected; verify |
+| Malasadas favorites. Hours and prices are samples. | Malasadas favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Manoa | Manoa | 1 expected; verify |
+| Marukame Udon | Marukame Udon | 1 expected; verify |
+| Matsumoto Shave Ice | Matsumoto Shave Ice | 1 expected; verify |
+| Minimum age {age} | Minimum age {age} | 1 expected; verify |
+| Moderate | Moderate | 1 expected; verify |
+| Must-do | Must-do | 1 expected; verify |
+| Musubi Cafe Iyasume | Musubi Cafe Iyasume | 1 expected; verify |
+| Musubi favorites. Hours and prices are samples. | Musubi favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Mānoa Falls hike | Mānoa Falls hike | 1 expected; verify |
+| Next: restaurants | Next: restaurants | 1 expected; verify |
+| No fitting swap | No fitting swap | 1 expected; verify |
+| No matches | No matches | 1 expected; verify |
+| North Shore | North Shore | 1 expected; verify |
+| Ono Seafood | Ono Seafood | 1 expected; verify |
+| Original malasada | Original malasada | 1 expected; verify |
+| Outdoors | Outdoors | 1 expected; verify |
+| Parasail Waikiki | Parasail Waikiki | 1 expected; verify |
+| Pearl Harbor | Pearl Harbor | 1 expected; verify |
+| Pearl Harbor / USS Arizona | Pearl Harbor / USS Arizona | 1 expected; verify |
+| Photo credit | Photo credit | 1 expected; verify |
+| Pick activities | Pick activities | 1 expected; verify |
+| Pick restaurants | Pick restaurants | 1 expected; verify |
+| Picked {count} | Picked {count} | 1 expected; verify |
+| Picked {count} · about {days} days | Picked {count} · about {days} days | 1 expected; verify |
+| Pipikaula | Pipikaula | 1 expected; verify |
+| Plan for a wait. | Plan for a wait. | 1 expected; verify |
+| Plate lunch | Plate lunch | 1 expected; verify |
+| Poke bowl | Poke bowl | 1 expected; verify |
+| Poke favorites. Hours and prices are samples. | Poke favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Polynesian Cultural Center | Polynesian Cultural Center | 1 expected; verify |
+| Popular | Popular | 1 expected; verify |
+| Price · {price} | Price · {price} | 1 expected; verify |
+| Rainbow Drive-In | Rainbow Drive-In | 1 expected; verify |
+| Remove | Remove | 1 expected; verify |
+| Reserve an entry time. Snorkel only in safe conditions. | Reserve an entry time. Snorkel only in safe conditions. | 1–2 expected; verify |
+| Reserve {name} | Reserve {name} | 1 expected; verify |
+| Rice ball | Rice ball | 1 expected; verify |
+| Roasted fish | Roasted fish | 1 expected; verify |
+| Royal Center & Market Place | Merged into Royal Hawaiian Center | 1 expected; verify |
+| Royal Hawaiian Center | Royal Hawaiian Center | 1 expected; verify |
+| Salad | Salad | 1 expected; verify |
+| Sample menu | Sample menu | 1 expected; verify |
+| Sample places for now | Sample places for now | 1 expected; verify |
+| Sample weekly hours | Sample weekly hours | 1 expected; verify |
+| Search | Search | 1 expected; verify |
+| Seasonal favorites. Hours and prices are samples. | Seasonal favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Seasonal fish | Seasonal fish | 1 expected; verify |
+| Seasonal vegetables | Seasonal vegetables | 1 expected; verify |
+| Senia Chinatown | Senia Chinatown | 1 expected; verify |
+| Sharks Cove snorkel | Sharks Cove snorkel | 1 expected; verify |
+| Shave ice | Shave ice | 1 expected; verify |
+| Shave ice favorites. Hours and prices are samples. | Shave ice favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Shopping | Shopping | 1 expected; verify |
+| Shoyu poke | Shoyu poke | 1 expected; verify |
+| Shrimp favorites. Hours and prices are samples. | Shrimp favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Slow down by the hotel pool or beach. | Slow down by the hotel pool or beach. | 1–2 expected; verify |
+| Snacks | Snacks | 1 expected; verify |
+| Spam musubi | Spam musubi | 1 expected; verify |
+| Summer is best for snorkeling. Winter surf: stay out. | Summer is best for snorkeling. Winter surf: stay out. | 1–2 expected; verify |
+| Sunday | Sunday | 1 expected; verify |
+| Swap | Swap | 1 expected; verify |
+| Tasting menu | Tasting menu | 1 expected; verify |
+| Too many picks · {count} didn’t fit | Too many picks · {count} didn’t fit | 1–2 expected; verify |
+| Udon favorites. Hours and prices are samples. | Udon favorites. Hours and prices are samples. | 1–2 expected; verify |
+| Vegetable tempura | Vegetable tempura | 1 expected; verify |
+| Waikiki | Waikiki | 1 expected; verify |
+| Waikiki sunset | Waikiki sunset | 1 expected; verify |
+| Waikiki surf lesson | Waikiki surf lesson | 1 expected; verify |
+| Waimea Bay | Waimea Bay | 1 expected; verify |
+| Water | Water | 1 expected; verify |
+| Weekly closure | Weekly closure | 1 expected; verify |
+| Your picks | Your picks | 1 expected; verify |
+| {cuisine} · {area} · {price} | {cuisine} · {area} · {price} | 1 expected; verify |
+| {hours} h · {effort} · {price} | {hours} h · {effort} · {price} | 1 expected; verify |
+| {stars} ★ · {review} | {stars} ★ · {review} | 1 expected; verify |
+| ʻIolani Palace tour | ʻIolani Palace tour | 1 expected; verify |
+| 🌿 GoNow Pick | 🌿 GoNow Pick | 1 expected; verify |

@@ -13,7 +13,8 @@ async def checks(browser):
     try:
         assets = await pg.locator('script[src],link[rel=stylesheet]').evaluate_all(
             "els => els.map(e => e.getAttribute('src') || e.getAttribute('href')).filter(p => /^(js|css|vendor|fonts)\\//.test(p))")
-        assert len(assets) == 22
+        # Pick catalog and scheduler add two versioned scripts.
+        assert len(assets) == 24
         for path in assets:
             assert path.endswith('?v=20de649-budgetfix'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
