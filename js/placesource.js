@@ -99,7 +99,7 @@ function create(options={}){
   const kind=t=>{const types=[t.primaryType||'',...(t.types||[])].join(' ');return /museum/.test(types)?'museum':/art_gallery/.test(types)?'gallery':/zoo/.test(types)?'zoo':/aquarium/.test(types)?'aquarium':/beach/.test(types)?'beach':/park|garden|hiking/.test(types)?'park':/observation|viewpoint|scenic/.test(types)?'viewpoint':/cafe|coffee|bakery/.test(types)?'cafe':DINING.test(types)?'restaurant':'attraction';};
   const seen=new Set();const rows=[...sights,...food].filter(p=>p&&p.id&&p.displayName&&p.location&&!seen.has(p.id)&&seen.add(p.id)).map((p,i)=>{const k=kind(p),dining=['restaurant','cafe'].includes(k),photo=p.photos&&p.photos[0],author=photo&&photo.authorAttributions&&photo.authorAttributions[0];
    return {id:'g-'+p.id,placeId:p.id,name:p.displayName.text,type:k,category:labels[k]||'Attraction',lat:+p.location.latitude,lng:+p.location.longitude,area:city,address:p.formattedAddress||'',...estimates(k),needsTicket:false,price:'',intro:'',
-    photo:photo&&photo.name&&/^places\/[\w-]+\/photos\/[\w-]+$/.test(photo.name)?'https://places.googleapis.com/v1/'+photo.name+'/media?maxWidthPx=480&key='+encodeURIComponent(key):'',creditUrl:author&&author.uri||p.googleMapsUri||'',creditName:author&&author.displayName||'Google Maps',
+    photo:photo&&photo.name&&/^places\/[\w-]+\/photos\/[\w-]+$/.test(photo.name)?'gplace:'+photo.name:'',creditUrl:author&&author.uri||p.googleMapsUri||'',creditName:author&&author.displayName||'Google Maps',
     generic:true,section:'popular',source:'google',cuisine:dining?(k==='cafe'?'Coffee':''):'',...(dining?{meals:BREAKFAST.test([p.primaryType,...(p.types||[])].join(' '))?['breakfast','lunch','snack']:['lunch','dinner']}:{}),...googleRating(p),openingHours:p.regularOpeningHours&&Array.isArray(p.regularOpeningHours.weekdayDescriptions)?p.regularOpeningHours.weekdayDescriptions.map(String).join('; ').replace(/[\u202f\u2009]/g,' '):'',parsedHours:googleHours(p.regularOpeningHours),hours:{},closed:[],closedDates:[],tags:[],mapUrl:p.googleMapsUri||'',rank:i};}).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
   const middle=center||(rows.length?{lat:rows.reduce((a,p)=>a+p.lat,0)/rows.length,lng:rows.reduce((a,p)=>a+p.lng,0)/rows.length}:null);
   if(!rows.length)throw Error('No places');
@@ -118,5 +118,7 @@ function create(options={}){
  }).then(data=>Object.assign(place,data)).catch(()=>place);}
  return {load,geocode,nearby,enrich,catalog};
 }
-window.GoNowPlaceSource={create,prune,parseHours,allows,estimates,durationLabel,cardLine,ratingLabel,placeholder,slug,normalize,CONTACT};
+// Google photos are stored as key-free 'gplace:<photo name>' tokens; the URL (with the key) is built only at render time.
+function photoSrc(v){v=String(v||'');const m=/^gplace:(places\/[\w-]+\/photos\/[\w-]+)$/.exec(v);if(!m)return /^gplace:/.test(v)?'':v;const cfg=root.GONOW_PLACES_CONFIG,key=String(cfg&&cfg.GOOGLE_PLACES_KEY||'').trim();return key?'https://places.googleapis.com/v1/'+m[1]+'/media?maxWidthPx=480&key='+encodeURIComponent(key):'';}
+window.GoNowPlaceSource={photoSrc,create,prune,parseHours,allows,estimates,durationLabel,cardLine,ratingLabel,placeholder,slug,normalize,CONTACT};
 })();

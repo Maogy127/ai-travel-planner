@@ -87,7 +87,7 @@ service cloud.firestore {
    function common(d) {
     return d.ownerId == request.auth.uid && str(d.ownerName, 40)
       && str(d.title, 80) && d.title.size() > 0 && str(d.line, 140) && str(d.destination, 80)
-      && str(d.photo, 300) && (d.photo == '' || d.photo.matches('^(images/[a-z-]+[.]jpg|https://.+)$'))
+      && str(d.photo, 300) && (d.photo == '' || d.photo.matches('^images/[a-z-]+[.]jpg$'))
       && d.createdAt == request.time;
    }
    function tripPost(d) {

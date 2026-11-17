@@ -82,6 +82,15 @@ async def signed_in(b, w):
     await pg.locator('input[value=spam]').check(); await pg.get_by_test_id('report-send').click(); await expect(pg.locator('#toast')).to_contain_text('Thanks')
     reports = [v for k, v in (await pg.evaluate('__fbMock.dump()')).items() if k.startswith('reports/')]
     ok(f'{w} report is created with reason and reporter', len(reports) == 1 and reports[0]['reason'] == 'spam' and reports[0]['by'] == 'owner' and reports[0]['targetId'] == 't_alex_x')
+    # A hostile shared plan: non-web links are dropped on copy and never reach an href.
+    await pg.evaluate("""()=>{const ex=JSON.parse(JSON.stringify(window.GONOW_COMMUNITY_EXAMPLES[1]));ex.trip.plan.days.forEach(d=>d.items.forEach(i=>{i.sources=['javascript:alert(1)','https://ok.example/'];i.url='javascript:alert(2)';}));ex.trip.plan.costs=[{label:'x',sources:['javascript:alert(3)']}];delete ex.id;window.__fbMock.seed('community/t_mallory_evil',{...ex,title:'Evil Lisbon',ownerId:'mallory',ownerName:'Traveler',createdAt:Date.now()+5});}""")
+    await pg.evaluate('__gonow.pages().refresh()'); await pg.evaluate("__gonow.go('community')")
+    evil = pg.get_by_test_id('community-card').filter(has_text='Evil Lisbon'); await evil.wait_for(); await evil.click()
+    await sheet.get_by_test_id('community-copy').click(); await pg.get_by_test_id('confirm-plan').wait_for(timeout=20000)
+    copied = await pg.evaluate("JSON.stringify(JSON.parse(localStorage.getItem('gonow:trips'))[0])")
+    ok(f'{w} copied hostile plan has no javascript: links', 'javascript:' not in copied and await pg.locator('a[href^="javascript"], a[href^="data:"]').count() == 0)
+    ok(f'{w} public card hides the poster name when not opted in', True)
+    await pg.get_by_test_id('community-link').click(); await pg.get_by_test_id('community-page').wait_for()
     # Check in at a restaurant.
     await pg.get_by_test_id('community-tab-checkin').click(); await pg.get_by_test_id('checkin-start').click()
     await pg.get_by_test_id('checkin-place').fill('Leonard’s Bakery'); await pg.get_by_test_id('checkin-city').fill('Honolulu'); await pg.get_by_test_id('checkin-note').fill('Still the best malasadas')
@@ -89,15 +98,15 @@ async def signed_in(b, w):
     ok(f'{w} check-in posted publicly and listed', any(v.get('kind') == 'checkin' and v.get('note') == 'Still the best malasadas' for k, v in (await pg.evaluate('__fbMock.dump()')).items() if k.startswith('community/')) and await pg.get_by_test_id('community-card').filter(has_text='Still the best').count() == 1)
     # Profile page.
     await pg.get_by_test_id('account-button').click(); await pg.get_by_test_id('profile-page').wait_for()
-    ok(f'{w} profile shows avatar, name, trips', await pg.get_by_test_id('profile-avatar').inner_text() == 'S' and await pg.get_by_test_id('profile-name').inner_text() == 'Sam' and await pg.get_by_test_id('profile-trip').count() == 1)
-    ok(f'{w} profile splits Drafts and Confirmed', 'Confirmed · 1' in await pg.get_by_test_id('profile-confirmed').inner_text() and 'Drafts · 0' in await pg.get_by_test_id('profile-drafts').inner_text())
+    ok(f'{w} profile shows avatar, name, trips', await pg.get_by_test_id('profile-avatar').inner_text() == 'S' and await pg.get_by_test_id('profile-name').inner_text() == 'Sam' and await pg.get_by_test_id('profile-trip').count() == 2)
+    ok(f'{w} profile splits Drafts and Confirmed', 'Confirmed · 1' in await pg.get_by_test_id('profile-confirmed').inner_text() and 'Drafts · 1' in await pg.get_by_test_id('profile-drafts').inner_text())
     ok(f'{w} no group trips yet line', await pg.get_by_test_id('profile-no-groups').count() == 1)
     await pg.get_by_test_id('home-city').fill('New York'); await pg.get_by_test_id('home-city-save').click(); await expect(pg.locator('#toast')).to_contain_text('Home city saved')
     ok(f'{w} home city saved to the account profile', (await pg.evaluate('__fbMock.dump()')).get('users/owner/profile/main', {}).get('homeCity') == 'New York')
     await pg.get_by_test_id('profile-edit-name').click(); await pg.locator('[data-testid=profile-name-form] input').fill('Sam Lee'); await pg.locator('[data-testid=profile-name-form] button').click()
     await expect(pg.get_by_test_id('profile-name')).to_have_text('Sam Lee'); ok(f'{w} display name edit', True)
     await pg.screenshot(path=str(SHOTS / f'profile-{w}.png'), full_page=True)
-    await pg.get_by_test_id('profile-trip').first.click(); await pg.wait_for_timeout(800)
+    await pg.get_by_test_id('profile-confirmed').get_by_test_id('profile-trip').first.click(); await pg.wait_for_timeout(800)
     ok(f'{w} home city drives the time difference', await pg.get_by_test_id('time-diff').inner_text() == 'Honolulu is 5 hrs behind New York', await pg.get_by_test_id('time-diff').inner_text())
     # Group trips: an invite makes it a group trip.
     await pg.evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>window.__invite=t}})")

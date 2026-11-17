@@ -68,6 +68,8 @@
     reduceMotion.addEventListener('change', function(e){document.documentElement.classList.toggle('reduce-motion',e.matches);});
     var flipNext=false, openTile='day-0';
     var activeGeneration=0, toastTimer, undoPending=false;
+    // Only web links reach href; javascript:, data: and other schemes become inert.
+    function safeHref(u){u=String(u==null?'':u).trim();return /^https?:\/\//i.test(u)?u:'#';}
     function esc(s, keepEmoji) {
         var text=String(s==null?'':s);
         if(!keepEmoji)text=text.replace(/[\p{Extended_Pictographic}\u200d\ufe0f]/gu,'');
@@ -105,9 +107,10 @@
     function creditHTML(credit) {
         if(!credit) return '';
         var source=credit.source||'Pexels';
-        return '<span class="image-label">'+icon('info')+' Photo: <a href="'+esc(credit.photoUrl)+'" target="_blank" rel="noopener">'+esc(credit.photographer)+'</a> / '+esc(source)+'</span>';
+        return '<span class="image-label">'+icon('info')+' Photo: <a href="'+esc(safeHref(credit.photoUrl))+'" target="_blank" rel="noopener">'+esc(credit.photographer)+'</a> / '+esc(source)+'</span>';
     }
     function photo(src, alt, cls, caption) {
+        if(window.GoNowPlaceSource&&GoNowPlaceSource.photoSrc)src=GoNowPlaceSource.photoSrc(src);
         var eager=/hero-photo|banner-photo/.test(cls||'');
         var id=(src||'').split('/').pop().replace('.jpg', '');
         var credit=window.PHOTO_CREDITS.find(function(c) {
@@ -117,7 +120,7 @@
     }
     function creditsScreen() {
         view.innerHTML='<div class="shell">'+heading('Photo credits', 'Real photographs only. Destination photos are from Pexels. Activity photos are from Wikimedia Commons, each with the photographer and license. Stops without a verified picture are left without one.')+btn('← Back', 'credits-back', 'outline')+'<div class="credits-grid">'+window.PHOTO_CREDITS.map(function(c) {
-            return'<article class="card credit-card">'+photo('images/'+c.id+'.jpg', c.alt)+'<h2>'+esc(c.alt)+'</h2><p>'+esc(c.photographer)+'</p><div class="row"><a href="'+esc(c.photoUrl)+'" target="_blank" rel="noopener">'+(c.source||'Source')+' ↗</a><a href="'+esc(c.licenseUrl)+'" target="_blank" rel="noopener">'+esc(c.license)+' ↗</a></div></article>';
+            return'<article class="card credit-card">'+photo('images/'+c.id+'.jpg', c.alt)+'<h2>'+esc(c.alt)+'</h2><p>'+esc(c.photographer)+'</p><div class="row"><a href="'+esc(safeHref(c.photoUrl))+'" target="_blank" rel="noopener">'+(c.source||'Source')+' ↗</a><a href="'+esc(safeHref(c.licenseUrl))+'" target="_blank" rel="noopener">'+esc(c.license)+' ↗</a></div></article>';
         }).join('')+'</div></div>';
         on('credits-back', function() {
             go(state.creditsFrom||'start');
@@ -189,7 +192,7 @@
             } catch(e) {
                 host='Source';
             }
-            return'<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer" data-testid="source-'+i+'">'+esc(host)+' ↗</a>';
+            return'<a href="'+esc(safeHref(u))+'" target="_blank" rel="noopener noreferrer" data-testid="source-'+i+'">'+esc(host)+' ↗</a>';
         }).join(' · ')+'</span>';
     }
     function toast(msg, undo) {
@@ -352,10 +355,10 @@
     // One-line reminder of the clock change, e.g. "Honolulu is 2 hrs behind LA". Unknown zones say nothing they cannot know.
     function destinationZone(){var known=Engine.matchDestination(state.answers.destination);return known&&known.tz||state.answers.destinationTz||(window.GoNowJetlag&&GoNowJetlag.zone?GoNowJetlag.zone(state.answers.destination):null);}
     // The profile's home city (if it maps to a known zone) wins over the trip's starting city.
-    function homeBase(j){var hc='';try{hc=(localStorage.getItem(KEY+'home-city')||'').trim();}catch(e){}var tz=hc&&j.zone?j.zone(hc):null;if(!tz)return j.home(state.answers.origin);var known=j.home(hc),matched=known.tz===tz&&(known.name!=='LA'||/los angeles|\blax\b|^la$/i.test(hc));return {tz:tz,name:matched?known.name:hc.split(',')[0].trim()};}
+    function homeBase(j){var hc='';try{hc=(localStorage.getItem(KEY+'home-city')||'').trim();}catch(e){}var tz=hc&&j.zone?j.zone(hc):null;if(!tz){var o=String(state.answers.origin||'').trim();if(o&&!j.zone(o))return null;return j.home(o);}var known=j.home(hc),matched=known.tz===tz&&(known.name!=='LA'||/los angeles|\blax\b|^la$/i.test(hc));return {tz:tz,name:matched?known.name:hc.split(',')[0].trim()};}
     function timeDiffLine(){
         var tz=destinationZone(),j=window.GoNowJetlag;if(!tz||!j||state.answers.mode==='local')return 'Times shown are local';
-        var h=homeBase(j),date=(state.plan&&state.plan.start)||state.answers.start||new Date().toISOString().slice(0,10),d=j.offset(date,tz)-j.offset(date,h.tz);
+        var h=homeBase(j);if(!h)return 'Times shown are local';var date=(state.plan&&state.plan.start)||state.answers.start||new Date().toISOString().slice(0,10),d=j.offset(date,tz)-j.offset(date,h.tz);
         d=((d+720)%1440+1440)%1440-720;if(!d)return 'Same time as '+h.name;
         var known=Engine.matchDestination(state.answers.destination),name=known.id==='oahu'?'Honolulu':known.id!=='custom'?known.name:String(state.answers.destination||'Your destination').split(',')[0].trim();
         var hrs=Math.abs(d)/60,text=(hrs%1?String(Math.round(hrs*10)/10):String(hrs))+(hrs===1?' hr':' hrs');
@@ -599,7 +602,7 @@
     function restrictionHTML(entry){
         return (entry.rules||[]).map(function(r){
             var tag=r.unconfirmed?'Unconfirmed':(r.optional?'Optional — does not block this outing':(entry.blocked?'Not a match':'Requirement'));
-            return '<p class="library-rule" data-testid="activity-restriction"><strong>'+esc(tag)+'.</strong> '+esc(r.text)+(r.url?' <a href="'+esc(r.url)+'" target="_blank" rel="noopener">'+esc(r.source||'Source')+'</a>':(r.source?' <span>'+esc(r.source)+'</span>':''))+'</p>';
+            return '<p class="library-rule" data-testid="activity-restriction"><strong>'+esc(tag)+'.</strong> '+esc(r.text)+(r.url?' <a href="'+esc(safeHref(r.url))+'" target="_blank" rel="noopener">'+esc(r.source||'Source')+'</a>':(r.source?' <span>'+esc(r.source)+'</span>':''))+'</p>';
         }).join('');
     }
     function bindLibrary(aside){
@@ -1291,10 +1294,10 @@
         var chips=food?['All','Breakfast','Lunch','Dinner','Snacks']:['All'].concat(Array.from(new Set(catalog.activities.map(function(p){return p.category;}))));
         view.innerHTML='<section class="shell pick-screen nearby-picks" data-testid="'+screen+'"><h1>Pick '+(food?'restaurants':'activities')+'</h1><div class="pick-chips">'+chips.map(function(c){return '<button data-pick-filter="'+esc(c)+'" aria-pressed="'+(pickFilter===c)+'">'+esc(c)+'</button>';}).join('')+'</div><label class="pick-search">Search<input type="search" data-testid="pick-search" value="'+esc(pickQuery)+'"></label><div id="pick-results"></div>'+credit+'<div class="pick-footer"><button data-testid="pick-back">Back</button><span id="pick-count" aria-live="polite"></span>'+btn(food?(editingPicks?'Update plan':'Check out'):'Next: restaurants','pick-next','primary')+'</div></section>';
         var observer;
-        function media(p,detail){return p.photo?'<img loading="lazy" '+(detail?'class="pick-detail-photo" ':'')+'src="'+esc(p.photo)+'" alt="'+esc(p.name)+'">'+(p.source==='google'&&detail&&p.creditName?'<small class="photo-credit">Photo: '+(p.creditUrl&&/^https:\/\//.test(p.creditUrl)?'<a href="'+esc(p.creditUrl)+'" target="_blank" rel="noopener">'+esc(p.creditName)+'</a>':esc(p.creditName))+'</small>':''):GoNowPlaceSource.placeholder(p);}
+        function media(p,detail){var src=window.GoNowPlaceSource&&GoNowPlaceSource.photoSrc?GoNowPlaceSource.photoSrc(p.photo):p.photo;return src?'<img loading="lazy" '+(detail?'class="pick-detail-photo" ':'')+'src="'+esc(src)+'" alt="'+esc(p.name)+'">'+(p.source==='google'&&detail&&p.creditName?'<small class="photo-credit">Photo: '+(p.creditUrl&&/^https:\/\//.test(p.creditUrl)?'<a href="'+esc(p.creditUrl)+'" target="_blank" rel="noopener">'+esc(p.creditName)+'</a>':esc(p.creditName))+'</small>':''):GoNowPlaceSource.placeholder(p);}
         function details(p){
             var sheet=document.getElementById('sheet');
-            sheet.innerHTML='<button id="pick-close" aria-label="Close">×</button>'+media(p,true)+'<h2>'+esc(p.name)+'</h2>'+(p.intro?'<p>'+esc(p.intro)+'</p>':'')+(p.rating?'<p>'+esc(GoNowPlaceSource.ratingLabel(p))+' on Google</p>':'')+'<p>'+esc(p.parsedHours&&p.openingHours?p.openingHours:'Hours not listed')+'</p><p>How long · '+esc(GoNowPlaceSource.durationLabel(p))+'</p><p>Effort · '+esc(p.effort)+'</p>'+(p.address?'<p>'+esc(p.address)+'</p>':p.area?'<p>'+esc(p.area)+'</p>':'')+'<p><a href="'+esc(p.mapUrl)+'" target="_blank" rel="noopener">Open in map</a></p>'+(p.photo&&p.creditUrl&&p.source!=='google'?'<small class="pick-photo-credit"><a href="'+esc(p.creditUrl)+'" target="_blank" rel="noopener">Photo: Wikipedia/Wikimedia Commons</a></small>':'')+'<footer class="pick-detail-footer"><button class="primary full" id="pick-detail-toggle">'+(a.picks[key].includes(p.id)?'Remove':'Add')+'</button></footer>';
+            sheet.innerHTML='<button id="pick-close" aria-label="Close">×</button>'+media(p,true)+'<h2>'+esc(p.name)+'</h2>'+(p.intro?'<p>'+esc(p.intro)+'</p>':'')+(p.rating?'<p>'+esc(GoNowPlaceSource.ratingLabel(p))+' on Google</p>':'')+'<p>'+esc(p.parsedHours&&p.openingHours?p.openingHours:'Hours not listed')+'</p><p>How long · '+esc(GoNowPlaceSource.durationLabel(p))+'</p><p>Effort · '+esc(p.effort)+'</p>'+(p.address?'<p>'+esc(p.address)+'</p>':p.area?'<p>'+esc(p.area)+'</p>':'')+'<p><a href="'+esc(safeHref(p.mapUrl))+'" target="_blank" rel="noopener">Open in map</a></p>'+(p.photo&&p.creditUrl&&p.source!=='google'?'<small class="pick-photo-credit"><a href="'+esc(p.creditUrl)+'" target="_blank" rel="noopener">Photo: Wikipedia/Wikimedia Commons</a></small>':'')+'<footer class="pick-detail-footer"><button class="primary full" id="pick-detail-toggle">'+(a.picks[key].includes(p.id)?'Remove':'Add')+'</button></footer>';
             sheet.setAttribute('data-testid','pick-details');sheet.showModal();document.getElementById('pick-close').onclick=function(){sheet.close();};document.getElementById('pick-detail-toggle').onclick=function(){toggle(p.id);sheet.close();};
         }
         function toggle(id){if(pickLocked(id))return;a.picks[key]=a.picks[key].includes(id)?a.picks[key].filter(function(x){return x!==id;}):a.picks[key].concat(id);save();results();}
@@ -1397,7 +1400,9 @@
     function plugAdapter(){
         if(!window.LocalInfo||state.answers.mode==='local')return null;
         var id=isOahuPlan(state.plan)?'oahu':Engine.matchDestination(state.answers.destination).id,info=LocalInfo.table[id];if(!info)return null;
-        var region=Engine.originRegion?Engine.originRegion(state.answers):'',home=/europe/i.test(region)?'C/F':'A/B';
+        // Home plugs from the home zone; an unknown home omits the line rather than guessing.
+        var j=window.GoNowJetlag,h=j?homeBase(j):null;if(!h)return null;var tz=h.tz||'';
+        var home=/^Europe\/(London|Dublin)$/.test(tz)?'G':/^Europe\//.test(tz)?'C/F':/^Australia\//.test(tz)?'I':/^Asia\/(Kolkata|Calcutta)$/.test(tz)?'C/D/M':/^Asia\/(Hong_Kong|Singapore|Kuala_Lumpur|Dubai)$/.test(tz)?'G':/^(America|Pacific\/Honolulu|Asia\/(Tokyo|Taipei))/.test(tz)?'A/B':null;if(!home)return null;
         return info.plugs===home?null:info.plugs;
     }
     function packingItem(id) {
@@ -1498,7 +1503,7 @@
             sources:[], bring:[], prep:[], tips:[], price:'', bestTime:'', bookable:false
         });
         return'<article class="item '+esc(it.kind)+'">'+(['travel','flight'].includes(it.kind)?icon('transport'):'')+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped&&!it.dietReplacement?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):(opts.photo?'<p class="activity-fallback">'+icon('info')+' No verified activity photo.</p>':''))+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+dietTag(it)+personalNotes(it)+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+bookingLink(it)+(it.tips?it.tips.map(function(t) {
-            return'<a class="badge tip-chip" data-testid="activity-tip" href="'+esc(t.url)+'" target="_blank" rel="noopener noreferrer">'+esc(t.sourceType)+' · '+esc(t.text)+' ↗</a>';
+            return'<a class="badge tip-chip" data-testid="activity-tip" href="'+esc(safeHref(t.url))+'" target="_blank" rel="noopener noreferrer">'+esc(t.sourceType)+' · '+esc(t.text)+' ↗</a>';
         }).join(''):'')+(opts.noActions?'':'<div class="row"><details class="item-more"><summary aria-label="More actions for '+esc(title)+'">⋯</summary>'+btn('Edit', 'item-edit', '', 'data-edit="'+esc(it.id)+'"')+btn('Swap', 'item-swap', '', 'data-swap="'+esc(it.id)+'"')+btn('Remove', 'item-remove', '', 'data-remove="'+esc(it.id)+'"')+'</details>'+(opts.noLock?'':btn((edit.locked||it.locked)?icon('lock'):icon('unlock'),'item-lock','icon-button','aria-label="'+((edit.locked||it.locked)?'Unlock ':'Lock ')+esc(title)+'" data-lock="'+esc(it.id)+'"'))+'</div><div id="edit-'+esc(it.id)+'"></div>')+(opts.travel&&it.travelToNext?'<p class="travel-chip db-next" data-testid="travel-chip">'+travelIcon(it.travelToNext)+' <strong>Getting to the next stop:</strong> '+esc(it.travelToNext)+'</p>':'')+'</article>';
     }
     function noteCount(count){return count+' '+(count===1?'note':'notes');}
@@ -1769,7 +1774,7 @@
                 }
                 return null;
             },
-            photoFor:function(src){return ITEM_PHOTOS[src]||(state.plan.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;})||{}).photo;},
+            photoFor:function(src){var v=ITEM_PHOTOS[src]||(state.plan.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;})||{}).photo;return v&&window.GoNowPlaceSource&&GoNowPlaceSource.photoSrc?GoNowPlaceSource.photoSrc(v):v;},
             titleFor:function(src,date,item){
                 var it=find(src,date);if(!it)return '';
                 var edit=(state.edits.items||{})[src]||{}, original=day(date).d.items.find(function(o){return o.id===src;});
@@ -2325,10 +2330,13 @@
         go('home');
     };
     var lastGroupTrip=null,seenGroupId=null,appliedGroupChanges={};
+    // Earlier preview builds stored Google photo URLs with the key; rewrite them to key-free tokens.
+    function scrubPhotoKeys(){try{var re=/https:\/\/places\.googleapis\.com\/v1\/(places\/[\w-]+\/photos\/[\w-]+)\/media\?[^"\s]*/g;Object.keys(localStorage).filter(function(k){return k.indexOf('gonow')===0;}).forEach(function(k){var v=localStorage.getItem(k);if(v&&v.indexOf('places.googleapis.com/v1/places/')>=0&&/key=/.test(v)){if(k.indexOf('gonow:places:')===0)localStorage.removeItem(k);else localStorage.setItem(k,v.replace(re,'gplace:$1'));}});}catch(e){}}
     function tripRange(t){var a=t.start||(t.plan&&t.plan.start)||'',b=t.end||(t.plan&&t.plan.end)||'';if(!a)return '';try{return dateLabel(a,{month:'short',day:'numeric'})+(b&&b!==a?'–'+dateLabel(b,{month:'short',day:'numeric'}):'');}catch(e){return a;}}
     function builderFor(trip){if(trip.id===state.tripId&&window.DayBuilder&&window.DayBuilder.exportState)try{return window.DayBuilder.exportState();}catch(e){}return trip.builder||read('gonow:daybuilder:'+trip.planId,null);}
     // Community "Copy to my trips": a new local draft from a public (or example) trip.
-    function copyTrip(post){
+    function webOnly(v){if(Array.isArray(v))return v.map(webOnly).filter(function(x){return x!==undefined;});if(v&&typeof v==='object'){var o={};Object.keys(v).forEach(function(k){var x=v[k];if(/^(url|href|link|sources?)$|Url$/i.test(k)&&typeof x==='string'&&!/^(https?:\/\/|images\/)/i.test(x.trim()))return;if(/^sources$/i.test(k)&&Array.isArray(x))x=x.filter(function(u){return typeof u==='string'&&/^https?:\/\//i.test(u);});o[k]=webOnly(x);});return o;}return v;}
+    function copyTrip(post){post=webOnly(cloneData(post));
         var t=post&&post.trip||{};var id='trip-'+Date.now().toString(36);var plan=t.plan?cloneData(t.plan):null;
         var planId=plan?String(plan.id||'plan').slice(0,80)+'-copy-'+id.slice(5):'';if(plan){if(!plan.destinationId&&isOahuPlan(t.plan))plan.destinationId='oahu';plan.id=planId;}
         var answers=Object.assign({},defaults,normalizeAnswers(Object.assign({},t.answers||{},{destination:t.destination||post.destination||'',start:t.start||(plan&&plan.start)||'',end:t.end||(plan&&plan.end)||''})));
@@ -2379,7 +2387,7 @@
     window.addEventListener('hashchange',function(){if(location.hash.indexOf('#trip=')===0)restoreShared();});
     if(location.hash.indexOf('#trip=')===0)restoreShared();
     else {
-        migrateLegacyTrip();if(window.GoNowPlaceSource)pruneCatalogs();
+        migrateLegacyTrip();scrubPhotoKeys();if(window.GoNowPlaceSource)pruneCatalogs();
         newTripFlow=false;go(/^#(community|profile)$/.test(location.hash)&&pages?location.hash.slice(1):'home');
     }
 }

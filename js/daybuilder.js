@@ -512,11 +512,13 @@ function exportDays(days, flightTime) {
         const base = buildSuggested(date).items;
         const pool = base.concat(tray);
         const items = day.items.map(item => {
-            if (item.custom) return {c: 1, b:item.booked, cl:item.closed, hr:item.hours, tg:item.tags, ru:item.rules, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
+            if (item.custom) return {c: 1, b:item.booked, cl:item.closed, hr:item.hours, tg:item.tags, ru:item.rules, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, ...(item.hoursOk ? {h: 1} : {})};
             const original = pool.find(candidate => candidate.id === item.id);
             if (original && !item.routeReview && !item.originalTitle && !item.manualTime && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
             const entry = {id: item.id, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
             if(item.overlapNote)entry.ov=item.overlapNote;
+            // A hand-set time outside opening hours is kept (with a heads-up) after reload.
+            if(item.hoursOk)entry.h=1;
             if(item.routeReview)entry.rv=item.title;
             if(item.originalTitle){entry.ot=item.originalTitle;entry.tt=item.title;}
             if (item.checkinSwap) entry.a = item.title;
@@ -548,7 +550,7 @@ function importDays(data) {
                 const start = minutes(entry.p), length = minutes(entry.d);
                 if (typeof entry.t !== 'string' || !entry.t.trim() || (start === undefined) || !length) return null;
                 return {closed:entry.cl,hours:entry.hr,tags:entry.tg,rules:entry.ru,originalTitle:entry.ot, id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
-                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, booked:entry.b, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false};
+                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, booked:entry.b, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false, ...(entry.h ? {hoursOk: true} : {})};
             }
             const item = find(entry.id) || pool.find(i => i.sourceId === entry.s) && clone(pool.find(i => i.sourceId === entry.s));
             if (!item) return null;
@@ -556,7 +558,7 @@ function importDays(data) {
             if(entry.ov)item.overlapNote=entry.ov;
             if(entry.rv){item.title=entry.rv;item.routeReview=true;}
             if(entry.ot){item.originalTitle=entry.ot;item.title=entry.tt;}
-            item.id = entry.id; item.manualTime = !!entry.m; if (entry.e !== undefined) item.estimate = entry.e;
+            item.id = entry.id; item.manualTime = !!entry.m; if (entry.e !== undefined) item.estimate = entry.e; if (entry.h) item.hoursOk = true;
             item.locked = fixedBooking(item) || !!entry.l;
             if (minutes(entry.p) !== undefined) item.preferred = entry.p;
             if (minutes(entry.d)) item.duration = entry.d;
