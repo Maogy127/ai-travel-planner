@@ -187,7 +187,7 @@ async def plan(browser, width):
         await audit.capture('sample-confirm-plan')
         await pg.get_by_test_id('confirm-plan').click()
         await audit.capture('prep-collapsed')
-        await audit.click('prep-good-to-know', 'good-to-know-toggle')
+        await audit.capture('prep-no-good-to-know')
         await audit.click('book-checklist', 'trip-essentials')
         await pg.get_by_test_id('prep-continue').click()
         await show_day(pg, 1)

@@ -1,3 +1,4 @@
+from pathlib import Path
 # Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 """Deterministic Day Builder screenshots; run with python3 tests/shots_daybuilder.py."""
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
@@ -15,7 +16,7 @@ async def main():
         sock.bind(('127.0.0.1', 0))
         port = sock.getsockname()[1]
     server = subprocess.Popen(
-        [sys.executable, '-m', 'http.server', str(port), '-d', str(SITE)],
+        [sys.executable, str(Path(__file__).parent / 'serve_site.py'), str(port)], cwd=str(SITE),
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(50):

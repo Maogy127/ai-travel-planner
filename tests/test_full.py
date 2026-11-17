@@ -137,7 +137,7 @@ async def local_api_fixture(ctx):
     await ctx.route('https://'+host+'/**',mock_local_api)
 def is_place_url(url):
   host = urlparse(str(url)).hostname or ''
-  return host in ('nominatim.openstreetmap.org', 'overpass-api.de', 'overpass.kumi.systems', 'upload.wikimedia.org') or any(host == domain or host.endswith('.' + domain) for domain in ('wikipedia.org', 'wikidata.org'))
+  return host in ('places.googleapis.com', 'nominatim.openstreetmap.org', 'overpass-api.de', 'overpass.kumi.systems', 'upload.wikimedia.org') or any(host == domain or host.endswith('.' + domain) for domain in ('wikipedia.org', 'wikidata.org'))
 
 async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False):
   ctx=await b.new_context(viewport={'width':w,'height':h}, reduced_motion=reduced_motion, has_touch=has_touch, is_mobile=has_touch and w<=600)
@@ -584,12 +584,8 @@ async def affiliate_checks(b,base,label):
     await open_trip_prep(pg)
     tile=pg.get_by_test_id('book-links')
     ok(f'{label} {destination} booking searches outside prep',await tile.count()==0)
-    # Item H moves the single disclosure behind Good to know in prep.
-    # open_trip_prep already opens disclosures; reset before exercising the toggle.
-    await pg.get_by_test_id('good-to-know').evaluate('e=>e.open=false')
-    await pg.get_by_test_id('good-to-know-toggle').click()
-    note=pg.get_by_test_id('affiliate-disclosure')
-    ok(f'{label} {destination} disclosure visible',await note.is_visible() and "We may earn a fee" in await note.inner_text())
+    # Good to know (and its fee disclosure) is gone from prep; affiliates are disabled.
+    ok(f'{label} {destination} no Good to know or disclosure',await pg.get_by_test_id('good-to-know').count()==0 and await pg.get_by_test_id('affiliate-disclosure').count()==0)
     domains={'booking':'www.booking.com','expedia':'www.expedia.com','skyscanner':'www.skyscanner.com','getyourguide':'www.getyourguide.com','viator':'www.viator.com'}
     await continue_prep(pg)
     links=await pg.locator('a[data-partner]').evaluate_all("els=>els.map(e=>({key:e.dataset.partner,href:e.href,rel:e.rel,target:e.target,text:e.textContent}))")
@@ -611,68 +607,26 @@ async def affiliate_checks(b,base,label):
     await ctx.close()
 
 async def local_info_checks(b,base,label):
+  # Good to know is removed: no weather/FX calls; a one-line time difference sits at the top of the plan.
   ctx,pg=await new(b,base)
   calls=[];pg.on('request',lambda r: calls.append(r.url))
-  await pg.get_by_test_id('demo-oahu').click();await continue_prep(pg)
-  tile=pg.get_by_test_id('local-info')
-  # Item H keeps local facts exclusively inside prep.
-  ok(f'{label} local info outside prep',await tile.count()==0)
+  await pg.get_by_test_id('demo-oahu').click()
+  ok(f'{label} draft time difference',await pg.get_by_test_id('time-diff').inner_text()=='Honolulu is 2 hrs behind LA')
+  await continue_prep(pg)
+  ok(f'{label} confirmed time difference',await pg.get_by_test_id('time-diff').inner_text()=='Honolulu is 2 hrs behind LA')
   await open_trip_prep(pg)
-  await pg.get_by_test_id('good-to-know').evaluate('e=>e.open=true')
-  await tile.get_by_test_id('info-asof').first.wait_for()
-  body=await tile.inner_text()
-  ok(f'{label} local static guidance',all(t in body for t in ('Pacific/Honolulu','Types A/B','120 V','USD','Local time now','2026-11','General guidance — check official sources')))
-  ok(f'{label} local source and asof',await tile.get_by_test_id('info-source').count()==1 and 'Data date:' in body and 'As of' in body)
-  forecast=date(2026,11,25)>=date.today() and date(2026,11,29)<=date.today()+timedelta(days=15)
-  ok(f'{label} Oahu weather path',('Weather forecast' if forecast else 'Last year on these dates (not a forecast)') in body)
-  ok(f'{label} Oahu no FX request','Uses US dollars (USD)' in body and not any('frankfurter.dev' in u for u in calls))
-  weather_calls=[u for u in calls if 'open-meteo.com/v1/' in u]
-  query=parse_qs(urlparse(weather_calls[0]).query)
-  ok(f'{label} weather request dates',query['start_date']==['2026-11-25' if forecast else '2025-11-25'] and ('archive-api.' in weather_calls[0])!=forecast)
-  count=len(weather_calls)
-  await continue_prep(pg);await open_trip_prep(pg)
-  await pg.reload(); await reopen(pg); await continue_prep(pg)
-  await open_trip_prep(pg);await pg.get_by_test_id('good-to-know').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info');await tile.get_by_test_id('info-asof').first.wait_for()
-  ok(f'{label} weather session cache',len([u for u in calls if 'open-meteo.com/v1/' in u])==count)
+  body=await pg.locator('main').inner_text()
+  ok(f'{label} no Good to know in prep',await pg.get_by_test_id('good-to-know').count()==0 and await pg.get_by_test_id('local-info').count()==0 and 'Good to know' not in body)
+  ok(f'{label} Oahu has no plug adapter','adapter' not in body.lower())
+  ok(f'{label} no weather or FX requests',not any('open-meteo.com' in u or 'frankfurter.dev' in u for u in calls))
   await ctx.close()
   ctx,pg=await new(b,base)
-  calls=[];pg.on('request',lambda r:calls.append(r.url))
-  # Use browser-local dates, matching the forecast window in the application.
-  dates=await pg.evaluate("[3,6].map(n=>{let d=new Date();d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})")
-  await answer(pg,'Lisbon',start=dates[0],end=dates[1])
+  await answer(pg,'Lisbon')
   await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await open_trip_prep(pg);await pg.get_by_test_id('good-to-know').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
-  await tile.get_by_test_id('fx-amount').wait_for();await tile.get_by_text('Weather forecast',exact=True).wait_for()
-  await tile.get_by_test_id('fx-amount').fill('100')
-  ok(f'{label} Lisbon FX converter',await tile.get_by_test_id('fx-result').inner_text()=='100 USD ≈ 90 EUR')
-  ok(f'{label} Lisbon daily forecast','high 80 °F / low 65 °F' in await tile.inner_text() and 'Rain chance 20%' in await tile.inner_text() and any('api.open-meteo.com/v1/forecast' in u for u in calls))
-  ok(f'{label} both live sources dated',await tile.get_by_test_id('info-source').count()==2 and await tile.get_by_test_id('info-asof').count()==2)
+  ok(f'{label} Lisbon time difference',await pg.get_by_test_id('time-diff').inner_text()=='Lisbon is 8 hrs ahead of LA',await pg.get_by_test_id('time-diff').inner_text())
+  await open_trip_prep(pg)
+  ok(f'{label} Lisbon plug adapter in What to bring',await pg.get_by_text('Plug adapter (Type C/F)',exact=True).count()==1)
   ok(f'{label} local info narrow layout',not await overflow(pg))
-  await ctx.close()
-  ctx,pg=await new(b,base)
-  # Invalid JSON with 200 avoids browser-generated resource-load console errors.
-  async def invalid(route): await route.fulfill(status=200,content_type='application/json',body='invalid JSON')
-  await pg.route('https://archive-api.open-meteo.com/**',invalid)
-  await pg.route('https://api.open-meteo.com/**',invalid)
-  await pg.route('https://api.frankfurter.dev/**',invalid)
-  await answer(pg,'Lisbon',start=dates[0],end=dates[1])
-  await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await open_trip_prep(pg);await pg.get_by_test_id('good-to-know').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
-  await tile.get_by_test_id('info-retry').wait_for();await tile.get_by_text('Live rate unavailable',exact=True).wait_for()
-  ok(f'{label} friendly live failure',"Couldn't load live weather — check open-meteo.com" in await tile.inner_text() and 'Europe/Lisbon' in await tile.inner_text())
-  await pg.unroute('https://api.open-meteo.com/**',invalid)
-  await tile.get_by_test_id('info-retry').click();await tile.get_by_text('Weather forecast',exact=True).wait_for()
-  ok(f'{label} weather retry recovers',await tile.get_by_test_id('info-retry').count()==0)
-  await ctx.close()
-  # CRC is outside the ECB currency list: no Frankfurter request at all.
-  ctx,pg=await new(b,base)
-  calls=[];pg.on('request',lambda r:calls.append(r.url))
-  await answer(pg,'Costa Rica',start=dates[0],end=dates[1])
-  await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await open_trip_prep(pg);await pg.get_by_test_id('good-to-know').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
-  await tile.get_by_text('Live rate unavailable',exact=False).wait_for()
-  await tile.get_by_test_id('info-asof').first.wait_for()
-  ok(f'{label} Costa Rica CRC skips Frankfurter',not any('api.frankfurter.dev' in u for u in calls) and 'CRC' in await tile.inner_text() and await tile.get_by_text('Live rate unavailable',exact=False).is_visible())
   await ctx.close()
 async def db_open(b,base,w=1280,reduced_motion='no-preference'):
   ctx,pg=await new(b,base,w,844,reduced_motion,has_touch=True)
@@ -1229,7 +1183,7 @@ async def regression_checks(b,base,label):
 
 async def main():
   await run((SITE/'index.html').resolve().as_uri(), 'file', True)
-  srv=subprocess.Popen([sys.executable,'-m','http.server','8793','-d',str(SITE)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); time.sleep(1)
+  srv=subprocess.Popen([sys.executable,str(Path(__file__).parent/'serve_site.py'),'8793'],cwd=str(SITE),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); time.sleep(1)
   try: await run('http://127.0.0.1:8793/index.html','http',False)
   finally: srv.terminate()
   ok('zero console errors', len(errors)==0, json.dumps(errors[:10]))

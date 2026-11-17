@@ -13,3 +13,9 @@ export async function updateDoc(ref,data){validate(data);state.calls.push(['upda
 export function onSnapshot(ref,fn){listeners.set(ref,fn);queueMicrotask(notify);return ()=>listeners.delete(ref);}
 
 export async function deleteDoc(ref){state.calls.push(['delete',ref.path]);state.records.delete(ref.path);notify();}
+// Collection reads for the community feed: query() keeps the ref; orderBy/limit are recorded, newest first.
+export const orderBy=(field,dir)=>({orderBy:field,dir});
+export const limit=n=>({limit:n});
+export const query=(ref,...parts)=>({...ref,parts});
+export async function getDocs(ref){state.calls.push(['list',ref.path]);if(state.listFail)throw Error('unavailable');const n=(ref.parts||[]).find(p=>p.limit)?.limit||1e9;const docs=[...state.records.keys()].filter(k=>k.startsWith(ref.path+'/')&&k.split('/').length===ref.path.split('/').length+1).map(snap).sort((a,b)=>(b.data().createdAt||0)-(a.data().createdAt||0)).slice(0,n);return {docs};}
+export async function addDoc(ref,data){validate(data);const id='auto'+(state.records.size+1)+Math.random().toString(36).slice(2,6);state.calls.push(['add',ref.path+'/'+id,clone(data)]);state.records.set(ref.path+'/'+id,clone(data));notify();return {id};}

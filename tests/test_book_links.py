@@ -10,21 +10,12 @@ async def checks(browser):
         ctx, pg = await new(browser, 'http://127.0.0.1:8878/index.html', width)
         try:
             await pg.get_by_test_id('demo-oahu').click()
+            await expect(pg.get_by_test_id('time-diff')).to_have_text('Honolulu is 2 hrs behind LA')
             await pg.get_by_test_id('confirm-plan').click()
-            good = pg.get_by_test_id('good-to-know')
-            toggle = pg.get_by_test_id('good-to-know-toggle')
-            await expect(toggle).to_have_attribute('aria-expanded', 'false')
-            assert not await good.evaluate('e=>e.open')
-            await toggle.click()
-            await expect(toggle).to_have_attribute('aria-expanded', 'true')
-            # USD is stated once (copy audit): no separate 'Currency: USD' line.
-            await expect(pg.get_by_test_id('local-info')).to_contain_text('Uses US dollars (USD) · Languages')
-            assert (await pg.get_by_test_id('local-info').inner_text()).count('Uses US dollars') == 1
-            await expect(pg.get_by_test_id('affiliate-disclosure')).to_be_visible()
-            await expect(pg.get_by_test_id('local-info').locator(':scope > h2, :scope > h3, :scope > h4, summary')).to_have_count(0)
-            await expect(toggle).to_have_attribute('aria-controls', 'good-to-know-content')
-            await expect(pg.get_by_test_id('affiliate-disclosure')).to_have_count(1)
-            await expect(pg.get_by_test_id('affiliate-disclosure')).to_have_text('We may earn a fee')
+            # Good to know is removed; the plan header carries a one-line time difference instead.
+            await expect(pg.get_by_test_id('good-to-know')).to_have_count(0)
+            await expect(pg.get_by_test_id('local-info')).to_have_count(0)
+            await expect(pg.get_by_test_id('affiliate-disclosure')).to_have_count(0)
             assert not await pg.evaluate('document.documentElement.scrollWidth > innerWidth')
             await pg.get_by_test_id('trip-essentials').click()
             tasks = pg.locator('#trip-essentials [data-prep-id]')
@@ -84,7 +75,7 @@ async def checks(browser):
             await pg.evaluate("__gonow.go('flights')")
             await expect(pg.get_by_test_id('book-flights')).to_be_visible()
             assert not await pg.evaluate('document.documentElement.scrollWidth > innerWidth')
-            print('PASS contextual bookings, Good to know and persistence', width)
+            print('PASS contextual bookings, time difference and persistence', width)
         finally:
             await ctx.close()
 

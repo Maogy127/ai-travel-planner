@@ -18,6 +18,11 @@ service cloud.firestore {
     let before = resource.data;
     let after = request.resource.data;
     return !(uid in before.memberIds)
+      && before.inviteId is string
+      && (!('inviteExpiresAt' in before) || request.time.toMillis() < before.inviteExpiresAt)
+      && before.memberIds.size() < 20
+      && after.members[uid].keys().hasOnly(['name','joinedAt'])
+      && after.members[uid].name is string && after.members[uid].name.size() <= 40
       && after.diff(before).affectedKeys().hasOnly(['members','memberIds','joinInvite'])
       && after.joinInvite == before.inviteId
       && after.memberIds.size() == before.memberIds.size()+1
@@ -34,6 +39,7 @@ service cloud.firestore {
     let old = before.get(key, []);
     let next = after[key];
     return keys.size() == 1 && keys.hasOnly([key]) && next is list
+      && key.matches('^[A-Za-z0-9_-]{1,120}$') && after.size() <= 300 && next.size() <= 20
       && next.size() == next.toSet().size()
       && next.removeAll([request.auth.uid]) == old.removeAll([request.auth.uid]);
    }
@@ -43,6 +49,10 @@ service cloud.firestore {
     let keys = after.diff(before).affectedKeys();
     let key = request.resource.data.lastChange.itemId;
     return keys.size() == 1 && keys.hasOnly([key]) && key in after
+      && key.matches('^' + request.auth.uid + '_[A-Za-z0-9_-]{1,120}$') && after.size() <= 100
+      && after[key].keys().hasOnly(['by','name','itemId','change'])
+      && after[key].change is map && after[key].change.size() <= 8
+      && after[key].name is string && after[key].name.size() <= 40
       && after[key].by == request.auth.uid
       && (!(key in before) || before[key].by == request.auth.uid);
    }
@@ -51,19 +61,64 @@ service cloud.firestore {
     let after = request.resource.data.planContent;
     let keys = after.diff(before).affectedKeys();
     let key = request.resource.data.lastChange.itemId;
-    return keys.size() == 1 && keys.hasOnly([key]) && resource.data.locks.get(key, false) != true;
+    return keys.size() == 1 && keys.hasOnly([key]) && resource.data.locks.get(key, false) != true
+      && key.matches('^[A-Za-z0-9_-]{1,120}$') && after[key] is map && after[key].size() <= 8 && after.size() <= 300;
    }
    function memberChange() {
     let keys = request.resource.data.diff(resource.data).affectedKeys();
-    return request.resource.data.lastChange.by == request.auth.uid && (
+    // Members cannot write toast text (no spoofed "Owner removed X" notices).
+    return request.resource.data.lastChange.by == request.auth.uid
+      && request.resource.data.lastChange.keys().hasOnly(['by','itemId']) && (
       (keys.hasOnly(['votes','lastChange']) && voteChange())
       || (keys.hasOnly(['suggestions','lastChange']) && suggestionChange())
       || (keys.hasOnly(['planContent','lastChange']) && contentChange()));
    }
    allow read: if member();
-   allow create: if signed() && request.resource.data.ownerId == request.auth.uid && request.resource.data.memberIds == [request.auth.uid] && request.resource.data.members.keys() == [request.auth.uid];
+   allow create: if signed() && request.resource.data.ownerId == request.auth.uid && request.resource.data.memberIds == [request.auth.uid] && request.resource.data.members.keys() == [request.auth.uid]
+     && request.resource.data.keys().hasOnly(['ownerId','ownerName','members','memberIds','inviteId','inviteExpiresAt','trip','votes','locks','suggestions','createdAt'])
+     && request.resource.data.ownerName is string && request.resource.data.ownerName.size() <= 40
+     && tripId == 'group-' + request.resource.data.inviteId;
    allow update: if signed() && ((owner() && request.resource.data.ownerId == resource.data.ownerId) || (member() && memberChange()) || joining());
    allow delete: if owner();
+  }
+  // Community: anyone can read public posts; only a signed-in (non-anonymous) owner writes or deletes their own.
+  match /community/{postId} {
+   function str(v, n) { return v is string && v.size() <= n; }
+   function common(d) {
+    return d.ownerId == request.auth.uid && str(d.ownerName, 40)
+      && str(d.title, 80) && d.title.size() > 0 && str(d.line, 140) && str(d.destination, 80)
+      && str(d.photo, 300) && (d.photo == '' || d.photo.matches('^(images/[a-z-]+[.]jpg|https://.+)$'))
+      && d.createdAt == request.time;
+   }
+   function tripPost(d) {
+    return d.kind == 'trip'
+      && d.keys().hasOnly(['kind','ownerId','ownerName','title','line','destination','photo','days','trip','createdAt'])
+      && d.days is list && d.days.size() <= 21
+      && d.trip is map && d.trip.keys().hasOnly(['destination','nights','start','end','answers','plan','builder'])
+      && (d.trip.get('plan', null) == null || (d.trip.plan is map && d.trip.plan.days is list && d.trip.plan.days.size() <= 21))
+      && postId.matches('^t_' + request.auth.uid + '_[A-Za-z0-9_-]{1,120}$');
+   }
+   function checkinPost(d) {
+    return d.kind == 'checkin'
+      && d.keys().hasOnly(['kind','ownerId','ownerName','title','line','destination','photo','place','note','createdAt'])
+      && str(d.place, 80) && str(d.note, 140)
+      && postId.matches('^c_' + request.auth.uid + '_[A-Za-z0-9_-]{1,40}$');
+   }
+   function author() { return signed() && request.auth.token.firebase.sign_in_provider != 'anonymous'; }
+   allow get, list: if true;
+   allow create: if author() && common(request.resource.data) && (tripPost(request.resource.data) || checkinPost(request.resource.data));
+   allow update: if author() && resource.data.ownerId == request.auth.uid && common(request.resource.data) && (tripPost(request.resource.data) || checkinPost(request.resource.data));
+   allow delete: if signed() && resource.data.ownerId == request.auth.uid;
+  }
+  // Reports are write-once and never readable from the app.
+  match /reports/{reportId} {
+   allow create: if signed()
+     && request.resource.data.keys().hasOnly(['targetId','reason','by','at'])
+     && request.resource.data.by == request.auth.uid
+     && request.resource.data.reason in ['spam','inappropriate','wrong']
+     && request.resource.data.targetId is string && request.resource.data.targetId.size() <= 200
+     && request.resource.data.at == request.time;
+   allow read, update, delete: if false;
   }
   match /{document=**} { allow read, write: if false; }
  }

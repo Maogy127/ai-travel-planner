@@ -1,3 +1,4 @@
+from pathlib import Path
 """Travel departure UI regression. Uses its own HTTP server on port 8817."""
 from test_full import dashboard_action
 import asyncio
@@ -16,9 +17,10 @@ async def checks(browser):
         # Includes the shared place alias script.
         # Any-city place source adds one versioned script.
         # Item I adds config, cloud client and account controls.
-        assert len(assets) == 29
+        # Nov 17 batch adds the Places config and the Community/Profile pages.
+        assert len(assets) == 31, len(assets)
         for path in assets:
-            assert path.endswith('?v=anycity-20261116'), path
+            assert path.endswith('?v=fixes-20261117'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()
@@ -67,13 +69,14 @@ async def checks(browser):
         await form.get_by_role('button', name='Save departure time').click()
         if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
         await expect(ride.get_by_test_id('db-time')).to_have_text('4:00 PM–4:45 PM')
-        # A saved explicit arrival remains explicit when reopening and changing departure.
+        # Start, End and Duration stay in sync: moving the departure keeps the 45-minute ride and moves the arrival.
         await ride.get_by_test_id('db-time').click()
         await form.locator('[name=start]').fill('16:15')
-        await expect(form.locator('[name=end]')).to_have_value('16:45')
+        await expect(form.locator('[name=end]')).to_have_value('17:00')
+        await expect(form.locator('[name=duration]')).to_have_value('45')
         await form.get_by_role('button', name='Save departure time').click()
         if await pg.get_by_test_id('move-conflict').count(): await pg.get_by_test_id('conflict-keep').click()
-        await expect(ride.get_by_test_id('db-time')).to_have_text('4:15 PM–4:45 PM')
+        await expect(ride.get_by_test_id('db-time')).to_contain_text('4:15 PM–5:00 PM')
         print('PASS explicit arrival persists without estimate label')
         await pg.reload()
         await expect(pg.get_by_test_id('dashboard')).to_be_visible()
@@ -81,7 +84,7 @@ async def checks(browser):
         await expect(pg.get_by_test_id('draft-screen')).to_be_visible()
         await expect(pg.get_by_test_id('db-root')).to_be_visible()
         await pg.get_by_test_id('db-day-' + target_date).click()
-        await expect(ride.get_by_test_id('db-time')).to_have_text('4:15 PM–4:45 PM')
+        await expect(ride.get_by_test_id('db-time')).to_have_text('4:15 PM–5:00 PM')
         await expect(home.get_by_test_id('db-time')).to_have_text(untouched)
         print('PASS reload persistence and untouched automatic ride')
         await ride.get_by_test_id('db-time').click()
@@ -93,19 +96,20 @@ async def checks(browser):
         await expect(ride.get_by_test_id('db-note').first).to_be_visible()
         await expect(dinner.get_by_test_id('db-time')).to_have_text(dinner_time)
         print('PASS visible locked-booking conflict; booking stays fixed')
-        # Locked travel uses the same explicit unlock gate as locked activities.
+        # Locked travel edits its time directly, like locked activities, and stays locked.
         await ride.get_by_test_id('db-lock').click()
         await ride.get_by_test_id('db-time').click()
-        await expect(pg.get_by_test_id('unlock-confirm')).to_be_visible()
-        await pg.get_by_test_id('unlock-decline').click()
+        await expect(pg.get_by_test_id('unlock-confirm')).to_have_count(0)
+        await expect(form).to_be_visible()
+        await pg.keyboard.press('Escape')
         await expect(form).to_have_count(0)
-        print('PASS locked travel requires unlocking')
+        print('PASS locked travel edits time without unlocking')
     finally:
         await ctx.close()
 
 
 async def main():
-    server = subprocess.Popen([sys.executable, '-m', 'http.server', '8817', '--bind', '127.0.0.1'], cwd=SITE,
+    server = subprocess.Popen([sys.executable, str(Path(__file__).parent / 'serve_site.py'), '8817'], cwd=SITE,
                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for attempt in range(50):

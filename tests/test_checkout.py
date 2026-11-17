@@ -40,16 +40,13 @@ async def checks(browser):
             assert 'Senia' not in await notice.inner_text()
             assert await notice.locator('.unfit-row small').evaluate_all("es=>es.every(e=>e.textContent.trim().length>0)")
             await notice.locator('[data-unfit-remove]').first.click()
-            # Bookings outside dates have a separate Fix action, never Remove.
+            # Sample La Mer/Senia booking dates are examples: on a user trip they are never flagged as outside the dates.
             await pg.evaluate("""()=>{const a=window.__gonow.state.answers;a.end='2026-11-26';a.picks={initialized:true,activities:[],restaurants:['lamer','senia']};window.__gonow.go('pick-food');}""")
             await pg.get_by_test_id('pick-next').click()
-            issue=pg.get_by_test_id('booking-issue').filter(has_text='Senia')
-            await expect(issue).to_contain_text('Senia booked Fri · outside your dates')
-            await expect(issue.get_by_role('button',name='Fix',exact=True)).to_have_count(1)
-            if width==390:
-                assert await issue.evaluate('e=>{const r=document.createRange();r.selectNodeContents(e.firstChild);return r.getClientRects().length===1 && e.scrollWidth<=e.clientWidth && Math.abs(r.getBoundingClientRect().top-e.querySelector("button").getBoundingClientRect().top)<16}')
-            await issue.get_by_role('button',name='Fix',exact=True).click()
-            await expect(pg.get_by_test_id('date-end')).to_be_visible()
+            await expect(pg.get_by_test_id('booking-issue').filter(has_text='Senia')).to_have_count(0)
+            assert 'outside your dates' not in await pg.locator('main').inner_text()
+            # Any remaining sample-booking notice (La Mer on the fly-home day) is labeled as an example.
+            for issue in await pg.get_by_test_id('booking-issue').all(): assert await issue.locator('.example-tag').count() == 1
             # A known later flight permits a short culture stop, but not PCC.
             await pg.evaluate("""()=>{const a=window.__gonow.state.answers;a.flightTime='4:00 PM';a.picks={initialized:true,activities:['pcc'],restaurants:[]};window.__gonow.go('pick-food');}""")
             await pg.get_by_test_id('pick-next').click()

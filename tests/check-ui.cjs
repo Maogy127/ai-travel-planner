@@ -132,7 +132,7 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert(node('view').innerHTML.includes('Book 4 Uber Reserve rides'));
   const assertPacking = n => {
     const html=node('view').innerHTML;
-    assert(html.includes('Packed '+n+' of 50'));
+    assert(html.includes('Packed '+n+' of 49'));
     assert.equal((html.match(/id="packing-status"/g)||[]).length,1);
     assert(!/prep-packing-count|Packing \d+\/\d+/.test(html));
   };
@@ -143,7 +143,7 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   node('view').querySelectorAll=selector=>selector==='[data-prep-id]'?[packCheckbox]:[];
   api.go('prep');
   packCheckbox.onchange();
-  assert.equal(node('packing-status').textContent,'Packed 1 of 50');
+  assert.equal(node('packing-status').textContent,'Packed 1 of 49');
   assert.equal(node('[data-testid="trip-prep-button"]').textContent,'Trip prep · '+prepCount+' left');
   api.go('prep');assertPacking(1);
   click('reset-packing');

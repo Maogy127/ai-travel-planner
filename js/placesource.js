@@ -37,16 +37,21 @@ function category(t){return (['restaurant','cafe'].includes(t.amenity)?t.amenity
 const labels={park:'Park',beach:'Beach',museum:'Museum',viewpoint:'Viewpoint',attraction:'Attraction',zoo:'Zoo',aquarium:'Aquarium',gallery:'Gallery',restaurant:'Restaurant',cafe:'Cafe'};
 const estimates=k=>({duration:['museum','zoo','aquarium'].includes(k)?120:60,effort:['park','beach','viewpoint'].includes(k)?'Moderate est.':'Easy est.'});
 const durationLabel=p=>(p.duration/60)+' h est.';
-const cardLine=p=>p.category+' · '+(p.cuisine||durationLabel(p));
+const ratingLabel=p=>p.rating?'★ '+p.rating.toFixed(1)+(p.ratingCount?' ('+(p.ratingCount>=1000?Math.round(p.ratingCount/100)/10+'k':p.ratingCount)+')':''):'';
+const cardLine=p=>p.category+' · '+(p.rating?ratingLabel(p):(p.cuisine||durationLabel(p)));
 const icons={park:'♧',beach:'≈',museum:'▥',viewpoint:'△',attraction:'◇',zoo:'◇',aquarium:'≈',gallery:'▥',restaurant:'♨',cafe:'☕'};
 function placeholder(p){return '<div class="place-placeholder" data-testid="place-placeholder" role="img" aria-label="'+(labels[p.type]||'Attraction')+' illustration">'+(icons[p.type]||'◇')+'</div>';}
+const root=typeof window==='undefined'?globalThis:window;
+// Drops expired place-cache entries and keeps at most `max` (oldest first). `all` clears the cache to free space.
+function prune(storage,all=false,max=40,now=Date.now()){try{const rows=[];for(let i=0;i<storage.length;i++){const k=storage.key(i);if(!k||!k.startsWith('gonow:places:')||k==='gonow:places:last-geocode')continue;let until=0;try{until=JSON.parse(storage.getItem(k)).until||0;}catch(e){}rows.push([k,until]);}rows.filter(r=>all||r[1]<=now).forEach(r=>storage.removeItem(r[0]));const live=rows.filter(r=>!all&&r[1]>now).sort((a,b)=>a[1]-b[1]);live.slice(0,Math.max(0,live.length-max)).forEach(r=>storage.removeItem(r[0]));}catch(e){}}
 function create(options={}){
  const request=options.fetch||((...args)=>window.fetch(...args)),now=options.now||Date.now,sleep=options.sleep||(ms=>new Promise(r=>setTimeout(r,ms))),storage=options.storage||window.localStorage;
  let geoTail=Promise.resolve(),lastGeo=-Infinity,overTail=Promise.resolve();
  try{lastGeo=Number(storage.getItem('gonow:places:last-geocode'))||-Infinity;}catch(e){}
  const inflight=new Map();
  function read(key){try{const v=JSON.parse(storage.getItem('gonow:places:'+key));return v&&v.until>now()?v.value:null;}catch(e){return null;}}
- function write(key,value,ttl){try{storage.setItem('gonow:places:'+key,JSON.stringify({value,until:now()+ttl}));}catch(e){}return value;}
+ function write(key,value,ttl){const data=JSON.stringify({value,until:now()+ttl});try{storage.setItem('gonow:places:'+key,data);}catch(e){prune(storage,false,10,now());try{storage.setItem('gonow:places:'+key,data);}catch(e2){}}return value;}
+ prune(storage,false,40,now());
  async function json(url,init={}){const {timeout=15000,...rest}=init,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);try{const r=await request(url,{...rest,signal:controller.signal});if(!r.ok)throw Error('Unavailable');return await r.json();}finally{clearTimeout(timer);}}
  function cached(key,ttl,fn){const hit=read(key);if(hit)return Promise.resolve(hit);if(inflight.has(key))return inflight.get(key);const p=Promise.resolve().then(fn).then(v=>write(key,v,ttl)).finally(()=>inflight.delete(key));inflight.set(key,p);return p;}
  function geocode(query){return cached('geo:'+normalize(query),180*DAY,()=>{const job=geoTail.then(async()=>{
@@ -58,17 +63,47 @@ function create(options={}){
  function nearby(center,radius=10000){const key='near:'+center.lat.toFixed(3)+','+center.lng.toFixed(3)+':'+radius;return cached(key,7*DAY,()=>{
   const job=overTail.then(async()=>{const around='(around:'+radius+','+center.lat+','+center.lng+')',query='[out:json][timeout:20];(nwr'+around+'[tourism~"^(attraction|museum|viewpoint|zoo|aquarium|gallery)$"][name];nwr'+around+'[leisure=park][name];nwr'+around+'[natural=beach][name];nwr'+around+'[amenity~"^(restaurant|cafe)$"][name];);out center tags 160;';
    // Public Overpass instances often return 502/504 under load: try the main instance, then one alternate, then fall back.
-   for(let attempt=0;attempt<2;attempt++){try{return await json(OVERPASS[attempt],{timeout:25000,method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(query)});}catch(e){if(attempt)throw e;await sleep(1500);}}
-  });overTail=job.catch(()=>{});return job;
+   // About 8 s per server so a down service fails fast (Places gives a retry button).
+   for(let attempt=0;attempt<2;attempt++){try{return await json(OVERPASS[attempt],{timeout:8000,method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(query)});}catch(e){if(attempt)throw e;await sleep(300);}}
+  }).then(slim);overTail=job.catch(()=>{});return job;
  });}
+ // Cache only what catalog() reads, not the full tag dump.
+ const KEEP=['name','name:en','tourism','leisure','natural','amenity','addr:suburb','addr:housenumber','addr:street','addr:city','fee','charge','cuisine','opening_hours','wikipedia','wikidata'];
+ function slim(data){return {elements:(data.elements||[]).filter(e=>e.tags&&e.tags.name).map(e=>({type:e.type,id:e.id,lat:e.lat,lon:e.lon,center:e.center,tags:Object.fromEntries(KEEP.filter(k=>e.tags[k]!==undefined).map(k=>[k,e.tags[k]])),n:Object.keys(e.tags).length}))};}
  function catalog(data,center,city){
   const seen=new Set(),distance=p=>Math.hypot(p.lat-center.lat,(p.lng-center.lng)*Math.cos(center.lat*Math.PI/180));
-  const rows=(data.elements||[]).filter(e=>e.tags&&e.tags.name).map(e=>{const t=e.tags,k=category(t),point=e.center||e,dining=['restaurant','cafe'].includes(k);return {id:'osm-'+e.type+'-'+e.id,name:t['name:en']||t.name,type:k,category:labels[k]||'Attraction',lat:+point.lat,lng:+point.lon,area:t['addr:suburb']||city,address:[t['addr:housenumber'],t['addr:street'],t['addr:city']].filter(Boolean).join(' '),...estimates(k),needsTicket:t.fee==='yes'||!!t.charge,price:'',intro:'',photo:'',generic:true,section:'popular',cuisine:t.cuisine?t.cuisine.replace(/[_;]/g,' '):k==='cafe'?'Coffee':'',...(dining?{meals:k==='cafe'?['breakfast','lunch','snack']:['lunch','dinner']}:{}),openingHours:t.opening_hours||'',parsedHours:parseHours(t.opening_hours),hours:parseHours(t.opening_hours)||{},closed:[],closedDates:[],tags:[],wikipedia:t.wikipedia,wikidata:t.wikidata,mapUrl:'https://www.openstreetmap.org/'+e.type+'/'+e.id,notability:Number(!!t.wikipedia)+Number(!!t.wikidata),richness:Object.keys(t).length};}).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
+  const rows=(data.elements||[]).filter(e=>e.tags&&e.tags.name).map(e=>{const t=e.tags,k=category(t),point=e.center||e,dining=['restaurant','cafe'].includes(k);return {id:'osm-'+e.type+'-'+e.id,name:t['name:en']||t.name,type:k,category:labels[k]||'Attraction',lat:+point.lat,lng:+point.lon,area:t['addr:suburb']||city,address:[t['addr:housenumber'],t['addr:street'],t['addr:city']].filter(Boolean).join(' '),...estimates(k),needsTicket:t.fee==='yes'||!!t.charge,price:'',intro:'',photo:'',generic:true,section:'popular',cuisine:t.cuisine?t.cuisine.replace(/[_;]/g,' '):k==='cafe'?'Coffee':'',...(dining?{meals:k==='cafe'?['breakfast','lunch','snack']:['lunch','dinner']}:{}),openingHours:t.opening_hours||'',parsedHours:parseHours(t.opening_hours),hours:parseHours(t.opening_hours)||{},closed:[],closedDates:[],tags:[],wikipedia:t.wikipedia,wikidata:t.wikidata,mapUrl:'https://www.openstreetmap.org/'+e.type+'/'+e.id,notability:Number(!!t.wikipedia)+Number(!!t.wikidata),richness:e.n||Object.keys(t).length};}).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
   rows.sort((a,b)=>b.notability-a.notability||b.richness-a.richness||distance(a)-distance(b));
   const unique=rows.filter(p=>{const n=normalize(p.name);if(seen.has(n))return false;seen.add(n);return true;});
   return {generic:true,city,center,activities:unique.filter(p=>!p.meals),restaurants:unique.filter(p=>p.meals)};
  }
- async function load(city,hotel){try{const center=hotel&&Number.isFinite(hotel.lat)&&Number.isFinite(hotel.lng)?hotel:await geocode(city);return {catalog:catalog(await nearby(center),center,city),fallback:false};}catch(e){return {catalog:null,fallback:true};}}
+ async function load(city,hotel){const key=googleKey();if(key){try{return {catalog:await google(city,hotel,key),fallback:false,source:'google'};}catch(e){/* Fall through to OpenStreetMap. */}}try{const center=hotel&&Number.isFinite(hotel.lat)&&Number.isFinite(hotel.lng)?hotel:await geocode(city);return {catalog:catalog(await nearby(center),center,city),fallback:false,source:'osm'};}catch(e){return {catalog:null,fallback:true};}}
+ function googleKey(){return String(options.googleKey!==undefined?options.googleKey:(root.GONOW_PLACES_CONFIG&&root.GONOW_PLACES_CONFIG.GOOGLE_PLACES_KEY)||'').trim();}
+ // Places API (New) Text Search. Only the fields the cards use: rating and hours put this on the Enterprise SKU, so
+ // there are just two searches per city, cached for a day. No reviews, website, phone or price.
+ const FIELDS='places.id,places.displayName,places.location,places.primaryType,places.types,places.formattedAddress,places.googleMapsUri,places.photos.name,places.photos.authorAttributions,places.rating,places.userRatingCount,places.regularOpeningHours.periods,places.regularOpeningHours.weekdayDescriptions';
+ function search(text,center,key){return json('https://places.googleapis.com/v1/places:searchText',{timeout:8000,method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':FIELDS},body:JSON.stringify({textQuery:text,maxResultCount:20,languageCode:'en',...(center?{locationBias:{circle:{center:{latitude:center.lat,longitude:center.lng},radius:10000}}}:{})})});}
+ function google(city,hotel,key){const center=hotel&&Number.isFinite(hotel.lat)&&Number.isFinite(hotel.lng)?{lat:hotel.lat,lng:hotel.lng}:null;
+  return cached('google:'+normalize(city)+':'+(center?center.lat.toFixed(3)+','+center.lng.toFixed(3):''),DAY,async()=>{
+   const [sights,food]=await Promise.all([search('top sights and things to do in '+city,center,key),search('popular restaurants and cafes in '+city,center,key)]);
+   return googleCatalog(sights.places||[],food.places||[],city,center,key);});}
+ // Google periods -> the same {week:[[start,end],...]} shape parseHours returns (0 = Sunday, minutes from midnight).
+ function googleHours(h){const periods=h&&Array.isArray(h.periods)?h.periods:null;if(!periods||!periods.length)return null;const week=[[],[],[],[],[],[],[]];
+  for(const p of periods){const o=p&&p.open;if(!o||!Number.isInteger(o.day)||o.day<0||o.day>6)continue;const a=(o.hour||0)*60+(o.minute||0);
+   if(!p.close){if(periods.length===1&&a===0){week.forEach(d=>d.push([0,1440]));break;}continue;}
+   const c=p.close,b=c.day===o.day?(c.hour||0)*60+(c.minute||0):1440;if(b>a)week[o.day].push([a,b]);}
+  return week.some(d=>d.length)?{week}:null;}
+ function googleRating(p){const r=+p.rating,n=+p.userRatingCount;return Number.isFinite(r)&&r>0?{rating:Math.round(r*10)/10,ratingCount:Number.isFinite(n)?n:0}:{};}
+ function googleCatalog(sights,food,city,center,key){
+  const DINING=/restaurant|cafe|coffee|bakery|bar|food|meal|diner|bistro/;const BREAKFAST=/breakfast|brunch|cafe|coffee|bakery/;
+  const kind=t=>{const types=[t.primaryType||'',...(t.types||[])].join(' ');return /museum/.test(types)?'museum':/art_gallery/.test(types)?'gallery':/zoo/.test(types)?'zoo':/aquarium/.test(types)?'aquarium':/beach/.test(types)?'beach':/park|garden|hiking/.test(types)?'park':/observation|viewpoint|scenic/.test(types)?'viewpoint':/cafe|coffee|bakery/.test(types)?'cafe':DINING.test(types)?'restaurant':'attraction';};
+  const seen=new Set();const rows=[...sights,...food].filter(p=>p&&p.id&&p.displayName&&p.location&&!seen.has(p.id)&&seen.add(p.id)).map((p,i)=>{const k=kind(p),dining=['restaurant','cafe'].includes(k),photo=p.photos&&p.photos[0],author=photo&&photo.authorAttributions&&photo.authorAttributions[0];
+   return {id:'g-'+p.id,placeId:p.id,name:p.displayName.text,type:k,category:labels[k]||'Attraction',lat:+p.location.latitude,lng:+p.location.longitude,area:city,address:p.formattedAddress||'',...estimates(k),needsTicket:false,price:'',intro:'',
+    photo:photo&&photo.name&&/^places\/[\w-]+\/photos\/[\w-]+$/.test(photo.name)?'https://places.googleapis.com/v1/'+photo.name+'/media?maxWidthPx=480&key='+encodeURIComponent(key):'',creditUrl:author&&author.uri||p.googleMapsUri||'',creditName:author&&author.displayName||'Google Maps',
+    generic:true,section:'popular',source:'google',cuisine:dining?(k==='cafe'?'Coffee':''):'',...(dining?{meals:BREAKFAST.test([p.primaryType,...(p.types||[])].join(' '))?['breakfast','lunch','snack']:['lunch','dinner']}:{}),...googleRating(p),openingHours:p.regularOpeningHours&&Array.isArray(p.regularOpeningHours.weekdayDescriptions)?p.regularOpeningHours.weekdayDescriptions.map(String).join('; ').replace(/[\u202f\u2009]/g,' '):'',parsedHours:googleHours(p.regularOpeningHours),hours:{},closed:[],closedDates:[],tags:[],mapUrl:p.googleMapsUri||'',rank:i};}).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
+  const middle=center||(rows.length?{lat:rows.reduce((a,p)=>a+p.lat,0)/rows.length,lng:rows.reduce((a,p)=>a+p.lng,0)/rows.length}:null);
+  if(!rows.length)throw Error('No places');
+  return {generic:true,source:'google',city,center:middle,activities:rows.filter(p=>!p.meals),restaurants:rows.filter(p=>p.meals)};}
  function enrich(place){return cached('photo:'+(place.wikipedia||place.wikidata||place.id),30*DAY,async()=>{
   let wiki=place.wikipedia;
   if(!wiki&&/^Q\d+$/.test(place.wikidata||'')){
@@ -83,5 +118,5 @@ function create(options={}){
  }).then(data=>Object.assign(place,data)).catch(()=>place);}
  return {load,geocode,nearby,enrich,catalog};
 }
-window.GoNowPlaceSource={create,parseHours,allows,estimates,durationLabel,cardLine,placeholder,slug,normalize,CONTACT};
+window.GoNowPlaceSource={create,prune,parseHours,allows,estimates,durationLabel,cardLine,ratingLabel,placeholder,slug,normalize,CONTACT};
 })();

@@ -119,7 +119,10 @@ function mealSlot(item) {
     return item?.kind==='meal'?'any':null;
 }
 function slotCandidates({item,previous,next,catalog,inPlan=[],date,mode='Uber'}) {
-    const meal=mealSlot(item),food=p=>Array.isArray(p.meals)&&p.meals.length>0;
+    // An untitled meal takes its slot from the clock, so a 7 AM bakery is swapped for breakfast places only.
+    const byClock=t=>!Number.isFinite(t)?'any':t<630?'breakfast':t<900?'lunch':t>=1020?'dinner':'any';
+    let meal=mealSlot(item);if(meal==='any')meal=byClock(item.start??item.preferred);
+    const food=p=>Array.isArray(p.meals)&&p.meals.length>0;
     return catalog.filter(p=>!inPlan.includes(p.id)&&(meal?food(p)&&(meal==='any'||p.meals.includes(meal)):!food(p))).map(p=>{
         // A following travel row already covers the road leg, so it is not counted twice.
         // Without coordinates on both ends, keep the plan's existing gap instead of guessing a 30-min ride.
@@ -331,7 +334,9 @@ function reflow(day, ctx = {}) {
 
     const ages = (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number);
     const rejected=[];
-    const raw = clone(day.items).filter(item=>{const reason=blockedOn(item,day.date,ctx);if(boundary&&item.locked&&/flight/i.test(reason||''))return true;if(reason)rejected.push({...item,blockedReason:reason});return !reason;});
+    // A time the traveler set by hand stays put; opening hours become a heads-up instead of moving it off the day.
+    const overridden=(item,reason)=>item.hoursOk&&/opening hours/i.test(reason||'');
+    const raw = clone(day.items).filter(item=>{const reason=blockedOn(item,day.date,ctx);if(boundary&&item.locked&&/flight/i.test(reason||''))return true;if(overridden(item,reason))return true;if(reason)rejected.push({...item,blockedReason:reason});return !reason;});
     raw.forEach(item => { delete item.notes; delete item.noteSources; delete item.notePriority; delete item.noteSource; });
     if(stayOverride)raw.forEach(item=>{['place','to'].forEach(k=>{if(item[k]===HOTEL)item[k]=stayOverride;});if(item.prepBlock&&item.prepBlock.place===HOTEL)item.prepBlock.place=stayOverride;});
     let previous = null;
@@ -403,7 +408,8 @@ function reflow(day, ctx = {}) {
             if(conflict){if(item.locked)warn(item,item.title+' conflicts with your flight');else {rejected.push(item);continue;}}
         }
         const block=blockedOn({...item,preferred:item.start},day.date,ctx);
-        if(block&&!(boundary&&item.locked&&/flight/i.test(block))){rejected.push({...item,blockedReason:block});continue;}
+        if(overridden(item,block))warn(item,'May be closed at this time');
+        else if(block&&!(boundary&&item.locked&&/flight/i.test(block))){rejected.push({...item,blockedReason:block});continue;}
         if (previous) {
             const buffer = item.dressy ? 15 : 0;
             const depart = item.locked && !item.textTime ? item.start - buffer - travel.minutes : previous.end;
@@ -749,6 +755,13 @@ function mount(root, ctx = {}) {
         const suggesting=!!(item?.locked&&window.goNowAccount?.group&&!window.goNowAccount.owner());
         if(!item||((item.locked||item.booked)&&!suggesting))return;
         const catalog=ctx.swapCatalog();
+        if(catalog===null){
+            // Places for this city are still loading (new session or device): wait briefly, then open.
+            const wait=document.createElement('dialog');wait.setAttribute('data-testid','swap-sheet');wait.className='swap-sheet';wait.innerHTML='<button type="button" data-close aria-label="Close">×</button><h2>Swap</h2><p role="status" data-testid="swap-loading">Loading places…</p>';
+            root.appendChild(wait);wait.showModal();let tries=0;const close=()=>{clearInterval(timer);wait.close();wait.remove();};wait.querySelector('[data-close]').onclick=close;
+            const timer=setInterval(()=>{const next=ctx.swapCatalog();if(next!==null||++tries>40){close();if(next&&next.length)openSwap(id);else announce('Couldn’t load places. Try again.');}},500);
+            return;
+        }
         const identify=i=>catalog.find(p=>p.id===i.sourceId||p.id===i.id||String(i.title||'').toLowerCase().includes(p.name.toLowerCase()));
         const used=schedule().days.flatMap(d=>d.items.map(i=>identify(i)?.id||i.sourceId||i.id));
         const origin=identify(shown[index-1]||{})||identify(item)||item;
@@ -797,7 +810,7 @@ function mount(root, ctx = {}) {
         // Reuse persisted manualTime/estimate and duration; explicit arrival is start + duration.
         const arrivalEstimate = travelTime && (!i.manualTime || i.estimate);
         const showArrivalEstimate = travelTime && i.manualTime && i.estimate;
-        const editor = canEditTime && editingTime === on + '|' + i.id ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><p>${i.locked ? 'Unlock first to edit this activity’s time.' : travelTime ? 'Edit departure time' : 'Edit scheduled time'}</p><fieldset ${i.locked ? 'disabled' : ''}><legend>${travelTime ? 'Travel time' : 'Activity time'}</legend><label>${travelTime ? 'Departure' : 'Start'}<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>${travelTime ? 'Arrival' : 'End'} <span data-time-estimate>${travelTime ? (arrivalEstimate ? '(est. from travel duration)' : '') : i.estimate ? '(estimate from default duration)' : ''}</span><input name="end" type="time" ${travelTime && !arrivalEstimate ? 'data-manual="true"' : ''} value="${hhmm(i.end)}"></label><label ${travelTime ? 'hidden' : ''}>Duration (minutes)<input name="duration" type="number" min="1" placeholder="${i.duration}"></label><button>${travelTime ? 'Save departure time' : 'Save activity time'}</button></fieldset><p role="alert" data-testid="activity-time-error"></p><button type="button" data-db-action="close-time">Close time editor</button></form>` : '';
+        const editor = canEditTime && editingTime === on + '|' + i.id ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><p>${travelTime ? 'Edit departure time' : 'Edit scheduled time'}${i.locked || i.booked ? ' · stays locked' : ''}</p><fieldset><legend>${travelTime ? 'Travel time' : 'Activity time'}</legend><label>${travelTime ? 'Departure' : 'Start'}<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>${travelTime ? 'Arrival' : 'End'} <span data-time-estimate>${travelTime ? (arrivalEstimate ? '(est. from travel duration)' : '') : i.estimate ? '(estimate from default duration)' : ''}</span><input name="end" type="time" ${travelTime && !arrivalEstimate ? 'data-manual="true"' : ''} value="${hhmm(i.end)}"></label><label ${travelTime ? 'hidden' : ''}>Duration (minutes)<input name="duration" type="number" min="1" value="${Math.max(1, (i.end ?? 0) - (i.start ?? 0)) || i.duration}"></label><button>${travelTime ? 'Save departure time' : 'Save activity time'}</button></fieldset><p role="alert" data-testid="activity-time-error"></p><button type="button" data-db-action="close-time">Close time editor</button></form>` : '';
         const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number).some(age => age < r.minAge)) : null;
         const detail = (ctx.detail ? ctx.detail(src, on, i) : '') + (tray ? (i.rules || []).map(r => `<p>${esc(r.text || r)}</p>`).join('') : '');
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
@@ -852,7 +865,6 @@ function mount(root, ctx = {}) {
         if (ctx.shared) return;
         const item = (days[on] || buildSuggested(on)).items.find(i => i.id === id);
         if (item?.locked && window.goNowAccount?.group && !window.goNowAccount.owner()) { suggestLocked(item, 'time'); return; }
-        if (item?.locked) { confirmUnlock(item, () => openTime(on, id)); return; }
         editingTime = on + '|' + id;
         selectDay(on, false);
         root.querySelector('.db-dock-tray')?.classList.remove('is-open');
@@ -901,9 +913,9 @@ function mount(root, ctx = {}) {
         d.chronological=true;
         d.items.sort((a,b)=>(a.preferred ?? Infinity)-(b.preferred ?? Infinity));
     }
-    function resolveTime(on, item, start, duration, apply) {
+    function resolveTime(on, item, start, duration, apply, options={}) {
         const proposed={...item,start,preferred:start,duration};
-        if(block(proposed,on,target=>{ // A suggested move leaves the original untouched until accepted.
+        if(!(options.explicit&&/opening hours/i.test(blockedOn(proposed,on,ruleContext())||''))&&block(proposed,on,target=>{ // A suggested move leaves the original untouched until accepted.
             Object.values(days).forEach(d=>{d.items=d.items.filter(i=>i.id!==item.id);d.unscheduled=(d.unscheduled||[]).filter(i=>i.id!==item.id);});
             days[target] ||= buildSuggested(target);days[target].items.push({...item,preferred:start,manualTime:true,duration});
             root.querySelector('dialog[open]')?.remove();save();selectDay(target,false);
@@ -1298,26 +1310,21 @@ function mount(root, ctx = {}) {
             change(row.dataset.dbId, row.dataset.dbZone, action);
         }
     });
-    root.addEventListener('input', e => {
-        if (e.target.closest('.db-time-editor') && ['end','duration'].includes(e.target.name)) {
-            e.target.form.dataset.lastManual = e.target.name;
-            if (e.target.name === 'end') e.target.dataset.manual = 'true';
-            e.target.form.querySelector('[data-time-estimate]').textContent = '';
-            if (e.target.name === 'duration' && Number(e.target.value) > 0) {
-                const form = e.target.form, parts = form.elements.start.value.split(':').map(Number);
-                const end = parts[0] * 60 + parts[1] + Number(e.target.value);
-                form.elements.end.value = end < 1440 ? String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0') : '';
-            }
-        }
-        if (e.target.closest('.db-time-editor') && e.target.name === 'start') {
-            const form = e.target.form, item = current().items.find(i => i.id === form.closest('[data-db-id]').dataset.dbId);
-            if (!form.elements.end.dataset.manual && !form.elements.duration.value && e.target.value) {
-                const [h,m] = e.target.value.split(':').map(Number), end = h*60+m+item.duration;
-                form.querySelector('[data-time-estimate]').textContent = item.kind === 'travel' ? '(est. from travel duration)' : '(estimate from default duration)';
-                form.elements.end.value = end < 1440 ? String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0') : '';
-            }
-        }
-    });
+    // Start, End and Duration stay in sync: Start keeps the duration, End sets the duration, Duration sets the end.
+    // Listen to change too: some mobile time pickers only fire change.
+    const hm = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? Number(v.slice(0,2))*60 + Number(v.slice(3)) : null;
+    const fmt = m => m >= 0 && m < 1440 ? String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0') : '';
+    function syncTime(e) {
+        const form = e.target.closest('.db-time-editor');
+        if (!form || !['start','end','duration'].includes(e.target.name)) return;
+        const {start, end, duration} = form.elements, s = hm(start.value), en = hm(end.value), d = Number(duration.value);
+        if (e.target.name !== 'start') { form.dataset.touched = 'true'; form.dataset.lastManual = e.target.name; if (e.target.name === 'end') end.dataset.manual = 'true'; form.querySelector('[data-time-estimate]').textContent = ''; }
+        if (e.target.name === 'start' && s !== null && d > 0) end.value = fmt(s + d);
+        if (e.target.name === 'end' && s !== null && en !== null && en > s) duration.value = String(en - s);
+        if (e.target.name === 'duration' && s !== null && d > 0) end.value = fmt(s + d);
+    }
+    root.addEventListener('input', syncTime);
+    root.addEventListener('change', syncTime);
     function editFlights(){
         if(ctx.shared||!window.GoNowFlights)return;
         const a={...(ctx.flightAnswers||{})};window.GoNowFlights.migrate(a);
@@ -1367,25 +1374,29 @@ function mount(root, ctx = {}) {
         if (e.target.matches('.db-time-editor')) {
             e.preventDefault();
             const form = e.target, row = form.closest('[data-db-id]');
+            days[date] ||= buildSuggested(date);
             const item = current().items.find(i => i.id === row.dataset.dbId);
-            if (!item || item.locked) return;
-            const time = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? Number(v.slice(0,2))*60 + Number(v.slice(3)) : NaN;
-            const start = time(form.elements.start.value);
+            if (!item) return;
+            if (item.locked && suggestLocked(item, 'time')) return;
+            const start = hm(form.elements.start.value);
             const durationField = form.elements.duration;
             const endField = form.elements.end;
-            const explicitDuration = durationField.value && form.dataset.lastManual !== 'end';
-            const length = explicitDuration ? Number(durationField.value) : endField.dataset.manual ? time(endField.value)-start : item.duration;
-            if (!Number.isFinite(start) || !Number.isFinite(length) || length <= 0 || start + length > 1440 || !form.checkValidity()) {
-                form.querySelector('[role=alert]').textContent = 'Enter valid times and a positive duration. End must be after start.';
+            const end = hm(endField.value);
+            // The last field the traveler edited wins; Start alone keeps the duration.
+            const length = form.dataset.lastManual === 'end' && end !== null ? end - start : Number(durationField.value) || (end !== null ? end - start : item.duration);
+            if (start === null || !Number.isFinite(length) || length <= 0 || start + length > 1440 || !form.checkValidity()) {
+                form.querySelector('[role=alert]').textContent = 'Enter valid times. End must be after start.';
                 form.setAttribute('aria-invalid','true');
                 [form.elements.start, endField, durationField].forEach(field => field.setAttribute('aria-invalid','true')); return;
             }
+            const touched = !!form.dataset.touched || endField.dataset.manual === 'true';
+            // An explicit time is the traveler's call: opening hours only warn (the card shows the heads-up).
             resolveTime(date,item,start,length,()=>{
             reviewTransfers(current(),item);
             item.originalTitle ||= item.title; item.title=cleanTimeTitle(item.title,item.preferred);
-            Object.assign(item,{preferred:start,duration:length,manualTime:true,estimate: !(durationField.value || endField.dataset.manual)});
-            sortDay(date); save(); closeTime(); announce(item.kind === 'travel' ? 'Departure time updated.' : 'Activity time updated. Travel and prep are estimated separately.');
-            });
+            Object.assign(item,{preferred:start,duration:length,manualTime:true,estimate: !touched,hoursOk:!!blockedOn({...item,preferred:start,duration:length},date,ruleContext())});
+            sortDay(date); save(); closeTime(); announce(item.kind === 'travel' ? 'Departure time updated.' : 'Activity time updated.');
+            },{explicit:true});
             return;
         }
 

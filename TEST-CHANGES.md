@@ -1808,3 +1808,34 @@ COPY-AUDIT (visible strings changed in this pass):
 
 Tests updated with comments (not weakened): test_book_links (USD once), test_rings_card / test_track_mode (duration once), test_rings / test_plan_render / test_ring_trim (fly-home line), test_share_menu (two-line clamp ≤600px), test_full / test_plan_render (sample flight title), test_travel_time (cache tag), test_any_city (retry + alternate host), test_placesource (alternate endpoint, 502 recovery).
 Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deployed.
+
+## Nov 17 fix batch (cache tag `fixes-20261117`)
+- **New suites**:
+  - `test_fixes_batch.py` (186 checks):
+    - A cold-load `#join` invite.
+    - A returning member and the owner reopening an invite.
+    - A malformed suggestion.
+    - Stop sharing.
+    - An owner choosing "Not now" plus a stale snapshot.
+    - Scoped Undo.
+    - Any-city Edit picks/Swap after reload.
+    - Reopening a Draft.
+    - Edit time: Start/End/Duration sync, Leonard's 6–8 AM, a locked booking, persistence after reload.
+    - The time difference.
+    - Plug adapter.
+    - Sample bookings.
+    - Copy-text flights.
+  - `test_community.py` (62 checks, 390 + 1280): Community and Profile pages.
+  - `test_google_places.js`: Places (New) mask, mapping, hours, rating, fallback, cache, prune.
+  - `test_community_unit.js`: public-post scrubbing and caps.
+  - `tests/rules/security.rules.test.mjs` and `tests/rules/community.rules.test.mjs`: emulator only.
+- **`tests/serve_site.py`**: the test server serves an empty Places key, so no suite calls Google. `GONOW_LIVE_PLACES=1` uses the real config. `test_full.is_place_url` also aborts `places.googleapis.com`.
+- **Updated expectations**:
+  - Good to know is removed. `local_info_checks` now checks the time-difference line and the plug adapter.
+  - Affiliate disclosure removed.
+  - Locked and booked items open the time editor directly (no unlock step) and keep their lock.
+  - Moving Start keeps the duration and moves End.
+  - Sample Senia "outside your dates" is no longer flagged.
+  - The share menu has "Share to community".
+  - The asset count is 31.
+  - New any-city failure copy.

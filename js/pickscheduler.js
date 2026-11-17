@@ -8,7 +8,7 @@ function route(a){
  const j=root.GoNowJetlag,home=j?j.home(a.origin):{tz:'America/Los_Angeles'},dest=j?j.home(a.destination):{tz:'Pacific/Honolulu'};
  const zones={kyoto:'Asia/Tokyo',bali:'Asia/Makassar',lisbon:'Europe/Lisbon',barcelona:'Europe/Madrid',cancun:'America/Cancun',reykjavik:'Atlantic/Reykjavik',banff:'America/Edmonton',costarica:'America/Costa_Rica',capetown:'Africa/Johannesburg'};
  const known=root.Engine&&root.Engine.matchDestination?root.Engine.matchDestination(a.destination):null;
- const key=String(a.destination||'').toLowerCase().replace(/\s/g,'');dest.tz=known&&known.tz||zones[key]||dest.tz;
+ const key=String(a.destination||'').toLowerCase().replace(/\s/g,'');const found=known&&known.tz||zones[key]||a.destinationTz||(j&&j.zone?j.zone(a.destination):dest.tz);const unknownZone=!found;dest.tz=found||home.tz;
  const countries=z=>/Honolulu|America\/(Los_Angeles|New_York|Chicago)/.test(z)?'US':/Tokyo/.test(z)?'JP':z;
  let international=countries(home.tz)!==countries(dest.tz);
  if(root.Engine&&root.Engine.originRegion){const r=root.Engine.originRegion(a);if(/^us/.test(r)&&known&&known.country)international=known.country!=='USA';if(r==='canada'&&known&&known.country)international=known.country!=='Canada';}
@@ -16,11 +16,13 @@ function route(a){
  const hawaii=/oahu|hawaii|honolulu|hnl/i.test(a.destination||'');
  const hours=hawaii?({usWest:6,usEast:11,usCentral:9,eastAsia:10,canada:7,europe:17}[region]||(/New_York/.test(home.tz)?11:/Asia/.test(home.tz)?10:6)):international?(/Tokyo/.test(dest.tz)?12:/Europe/.test(dest.tz)?(region==='usEast'?7:11):10):home.tz===dest.tz?2.5:5.5;
  const date=a.start||'2026-11-25',delta=j?j.offset(date,dest.tz)-j.offset(date,home.tz): -120;
+ // Unknown destination zone: no fake jet-lag math. Assume a mid-afternoon arrival and an early-evening departure.
+ if(unknownZone)return {international,hours,landing:840,departure:1020,unknownZone:true};
  return {international,hours,landing:((540+hours*60+delta)%1440+1440)%1440,departure:((1080-hours*60+delta)%1440+1440)%1440};
 }
 function windowFor(a){a=migrate({...a});const r=route(a),landing=parse(a.arrivalTime)??r.landing,departure=parse(a.returnTime)??r.departure;
  const road=root.DayBuilder?root.DayBuilder.estimateTravel({area:a.stay||'Hotel'},{area:'Airport'}).minutes:35;
- return {landing,departure,arrivalStart:landing+75,leave:Math.max(0,departure-(r.international?180:120)-road),road,international:r.international,arrivalEstimated:parse(a.arrivalTime)===null,returnEstimated:parse(a.returnTime)===null};}
+ return {landing,departure,unknownZone:!!r.unknownZone,arrivalStart:landing+75,leave:Math.max(0,departure-(r.international?180:120)-road),road,international:r.international,arrivalEstimated:parse(a.arrivalTime)===null,returnEstimated:parse(a.returnTime)===null};}
 function label(a,direction){const w=windowFor(a),arrival=direction==='arrival',number=a[arrival?'arrivalFlight':'returnFlight']||'',est=w[arrival?'arrivalEstimated':'returnEstimated'];return (number?number+' · ':'')+(est?'Est. ':'')+(arrival?'lands ':'departs ')+(est?'~':'')+clock(w[arrival?'landing':'departure']);}
 function fields(a,escape){const e=escape||String;return '<p>Times at your destination</p>'+['arrival','return'].map((k,i)=>'<div class="flight-row"><strong>'+ (i?'Return':'Arrival')+'</strong><label>Flight number (optional)<input data-flight-field="'+k+'Flight" data-testid="'+k+'-flight" placeholder="'+(i?'Flight number':'HA 11')+'" value="'+e(a[k+'Flight']||'')+'"></label><label>'+ (i?'Departs · last day':'Lands · day 1')+'<input type="time" data-flight-field="'+k+'Time" data-testid="'+k+'-time" value="'+e(parse(a[k+'Time'])===null?'':String(Math.floor(parse(a[k+'Time'])/60)).padStart(2,'0')+':'+String(parse(a[k+'Time'])%60).padStart(2,'0'))+'"></label></div>').join('')+'<span data-flight-booking-hook hidden></span>';}
 root.GoNowFlights={parse,clock,migrate,route,windowFor,label,fields};
@@ -38,7 +40,9 @@ const travel=(a,b)=>!a||!b?0:window.DayBuilder.estimateTravel(a,b).minutes;
 function scheduleOnce(a,catalog,attempt=0,seed){
  const start=a.start||'2026-11-25',end=a.end||'2026-11-29',days=[];
  for(let t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z')&&days.length<31;t+=86400000)days.push({date:new Date(t).toISOString().slice(0,10),theme:'',items:[],prep:[],unscheduled:[]});
- const picks=a.picks||{},all=[...catalog.activities,...catalog.restaurants].map(p=>catalog.generic?{...p,area:p.area||'',duration:p.duration||60,price:p.price||'',intro:p.intro||'',closed:p.closed||[],hours:p.parsedHours||p.hours||{}}:p),selected=all.filter(i=>i.reservation||i.locked||i.booked||(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id));
+ // Sample reservations only apply when their date is inside this trip; otherwise they are ordinary places.
+ const sample=p=>p.reservation&&(p.reservation.date<start||p.reservation.date>end)?(({reservation,...rest})=>rest)(p):p;
+ const picks=a.picks||{},all=[...catalog.activities,...catalog.restaurants].map(sample).map(p=>catalog.generic?{...p,area:p.area||'',duration:p.duration||60,price:p.price||'',intro:p.intro||'',closed:p.closed||[],hours:p.parsedHours||p.hours||{}}:p),selected=all.filter(i=>i.reservation||i.locked||i.booked||(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id));
  if(seed)days.forEach(d=>{d.items=JSON.parse(JSON.stringify(seed[d.date]||[]));});
  const fw=window.GoNowFlights.windowFor(a);const unfit=[],bookingIssues=[];const {flight,leave}=departure({...a,start,end,generic:catalog.generic});
  function fits(p,d,t){
@@ -72,9 +76,12 @@ function scheduleOnce(a,catalog,attempt=0,seed){
   }
   if(!placed)((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);
  }
- for(const d of days){d.items.sort((a,b)=>a.start-b.start);const names=[...new Set(d.items.filter(i=>i.kind==='activity').map(i=>i.area))];d.theme=names.slice(0,2).join(' & ')||[...new Set(d.items.map(i=>i.area))].slice(0,1).join('')||(d.date===end?'Fly home':'Arrive & settle in');}
+ for(const d of days){d.items.sort((a,b)=>a.start-b.start);const names=[...new Set(d.items.filter(i=>i.kind==='activity').map(i=>i.area))];d.theme=names.slice(0,2).join(' & ')||[...new Set(d.items.map(i=>i.area))].slice(0,1).join('')||(d.date===end?'Fly home':d.date===start?'Arrive & settle in':'Free day');}
  if(!seed&&days.length)days[days.length-1].items.push({id:'pick-airport',title:catalog.generic?'Leave for the airport':'Uber to HNL',kind:'travel',time:window.DayBuilder.clock(leave),start:leave,duration:a.flightsStep?fw.road:35,locked:true,desc:a.flightsStep?'About '+fw.road+' min.':'Leave for the airport.',prep:[],bring:[],sources:[]});
- if(days[0]){days[0].unscheduled=unfit.map(p=>({id:p.id,title:p.name,place:p.area,duration:p.duration,kind:p.meals?'meal':'activity',custom:true,tags:p.tags||[],closed:p.closed,hours:p.hours}));if(!seed&&fw.arrivalStart<1410&&!days[0].items.some(i=>i.start<1140))days[0].items.unshift({id:'pick-checkin',title:'Hotel check-in',kind:'stay',time:window.DayBuilder.clock(Math.max(1080,fw.arrivalStart)),desc:'About 30 min. Settle in.',duration:30,prep:[],bring:[],sources:[]});}
+ if(days[0]){days[0].unscheduled=unfit.map(p=>({id:p.id,title:p.name,place:p.area,duration:p.duration,kind:p.meals?'meal':'activity',custom:true,tags:p.tags||[],closed:p.closed,hours:p.hours}));if(!seed&&fw.arrivalStart<1410&&!days[0].items.some(i=>i.start<1140)){const checkin=Math.max(900,fw.arrivalStart);days[0].items.unshift({id:'pick-checkin',title:'Hotel check-in',kind:'stay',time:window.DayBuilder.clock(checkin),start:checkin,desc:'About 30 min. Settle in.',duration:30,prep:[],bring:[],sources:[]});
+  // An early landing gets a light, optional afternoon instead of a blank gap before dinner.
+  const stroll=checkin+60,dinner=Math.max(1170,fw.arrivalStart+30),busy=days[0].items.some(i=>i.start!=null&&i.start<dinner&&i.start+(i.duration||0)>stroll&&i.id!=='pick-checkin');
+  if(!busy&&stroll+60<=dinner-30)days[0].items.push({id:'pick-arrival-stroll',title:catalog.generic?'Easy walk near your hotel':'Beach time near your hotel',kind:'activity',time:window.DayBuilder.clock(stroll),start:stroll,desc:'About 60 min. Optional, keep it easy after the flight.',duration:60,area:'',prep:[],bring:[],sources:[]});}}
  if(!seed&&days[0]&&Math.max(1170,fw.arrivalStart+30)+60<=1440&&!days[0].items.some(i=>i.kind==='meal'||i.start>=1110))days[0].items.push({id:'pick-arrival-meal',title:'Evening meal near hotel',kind:'meal',time:window.DayBuilder.clock(Math.max(1170,fw.arrivalStart+30)),desc:'About 60 min. Choose nearby.',duration:60,prep:[],bring:[],sources:[]});
  if(a.flightsStep&&!seed){days[0].items.unshift({id:'arrival-flight',title:window.GoNowFlights.label(a,'arrival'),kind:'flight',time:window.DayBuilder.clock(fw.landing),duration:0,locked:true,flightDirection:'arrival',prep:[],bring:[],sources:[]});days.at(-1).items.push({id:'return-flight',title:window.GoNowFlights.label(a,'return'),kind:'flight',time:window.DayBuilder.clock(fw.departure),duration:0,locked:true,flightDirection:'return',prep:[],bring:[],sources:[]});}
  return {days,unfit:unfit.map(p=>({...p,reason:reason(p,{...a,start,end})})),bookingIssues,flightTime:flight===null?'':window.DayBuilder.clock(flight),leaveTime:leave,pace:pace(a)};

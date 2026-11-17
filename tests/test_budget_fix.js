@@ -118,7 +118,7 @@ assert(!/Transport &amp; conditions|Typical conditions|Staying at/.test(headSour
 assert(app.includes('Getting around · ')); // Hint marks a tappable info row.
 console.log('PASS minimal day header, Draft hint removal and prep dedupe copy');
 
-assert.equal(packs.length,50);
+assert.equal(packs.length,49,'the US-plug adapter row is gone for a US traveler');
 assert(!packs.some(t=>/insurance/i.test(t.text)));
 ctx.state.answers={international:true};
 const savedPlan=ctx.state.plan;
