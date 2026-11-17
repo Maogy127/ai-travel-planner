@@ -117,7 +117,7 @@ function smoke(label){
  const nudgeDay={date:'2026-11-26'}, reserved=[{id:'early',title:'Reserved tour',start:335,end:400,locked:true}];
  const nudgeContext={previous:{date:'2026-11-25',items:[]},ringResult:{values:{sleep:5.75},goals:{sleep:8},sleepDetail:{first:reserved[0]}}};
  const nudge=h.sleepNudgeHTML(nudgeDay,reserved,nudgeContext);
- assert(nudge.includes('Short night · 5h45 sleep'));
+ assert(nudge.includes('<span>Short night</span>') && !nudge.includes('5h45 sleep') /* duration shown once in the ring */);
  assert(nudge.includes('sleep-nudge-keep') && nudge.includes('sleep-nudge-accept'));
  assert(nudge.includes('reserved times') && !nudge.includes('data-testid="sleep-proposal-apply"'));
  // Airport-first and fixed-flight mornings never offer a later start.

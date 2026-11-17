@@ -96,7 +96,7 @@ for(const html of [emptyHtml,compactDay,flightHtml]){
 const shortResult=scoreDay([],'active');shortResult.values.sleep=5+55/60;
 const shortHtml=render(shortResult,{compact:true,flyHome:true,flightLabel:'Flight 8:00 AM'});
 // Final audit: duration belongs only to the compact summary; advice gives an action.
-assert(shortHtml.includes('Wind down early tonight'));
+assert(shortHtml.includes('Short night · Rest on your flight'));
 assert(shortHtml.includes('aria-label="Sleep 5h55 · Flight 8:00 AM"'));
 assert.equal((shortHtml.replace(/<svg[\s\S]*?<\/svg>/g,'').match(/5h55/g)||[]).length,1);
 assert(!shortHtml.includes('ring-rest-break'));

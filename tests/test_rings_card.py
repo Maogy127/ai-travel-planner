@@ -41,7 +41,7 @@ async def checks(browser):
             nudge = pg.get_by_test_id('sleep-nudge')
             await expect(nudge).to_contain_text('5h45')
             print('PASS test_rings_card.py check line 39')
-            await expect(nudge.locator('span')).to_have_text('Short night · 5h45 sleep')
+            await expect(nudge.locator('span')).to_have_text('Short night')  # duration already shown once in the ring summary
             assert await nudge.evaluate('(e)=>e.previousElementSibling.matches(".wellness-rings") && e.nextElementSibling.matches(".pace-control")')
             print('PASS test_rings_card.py check line 41')
             before = await pg.evaluate('JSON.stringify(window.DayBuilder.schedule())')

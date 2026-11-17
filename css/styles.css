@@ -1733,3 +1733,6 @@ body:has(#sheet[open][data-testid=pick-details]) .pick-footer{visibility:hidden;
 .db-flight-card .db-expand strong,.db-flight-card .db-activity>strong{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}
 @media(max-width:600px){.db-flight-card .db-expand strong,.db-flight-card .db-activity>strong{font-size:16px}}
 @media(max-width:600px){.db-daycard .db-flight-card .db-time{flex-basis:64px}.db-flight-card>.transport-icon{margin-inline:4px}}
+.checkin-detail{margin:0 0 6px;font-size:.88rem}.checkin-detail summary{cursor:pointer;color:var(--muted,#667)}.checkin-detail p{margin:4px 0 0}
+.about-tap{margin:4px 0 10px;font-size:.88rem}.about-tap summary{cursor:pointer;color:var(--muted,#667)}.about-tap p{margin:4px 0 0}
+.hotel-actions{display:inline-flex;flex-wrap:wrap;align-items:center;gap:8px}

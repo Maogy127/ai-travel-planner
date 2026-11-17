@@ -46,7 +46,7 @@ async def checks(browser):
             await audit(rings)
             await expect(rings.locator('.ring-move,.ring-rec,.ring-value-move,.ring-value-rec')).to_have_count(0)
             # Final audit: one visible duration, with separate actionable advice.
-            await expect(rings.locator('.ring-encouragement')).to_have_text('Wind down early tonight')
+            await expect(rings.locator('.ring-encouragement')).to_have_text('Short night · Rest on your flight')
             await expect(rings.get_by_test_id('ring-rest-break')).to_have_count(0)
             assert 'goal' not in await rings.inner_text()
             await expect(rings.locator('.compact-values')).to_contain_text('departs')

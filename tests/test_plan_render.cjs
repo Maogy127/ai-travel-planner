@@ -103,13 +103,13 @@ function smoke(label){
  }
  // Final audit: sleep duration appears once outside the accessible SVG label.
  const flyHeader=assertFlyHome(lastDay);
- assert(flyHeader.includes('Wind down early tonight'));
+ assert(flyHeader.includes('Short night · Rest on your flight'));
  assert.equal((flyHeader.replace(/<svg[\s\S]*?<\/svg>/g,'').match(/5h55/g)||[]).length,1);
  const savedItems=lastDay.items;
  lastDay.items=[{kind:'travel',title:'Uber Reserve to HNL',time:'4:55 AM'}];
  ctx.DayBuilder.resetSession();
  // Preceding sleep ends 30 minutes before the 4:55 AM airport ride.
- assert(assertFlyHome(lastDay).includes('Wind down early tonight'));
+ assert(assertFlyHome(lastDay).includes('Short night · Rest on your flight'));
  lastDay.items=savedItems;
 
  assert.equal(api.state.plan.id,'oahu-demo-2026-11');
