@@ -39,7 +39,9 @@ async def checks(browser):
             await pg.reload()
             await show_day(pg, 1)
             nudge = pg.get_by_test_id('sleep-nudge')
-            await expect(nudge).to_contain_text('5h45')
+            # 5h45 is shown once, in the ring summary right above; the nudge does not repeat it.
+            await expect(nudge.locator('xpath=preceding-sibling::figure[1]')).to_contain_text('5h45')
+            await expect(nudge).not_to_contain_text('5h45')
             print('PASS test_rings_card.py check line 39')
             await expect(nudge.locator('span')).to_have_text('Short night')  # duration already shown once in the ring summary
             assert await nudge.evaluate('(e)=>e.previousElementSibling.matches(".wellness-rings") && e.nextElementSibling.matches(".pace-control")')

@@ -1777,3 +1777,34 @@ COPY-AUDIT — every visible string added/changed:
 - Estimated flight titles: `Est. lands ~11:30 AM` → `Est. ~11:30 AM`; `Est. departs ~10:00 AM` → `Est. ~10:00 AM` (times vary). `Est.` and `~` remain explicit.
 - Curated sample arrival: `Sample lands ~5:30 PM` → `Sample ~5:30 PM`. Curated sample return: `Sample departure` → `Sample ~10:00 AM`. Both retain their sample status and accessible direction.
 - Existing expanded explanatory wording remains available on tap. No other visible product strings added or changed; audit filenames, diagnostics and mock labels are test evidence only.
+
+## Final batch completion (box, Grok Bot — no Codex), 2026-11-16
+
+Repair:
+- `js/accounts.js` `refreshStorage()` only writes `textContent` when the text changes (the unconditional write re-triggered its own MutationObserver → browser hang). Same guard for the member "Waiting for … to check out" label.
+- Save-state copy: guest home `Saved on this device. Sign in to sync.`; signed-in with sync on and last upload succeeded → `Saved to your account`; Not now / failed upload → `Saved on this device`. New `tests/test_storage_summary.js`.
+
+Any-city robustness:
+- Overpass: second attempt uses an alternate public instance (`overpass.kumi.systems`), 25 s per attempt. Failures are never cached.
+- Loading screen offers `Skip · plan without picks`; failure screen offers `Try again` + `Plan without picks`.
+- `Popular nearby` heading shown on both any-city pick pages (GoNow Picks still Oahu-only).
+
+Swap:
+- Meals swap only for restaurants serving that meal (a meal may shorten to the slot: ≥15 min breakfast, ≥30 min lunch/dinner); activities never get restaurants. Without coordinates on both ends the plan's existing gap is kept instead of a guessed 30-min ride. A swapped-in restaurant keeps kind `meal`. No Swap on check-in/check-out rows. Empty state `Nothing else fits this time`. Tests in `tests/test_swap.cjs`.
+
+COPY-AUDIT (visible strings changed in this pass):
+- Check-in (group): `You's movement goal eased…` → `Your movement goal eased…`; `You is sore — offer a gentle X instead of Y for You; others keep their plan.` → `You’re sore · Gentle X?` + `Details` tap: `Replaces Y for you only. Others keep their plan.` Named travelers: `Alex is sore · Gentle X?`. Button `Swap for You` → `Swap for you`.
+- Pace summary: no trailing ` · ` when no activities are chosen.
+- Sleep question: one line (`Helps us ease you into local time.` / local mode `Helps us keep plans out of your sleep.`) + `About sleep times` tap holding the 10:30 PM–6:30 AM default and clear-both rule.
+- Local-mode style option `Staying at the hotel / Pool, spa, great food on site` → `Taking it easy / A quiet break, pool or spa` (same value `hotel`; trip mode unchanged).
+- Fly-home ring: `Wind down early tonight` → `Short night · Rest on your flight`. Normal-day sleep nudge: `Short night · 6h10 sleep` → `Short night` (duration already in the ring summary once).
+- Good to know: `Currency: USD · Languages…` + `Uses US dollars (USD)` → single `Uses US dollars (USD) · Languages…`.
+- Forecast labels: `These dates are inside the live forecast window…` → `Live forecast when it loads.`; seasonal → `Typical for the season, not a forecast.`
+- Plan header: `Edit picks` sits in the Draft/Confirm (or Trip prep) row; hotel button reads `Add your hotel` when no hotel is set; non-Oahu `Local times` → `Times shown are local`; `Find a hotel` and the hotel button have an 8px gap; titles may use two lines at ≤600px instead of `Oahu, ...`.
+- Sample flight titles: `Sample ~10:00 AM` → `Sample · ~10:00 AM` (arrival likewise; still one line at 390).
+- Trip prep budget: removed the duplicate inner `Estimates` heading.
+- Sign-in sheet: lead line `Sync your trips and plan with friends.`, Google button primary; sync dialog `Sync your trips?` / `Copies trips on this device to your account.` / `Yes, sync` · `Not now`.
+- Cache tag `originfix-20261116` → `anycity-20261116`.
+
+Tests updated with comments (not weakened): test_book_links (USD once), test_rings_card / test_track_mode (duration once), test_rings / test_plan_render / test_ring_trim (fly-home line), test_share_menu (two-line clamp ≤600px), test_full / test_plan_render (sample flight title), test_travel_time (cache tag), test_any_city (retry + alternate host), test_placesource (alternate endpoint, 502 recovery).
+Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deployed.

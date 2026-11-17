@@ -13,14 +13,16 @@ async def check_header(pg):
     # The one-line header must reserve space for Share even on narrow screens.
     assert await toggle.evaluate('''e=>{
         const b=e.getBoundingClientRect(),t=e.closest('header').querySelector('h1'),r=t.getBoundingClientRect(),s=getComputedStyle(t);
-        return r.width>0&&r.right<=b.left&&b.left>=0&&b.right<=innerWidth&&s.whiteSpace==='nowrap'&&s.overflow==='hidden'&&s.textOverflow==='ellipsis';
+        // Wide: one line with ellipsis. Narrow (<=600px): up to two clamped lines so short names like "Oahu, Hawaii" are not cut to "Oahu, ...".
+        const clamp=innerWidth<=600?s.webkitLineClamp==='2':s.whiteSpace==='nowrap'&&s.textOverflow==='ellipsis';
+        return r.width>0&&r.right<=b.left&&b.left>=0&&b.right<=innerWidth&&s.overflow==='hidden'&&clamp;
     }''')
     if pg.viewport_size['width'] == 390:
         title = pg.locator('.plan-heading-row h1')
         original = await title.text_content()
         try:
             await title.evaluate('(e)=>{e.textContent="A long trip title with plenty of room to explore Oahu"}')
-            assert await title.evaluate('(e)=>e.scrollWidth>e.clientWidth')
+            assert await title.evaluate('(e)=>e.scrollWidth>e.clientWidth||e.scrollHeight>e.clientHeight')
             assert await toggle.evaluate('(e)=>{const b=e.getBoundingClientRect(),t=e.closest("header").querySelector("h1").getBoundingClientRect();return t.right<=b.left&&b.right<=innerWidth}')
             await expect(toggle).to_be_visible()
         finally:

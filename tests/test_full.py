@@ -137,7 +137,7 @@ async def local_api_fixture(ctx):
     await ctx.route('https://'+host+'/**',mock_local_api)
 def is_place_url(url):
   host = urlparse(str(url)).hostname or ''
-  return host in ('nominatim.openstreetmap.org', 'overpass-api.de', 'upload.wikimedia.org') or any(host == domain or host.endswith('.' + domain) for domain in ('wikipedia.org', 'wikidata.org'))
+  return host in ('nominatim.openstreetmap.org', 'overpass-api.de', 'overpass.kumi.systems', 'upload.wikimedia.org') or any(host == domain or host.endswith('.' + domain) for domain in ('wikipedia.org', 'wikidata.org'))
 
 async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False):
   ctx=await b.new_context(viewport={'width':w,'height':h}, reduced_motion=reduced_motion, has_touch=has_touch, is_mobile=has_touch and w<=600)
@@ -743,7 +743,7 @@ async def daybuilder_checks(b,base,label,shots):
     ok(label+' db clear '+date,await day.locator('.db-conflict').count()==0)
   # The default departure keeps its sample anchor and now offers the shared editor.
   # Final audit: Return supplies direction; show the sample time in the short title.
-  ok(label+' db flight anchor','Sample ~10:00 AM' in await day.inner_text() and await day.locator('.db-locked').count()==1)
+  ok(label+' db flight anchor','Sample · ~10:00 AM' in await day.inner_text() and await day.locator('.db-locked').count()==1)
   await pg.get_by_test_id('db-day-2026-11-26').click()
   async def ids():
     return await day.locator('[data-db-id]:not(.db-prep)').evaluate_all('es=>es.map(e=>e.dataset.dbId)')

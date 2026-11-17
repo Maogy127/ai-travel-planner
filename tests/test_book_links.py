@@ -17,7 +17,9 @@ async def checks(browser):
             assert not await good.evaluate('e=>e.open')
             await toggle.click()
             await expect(toggle).to_have_attribute('aria-expanded', 'true')
-            await expect(pg.get_by_test_id('local-info')).to_contain_text('Currency: USD')
+            # USD is stated once (copy audit): no separate 'Currency: USD' line.
+            await expect(pg.get_by_test_id('local-info')).to_contain_text('Uses US dollars (USD) · Languages')
+            assert (await pg.get_by_test_id('local-info').inner_text()).count('Uses US dollars') == 1
             await expect(pg.get_by_test_id('affiliate-disclosure')).to_be_visible()
             await expect(pg.get_by_test_id('local-info').locator(':scope > h2, :scope > h3, :scope > h4, summary')).to_have_count(0)
             await expect(toggle).to_have_attribute('aria-controls', 'good-to-know-content')

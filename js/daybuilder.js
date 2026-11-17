@@ -111,16 +111,29 @@ function estimateTravel(a,b,mode='Uber') {
     return {roadKm,minutes,label:(walking?'Walk':mode==='Walk'?'Uber':mode)+' ~'+minutes+' min'};
 }
 // Candidates must fit the outgoing road leg as well as the activity itself.
+// Meals swap for restaurants serving that meal; activities swap for activities.
+const MEAL_WORD=/\b(breakfast|brunch|lunch|dinner|supper)\b/i;
+function mealSlot(item) {
+    const m=String(item?.title||'').match(MEAL_WORD);
+    if(m)return ({brunch:'breakfast',supper:'dinner'})[m[1].toLowerCase()]||m[1].toLowerCase();
+    return item?.kind==='meal'?'any':null;
+}
 function slotCandidates({item,previous,next,catalog,inPlan=[],date,mode='Uber'}) {
-    return catalog.filter(p=>!inPlan.includes(p.id)).map(p=>{
-        const travel=next?estimateTravel(p,next,mode):{minutes:0,label:mode+' ~0 min'};
+    const meal=mealSlot(item),food=p=>Array.isArray(p.meals)&&p.meals.length>0;
+    return catalog.filter(p=>!inPlan.includes(p.id)&&(meal?food(p)&&(meal==='any'||p.meals.includes(meal)):!food(p))).map(p=>{
+        // A following travel row already covers the road leg, so it is not counted twice.
+        // Without coordinates on both ends, keep the plan's existing gap instead of guessing a 30-min ride.
+        const known=next&&[p.lat,p.lng,next.lat,next.lng].every(Number.isFinite);
+        const travel=next&&next.kind!=='travel'&&known?estimateTravel(p,next,mode):{minutes:next&&Number.isFinite(item.end)?Math.max(0,next.start-item.end):0,label:''};
         const slot=(next?.start??item.end)-item.start-travel.minutes;
-        const duration=Number(p.duration)||60;
+        const natural=Number(p.duration)||60;
+        // A meal can be quicker than usual (min 15 min); activities keep their full time.
+        const duration=meal?Math.min(natural,slot):natural;
         const candidate={...p,title:p.name,preferred:item.start,duration,hours:p.parsedHours||p.hours,
             closed:[...(p.closed||[]),...(p.closedDates||[]).map(date=>({date})),...(p.closedDays?.length?[{weekdays:p.closedDays}]:[])]};
         const distance=estimateTravel(previous||item,p);
         return {pick:p,duration,slot,travel,candidate,distance:distance.roadKm??distance.minutes};
-    }).filter(r=>r.duration>0&&r.duration<=r.slot&&!blockedOn(r.candidate,date))
+    }).filter(r=>r.duration>=(meal==='breakfast'?15:meal?30:1)&&r.duration<=r.slot&&!blockedOn(r.candidate,date))
       .sort((a,b)=>a.distance-b.distance||a.pick.name.localeCompare(b.pick.name));
 }
 function leg(from, to, mode = 'Drive') {
@@ -746,13 +759,13 @@ function mount(root, ctx = {}) {
             if(suggesting){const p=choice?.pick;window.goNowAccount.change(id,p?{action:'swap',title:item.title,alternative:{title:p.name,sourceId:p.id,place:p.area||p.name,duration:choice.duration}}:{action:'remove',title:item.title});sheet.close();sheet.remove();return;}
             const before=clone(days), restorePicks=ctx.swapPicks?.(identify(item),choice?.pick);
             days[on]={...current(),chronological:true,items:shown.filter(i=>i.id!==id).map(i=>({...i,preferred:i.start,manualTime:true}))};
-            if(choice){const p=choice.pick;days[on].items.push({id:p.id,sourceId:p.id,custom:true,title:p.name,place:p.area||p.name,lat:p.lat,lng:p.lng,kind:'activity',preferred:item.start,duration:Math.min(choice.duration,choice.slot),manualTime:true,hours:p.hours,closed:choice.candidate.closed});}
+            if(choice){const p=choice.pick;days[on].items.push({id:p.id,sourceId:p.id,custom:true,title:p.name,place:p.area||p.name,lat:p.lat,lng:p.lng,kind:p.meals?.length?'meal':'activity',preferred:item.start,duration:Math.min(choice.duration,choice.slot),manualTime:true,hours:p.hours,closed:choice.candidate.closed});}
             days[on].items.sort((a,b)=>a.preferred-b.preferred);
             sheet.close();sheet.remove();save();render();
             ctx.undo?.('Swapped ·',()=>{Object.keys(days).forEach(k=>delete days[k]);Object.assign(days,before);restorePicks?.();save();render();});
         };
         const results=sheet.querySelector('[data-results]');
-        function filter(){const q=sheet.querySelector('input').value.toLowerCase();const rows=candidates.filter(r=>(r.pick.name+' '+r.pick.category).toLowerCase().includes(q)).slice(0,5);results.innerHTML=rows.map((r,n)=>'<button type="button" data-testid="swap-option" data-choice="'+n+'">'+esc(r.pick.name)+' · '+r.duration+' min · '+esc(r.travel.label)+'</button>').join('')||'<p>No matches</p>';results.querySelectorAll('button').forEach(b=>b.onclick=()=>finish(rows[+b.dataset.choice]));}
+        function filter(){const q=sheet.querySelector('input').value.toLowerCase();const rows=candidates.filter(r=>(r.pick.name+' '+r.pick.category).toLowerCase().includes(q)).slice(0,5);results.innerHTML=rows.map((r,n)=>'<button type="button" data-testid="swap-option" data-choice="'+n+'">'+esc(r.pick.name)+' · '+r.duration+' min'+(r.travel.label?' · '+esc(r.travel.label):'')+'</button>').join('')||'<p>'+(q?'No matches':'Nothing else fits this time')+'</p>';results.querySelectorAll('button').forEach(b=>b.onclick=()=>finish(rows[+b.dataset.choice]));}
         sheet.querySelector('input').oninput=filter;sheet.querySelector('[data-close]').onclick=()=>{sheet.close();sheet.remove();};sheet.querySelector('[data-testid=swap-free]').onclick=()=>finish(null);
         root.appendChild(sheet);filter();sheet.showModal();
     }
@@ -788,7 +801,7 @@ function mount(root, ctx = {}) {
         const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number).some(age => age < r.minAge)) : null;
         const detail = (ctx.detail ? ctx.detail(src, on, i) : '') + (tray ? (i.rules || []).map(r => `<p>${esc(r.text || r)}</p>`).join('') : '');
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
-        const title = i.flight&&!ctx.flightAnswers?.flightsStep?(flightDirection==='arrival'?'Sample lands ~5:30 PM':'Sample departs ~10:00 AM'):(!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
+        const title = i.flight&&!ctx.flightAnswers?.flightsStep?(flightDirection==='arrival'?'Sample · lands ~5:30 PM':'Sample · departs ~10:00 AM'):(!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
         // Arrival/Return supplies direction; retain full wording for assistive technology.
         const cardTitle = flightDirection ? title.replace(/\b(?:lands|departs)\s*/i, '') : title;
         const movable = !i.locked && i.kind !== 'prep' && !print;
@@ -803,7 +816,7 @@ function mount(root, ctx = {}) {
         const menuMoves = (moves + (i.custom && !print ? button('delete', title) : '')).replace(/(<button[^>]*data-db-action="([^"]+)"[^>]*>)([\s\S]*?)(<\/button>)/g,
             (_, start, action, icon, end) => start + icon + '<span>' + menuLabels[action] + '</span>' + end);
         const groupMember=!!(window.goNowAccount?.group&&!window.goNowAccount.owner());
-        const swapAction = !tray && !print && ((!i.locked&&!i.booked)||groupMember) && !['prep','flight','travel'].includes(i.kind) && ctx.swapCatalog ? '<button data-testid="db-swap" data-db-action="swap">Swap</button>' : '';
+        const swapAction = !tray && !print && ((!i.locked&&!i.booked)||groupMember) && !['prep','flight','travel','hotel'].includes(i.kind) && !/^check[ -]?(in|out)\b/i.test(i.title||'') && ctx.swapCatalog ? '<button data-testid="db-swap" data-db-action="swap">Swap</button>' : '';
         const availableActions = actions;
         const memberRemove=i.locked&&groupMember?button('remove',title).replace('</button>','<span>Remove from day</span></button>'):'';
         const menuItems = (swapAction + menuMoves + memberRemove + availableActions.replace('>Add it again', '><span aria-hidden="true">＋</span> Add it again').replace('>Move to another day', '><span aria-hidden="true">↗</span> Move to another day')).replace(/<button /g, '<button role="menuitem" ');

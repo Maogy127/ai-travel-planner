@@ -2,6 +2,7 @@
 (function(){
 'use strict';
 const CONTACT='gonow-preview@users.noreply.github.com', DAY=86400000;
+const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
 const normalize=q=>String(q||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase();
 function slug(q){
  const text=normalize(q).normalize('NFD').replace(/[\u0300-\u036f]/g,''),base=text.replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
@@ -46,7 +47,7 @@ function create(options={}){
  const inflight=new Map();
  function read(key){try{const v=JSON.parse(storage.getItem('gonow:places:'+key));return v&&v.until>now()?v.value:null;}catch(e){return null;}}
  function write(key,value,ttl){try{storage.setItem('gonow:places:'+key,JSON.stringify({value,until:now()+ttl}));}catch(e){}return value;}
- async function json(url,init={}){const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),15000);try{const r=await request(url,{...init,signal:controller.signal});if(!r.ok)throw Error('Unavailable');return await r.json();}finally{clearTimeout(timer);}}
+ async function json(url,init={}){const {timeout=15000,...rest}=init,controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeout);try{const r=await request(url,{...rest,signal:controller.signal});if(!r.ok)throw Error('Unavailable');return await r.json();}finally{clearTimeout(timer);}}
  function cached(key,ttl,fn){const hit=read(key);if(hit)return Promise.resolve(hit);if(inflight.has(key))return inflight.get(key);const p=Promise.resolve().then(fn).then(v=>write(key,v,ttl)).finally(()=>inflight.delete(key));inflight.set(key,p);return p;}
  function geocode(query){return cached('geo:'+normalize(query),180*DAY,()=>{const job=geoTail.then(async()=>{
   // A destination submission, never an autocomplete request. Settle rapid navigation first.
@@ -56,7 +57,8 @@ function create(options={}){
  });geoTail=job.catch(()=>{});return job;});}
  function nearby(center,radius=10000){const key='near:'+center.lat.toFixed(3)+','+center.lng.toFixed(3)+':'+radius;return cached(key,7*DAY,()=>{
   const job=overTail.then(async()=>{const around='(around:'+radius+','+center.lat+','+center.lng+')',query='[out:json][timeout:20];(nwr'+around+'[tourism~"^(attraction|museum|viewpoint|zoo|aquarium|gallery)$"][name];nwr'+around+'[leisure=park][name];nwr'+around+'[natural=beach][name];nwr'+around+'[amenity~"^(restaurant|cafe)$"][name];);out center tags 160;';
-   for(let attempt=0;attempt<2;attempt++){try{return await json('https://overpass-api.de/api/interpreter',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(query)});}catch(e){if(attempt)throw e;await sleep(1500);}}
+   // Public Overpass instances often return 502/504 under load: try the main instance, then one alternate, then fall back.
+   for(let attempt=0;attempt<2;attempt++){try{return await json(OVERPASS[attempt],{timeout:25000,method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(query)});}catch(e){if(attempt)throw e;await sleep(1500);}}
   });overTail=job.catch(()=>{});return job;
  });}
  function catalog(data,center,city){

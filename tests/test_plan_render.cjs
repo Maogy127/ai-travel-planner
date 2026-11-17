@@ -139,8 +139,8 @@ function smoke(label){
  defaultBuilder.selectDay('2026-11-29',false);
  // Final audit: the Return column supplies direction; sample time is explicit.
  const flightMarkup=node('default-regression .db-content').innerHTML;
- assert(flightMarkup.includes('Sample ~10:00 AM'));
- assert(flightMarkup.includes('aria-label="Sample departs ~10:00 AM"'));
+ assert(flightMarkup.includes('Sample · ~10:00 AM'));
+ assert(flightMarkup.includes('aria-label="Sample · departs ~10:00 AM"'));
  assert(flightMarkup.includes('db-flight-card'));
  assert.equal((node('default-regression .db-content').innerHTML.match(/data-testid="edit-flight"/g)||[]).length,1);
  // Final audit: real renderer preserves number/time and accessible direction for

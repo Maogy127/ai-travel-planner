@@ -18,7 +18,7 @@ async def checks(browser):
         # Item I adds config, cloud client and account controls.
         assert len(assets) == 29
         for path in assets:
-            assert path.endswith('?v=originfix-20261116'), path
+            assert path.endswith('?v=anycity-20261116'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()

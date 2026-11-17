@@ -26,8 +26,12 @@ const memory=()=>{const map=new Map();return {getItem:k=>map.get(k)||null,setIte
  assert(S.allows(S.parseHours('24/7'),'2026-11-22',0,1440));assert(!S.allows(S.parseHours('off'),'2026-11-16',600,60));assert(!S.allows(S.parseHours('Tu-Su 10:00-18:00'),'2026-11-16',600,60));
  for(const invalid of ['',null,'sunrise-sunset','Mo 25:00-26:00','Mo 22:00-02:00','PH off'])assert.equal(S.parseHours(invalid),null);
  const split=S.parseHours('Mo 09:00-12:00,14:00-18:00');assert(!S.allows(split,'2026-11-16',690,90));assert(S.allows(null,'2026-11-16',0,1440));
- let failures=0,waits=[];const bad=S.create({storage:memory(),sleep:async ms=>waits.push(ms),fetch:async url=>{failures++;if(url.includes('nominatim'))return {ok:true,json:async()=>fixture('seattle','nominatim')};throw Error('offline');}});
+ let failures=0,waits=[],urls=[];const bad=S.create({storage:memory(),sleep:async ms=>waits.push(ms),fetch:async url=>{failures++;urls.push(url);if(url.includes('nominatim'))return {ok:true,json:async()=>fixture('seattle','nominatim')};throw Error('offline');}});
  assert((await bad.load('Seattle')).fallback);assert.equal(failures,3,'one geocode and two bounded place attempts');assert(waits.includes(1500));
+ assert.deepEqual(urls.filter(u=>u.includes('overpass')),['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'],'second attempt uses the alternate instance');
+ // A 502 from the main instance (seen live in Chromium) recovers through the alternate.
+ const alt=S.create({storage:memory(),sleep:async()=>{},fetch:async url=>url.includes('nominatim')?{ok:true,json:async()=>fixture('seattle','nominatim')}:url.includes('overpass-api.de')?{ok:false,status:502}:{ok:true,json:async()=>fixture('seattle','overpass')}});
+ const recovered=await alt.load('Seattle');assert(!recovered.fallback&&recovered.catalog.activities.length>0);
  assert((await S.create({storage:memory(),sleep:async()=>{},fetch:async()=>{throw Error('offline');}}).load('Tokyo')).fallback);
  // Generic weekly hours survive scheduling and DayBuilder conversion/reflow rules.
  ctx.window.DayBuilder=undefined;ctx.window=ctx;ctx.localStorage=memory();ctx.document={};ctx.Date=Date;

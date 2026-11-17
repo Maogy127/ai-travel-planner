@@ -8,7 +8,7 @@ from test_full import new, answer
 from test_wellness_home import serve_checks
 
 FIXTURES = Path(__file__).parent / 'fixtures'
-HOSTS = ('nominatim.openstreetmap.org', 'overpass-api.de', 'wikipedia.org', 'wikidata.org')
+HOSTS = ('nominatim.openstreetmap.org', 'overpass-api.de', 'overpass.kumi.systems', 'wikipedia.org', 'wikidata.org')
 
 async def routes(pg, city, failure=False):
     requests = []
@@ -97,6 +97,10 @@ async def checks(browser):
         await expect(pg.locator('.pick-chips')).to_have_count(0)
         await expect(pg.get_by_test_id('place-failure')).to_have_text('Couldn’t load places')
         await expect(pg.locator('.pick-chips')).to_have_count(0)
+        # Try again re-runs the lookup (failures are never cached) and fails gracefully again.
+        await expect(pg.get_by_test_id('pick-skip-loading')).to_have_count(0)
+        await pg.get_by_test_id('pick-retry').click()
+        await expect(pg.get_by_test_id('place-failure')).to_have_text('Couldn’t load places', timeout=20000)
         await pg.get_by_test_id('pick-fallback').click()
         await expect(pg.get_by_test_id('confirm-plan')).to_be_visible(timeout=20000)
         assert '-picks-' not in await pg.evaluate('window.__gonow.state.plan.id')
