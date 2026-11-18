@@ -70,7 +70,8 @@ nudge.querySelector('[data-testid=nudge-sign-in]').onclick = () => { viaButton =
 // After signing in, planning continues with the same answers.
 window.addEventListener('gonow:auth', e => {
   // A sign-in long after the prompt (sheet closed, came back later) never starts a trip by surprise.
-  if (!waiting || !e.detail || Date.now() - waiting > 10 * 60 * 1000) { waiting = 0; return; } waiting = 0;
+  if (!waiting || !e.detail) return;
+  if (Date.now() - waiting > 10 * 60 * 1000) { waiting = 0; resume = null; return; } waiting = 0;
   // Wait for the sign-in / sync sheet to finish, then continue from the home form.
   let tries = 0; const timer = setInterval(() => {
     const sheet = document.querySelector('[data-testid=sign-in-sheet]');
