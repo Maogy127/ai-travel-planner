@@ -844,21 +844,24 @@ function mount(root, ctx = {}) {
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
         const placeText = tray ? '' : `${esc(i.place)}${i.estimate ? ' · ' + durationText : ''}`;
         const heading = detail
-            ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}><strong title="${esc(title)}">${esc(cardTitle)}</strong><small>${placeText}</small><span class="db-expand-mark" aria-hidden="true">＋</span></button>`
-            : `<strong id="db-title-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}>${esc(cardTitle)}</strong><small>${placeText}</small>`;
+            ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}><strong title="${esc(title)}">${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}</button>`
+            : `<strong id="db-title-${uid}" title="${esc(title)}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}>${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}`;
+        const compact=(a,b)=>{const [x,xm]=clock(a).split(' '),[y,ym]=clock(b).split(' ');return `<span>${x}<span class="${xm===ym?'db-mer-dup':''}"> ${xm}</span></span><span>–${y} ${ym}</span>`;};
+        const timeEl = tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight||i.flightDirection ? (flightDirection==='arrival'?'Arrival':'Return') : i.textTime ? esc(i.textTime) : compact(i.start,i.end)+(showArrivalEstimate ? '<span> est.</span>' : '')}</${canEditTime ? 'button' : 'div'}>`;
+        const plus = detail && !tray && !print ? `<button type="button" class="db-plus" data-db-action="expand" aria-expanded="${open}" aria-controls="db-detail-${uid}" aria-label="Details for ${esc(title)}">＋</button>` : '';
         const lockedLabel = !fixedBooking(i) ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
-            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight||i.flightDirection ? (flightDirection==='arrival'?'Arrival':'Return') : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
-            ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt="">` : ''}
+            ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt=""${ctx.photoCredit && ctx.photoCredit(src) ? ` title="${esc(ctx.photoCredit(src))}"` : ''}>` : ''}
             <div class="db-activity" data-testid="db-activity">
-                ${heading}${flightEdit?`<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${Number.isFinite(i.preferred)?String(Math.floor(i.preferred/60)).padStart(2,'0')+':'+String(i.preferred%60).padStart(2,'0'):''}"><span data-testid="add-flight-time"><button type="button" data-testid="edit-flight" aria-haspopup="dialog" ${ctx.shared?'disabled':''}>Edit flight</button></span>`:''}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
+                ${heading}${tray ? '' : `<div class="db-meta">${timeEl}${canLock ? (i.locked ? `<span class="db-mini-lock" aria-hidden="true">${icons.lock}</span>` : '') : lockChip}${placeText && !transport ? `<small class="db-place">${placeText}</small>` : ''}</div>`}${flightEdit?`<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${Number.isFinite(i.preferred)?String(Math.floor(i.preferred/60)).padStart(2,'0')+':'+String(i.preferred%60).padStart(2,'0'):''}"><span data-testid="add-flight-time"><button type="button" data-testid="edit-flight" aria-haspopup="dialog" ${ctx.shared?'disabled':''}>Edit flight</button></span>`:''}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
 
                 ${!tray && i.detail ? `<small>${esc(i.detail)}</small>` : ''}
-                ${canLock ? '' : lockChip}
+                ${tray && !canLock ? lockChip : ''}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
-                ${controls}
+                ${tray ? controls : ''}
                 ${i.overlapNote && !(i.notes || []).includes(i.overlapNote) ? `<p class="db-note">${esc(i.overlapNote)}</p>` : ''}${(i.notes || []).map((note, index) => `<p class="db-note ${/conflicts with your flight/.test(note)?'flight-conflict-notice':''}" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>${/conflicts with your flight/.test(note)?'<span class="flight-conflict-text" title="'+esc(note)+'">'+esc(note)+'</span> · <button data-flight-conflict-edit>Edit</button>':'Heads-up: '+esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div>
+            ${tray ? '' : (controls || plus ? `<div class="db-side">${controls}${plus}</div>` : '')}
             ${menu}
             ${editor}
             ${detail ? `<div class="db-detail" id="db-detail-${uid}" data-testid="db-detail" role="region" aria-labelledby="db-title-${uid}"${open ? '' : ' hidden'}>${detail}</div>` : ''}</div>`;
@@ -909,6 +912,56 @@ function mount(root, ctx = {}) {
                 ride.title+=' — route changed; review this transfer';ride.routeReview=true;
             }
         });
+    }
+    // Reorder rules: order wins. After a move, add or remove, the day's unlocked items
+    // run back to back in the new order (previous end + travel), starting from the
+    // day's first unlocked start time. Hand-set times on unlocked items are released
+    // (lock an item to keep its time). Locked and booked items never move. If an
+    // item cannot fit before a locked one, it goes right after it; if it cannot fit
+    // the day at all, it goes to Needs a time. Only then is a conflict shown.
+    const movable = i => i && !i.locked && !i.booked && !i.textTime && i.kind !== 'flight' && i.kind !== 'prep' && !fixedBooking(i);
+    function releaseDay(on, movedId, before) {
+        const d = days[on]; if (!d) return;
+        const prior = dayResult(before || d, on).items;
+        const lead = prior.find(i => movable(i) && i.start != null);
+        d.chronological = false;
+        d.items.forEach(i => {
+            if (!movable(i)) return;
+            i.preferred = null; delete i.manualTime; delete i.hoursOk; delete i.overlapNote; delete i.shifted;
+        });
+        const first = d.items.find(movable);
+        if (first && lead) first.preferred = lead.start;
+        // A reorder never silently drops a stop: if the new order runs it past opening hours,
+        // it stays with a "May be closed" heads-up.
+        keepOpen(on); settleDay(on); keepOpen(on); return overflowDay(on);
+    }
+    function keepOpen(on) { const d = days[on]; for (let n = 0; n < 8; n++) { const h = dayResult(d, on).unscheduled.find(i => /opening hours/i.test(i.blockedReason || '') && d.items.some(x => x.id === i.id)); if (!h) return; d.items.find(x => x.id === h.id).hoursOk = true; } }
+    function settleDay(on) {
+        const d = days[on]; if (!d) return;
+        const misses = r => r.items.filter(i => !i.locked && (i.notes || []).some(t => /you'd miss/.test(t))).length;
+        for (let n = 0; n < 8; n++) {
+            const r = dayResult(d, on), count = misses(r);
+            if (!count) return;
+            const late = r.items.find(i => !i.locked && (i.notes || []).some(t => /you'd miss/.test(t)));
+            const anchor = r.items.slice(r.items.indexOf(late) + 1).find(i => i.locked && !i.textTime);
+            const at = anchor ? d.items.findIndex(i => i.id === anchor.id) : -1;
+            if (at < 0) return;
+            const victimAt = d.items.slice(0, at).map((i, k) => [i, k]).filter(([i]) => movable(i) && i.kind !== 'travel').map(([, k]) => k).pop();
+            if (victimAt === undefined) return;
+            const saved = clone(d.items);
+            const [victim] = d.items.splice(victimAt, 1);
+            d.items.splice(d.items.findIndex(i => i.id === anchor.id) + 1, 0, victim);
+            const next = dayResult(d, on);
+            if (misses(next) >= count || next.unscheduled.filter(i => !/opening hours/i.test(i.blockedReason || '')).length > r.unscheduled.filter(i => !/opening hours/i.test(i.blockedReason || '')).length) { d.items = saved; return; }
+            keepOpen(on);
+        }
+    }
+    // Anything that now runs past midnight goes to Needs a time instead of a fake late slot.
+    function overflowDay(on) {
+        const d = days[on]; if (!d) return [];
+        const late = dayResult(d, on).items.filter(i => movable(i) && i.kind !== 'travel' && i.end != null && i.end > 1440).map(i => i.id);
+        late.forEach(id => { const at = d.items.findIndex(i => i.id === id); if (at < 0) return; const [item] = d.items.splice(at, 1); Object.assign(item, {needsTime: true, preferred: null}); (d.unscheduled ||= []).push(item); });
+        return late;
     }
     function sortDay(on) {
         const d=days[on];
@@ -994,11 +1047,12 @@ function mount(root, ctx = {}) {
             copy.originalTitle ||= copy.title;
             copy.title = cleanTimeTitle(copy.title, item.preferred);
             copy.preferred = start; delete copy.manualTime;
-            const apply = () => {
+            const apply = () => { const before=clone(days[date]||current());
             if(mode !== 'again') list.splice(list.findIndex(i => i.id === id), 1);
             if(mode === 'move-day') {
                 const old=days[date];
                 reviewTransfers(old,item);
+                if(target!==date)releaseDay(date,null,before);
             }
             days[target] ||= buildSuggested(target); days[target].unscheduled ||= [];
             if (start === null) {copy.needsTime=true; days[target].unscheduled.push(copy);}
@@ -1135,10 +1189,11 @@ function mount(root, ctx = {}) {
     function setExpanded(row, force) {
         const toggle = row?.querySelector('[data-db-action=expand]');
         if (!toggle) return false;
+        const toggles = row.querySelectorAll(':scope [data-db-action=expand]');
         const panel = row.querySelector('.db-detail');
         const on = force ?? toggle.getAttribute('aria-expanded') !== 'true';
         const key = date + '|' + row.dataset.dbId;
-        toggle.setAttribute('aria-expanded', String(on));
+        toggles.forEach(t => t.setAttribute('aria-expanded', String(on)));
         panel.hidden = !on;
         row.classList.toggle('is-open', on);
         if (on) session.open.add(key); else session.open.delete(key);
@@ -1189,7 +1244,10 @@ function mount(root, ctx = {}) {
         list.splice(index, 1);
         if (zone === 'tray') { item.preferred = null; delete item.manualTime; delete item.start; delete item.end; }
         if (zone !== 'tray' || !destination.some(existing => existing.id === item.id)) destination.splice(at, 0, item);
-        const unsafe=dayResult(current(),date).unscheduled.find(i=>!dayResult(snapshot,date).unscheduled.some(old=>old.id===i.id));
+        // Reordering inside Needs a time leaves the day's clock alone.
+        const overflowed = zone === 'tray' && destination === list ? [] : releaseDay(date, zone === 'day' ? id : null, snapshot) || [];
+        // Items the reflow moved to Needs a time are expected, not a reason to undo the move.
+        const unsafe=dayResult(current(),date).unscheduled.find(i=>!overflowed.includes(i.id)&&!dayResult(snapshot,date).unscheduled.some(old=>old.id===i.id));
         if(unsafe){days[date]=snapshot;block({...unsafe,preferred:unsafe.start??unsafe.preferred},date,target=>{days[date].items=days[date].items.filter(i=>i.id!==unsafe.id);addToDay(target,{...unsafe,time:clock(unsafe.start??unsafe.preferred??540)});});return;}
         session.open.delete(date + '|' + id);
         save();
