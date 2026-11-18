@@ -77,16 +77,58 @@ function create(options={}){
   const unique=rows.filter(p=>{const n=normalize(p.name);if(seen.has(n))return false;seen.add(n);return true;});
   return {generic:true,city,center,activities:unique.filter(p=>!p.meals),restaurants:unique.filter(p=>p.meals)};
  }
- async function load(city,hotel){const key=googleKey();if(key){try{return {catalog:await google(city,hotel,key),fallback:false,source:'google'};}catch(e){/* Fall through to OpenStreetMap. */}}try{const center=hotel&&Number.isFinite(hotel.lat)&&Number.isFinite(hotel.lng)?hotel:await geocode(city);return {catalog:catalog(await nearby(center),center,city),fallback:false,source:'osm'};}catch(e){return {catalog:null,fallback:true};}}
+ // Speed: Google first (3 s per request); OpenStreetMap starts only if Google fails or is still loading after 1.2 s, hard 4.5 s cap,
+ // so the worst case is about 5.7 s. Results are cached per city for a day, so repeat cities are instant.
+ const GOOGLE_TIMEOUT=3000, OSM_CAP=4500, OSM_HEAD_START=1200;
+ const cap=(p,ms)=>Promise.race([p,new Promise((_,no)=>setTimeout(()=>no(Error('timeout')),ms))]);
+ async function osm(city,hotel){const center=hotel&&Number.isFinite(hotel.lat)&&Number.isFinite(hotel.lng)?hotel:await geocode(city);return catalog(await nearby(center),center,city);}
+ async function load(city,hotel,opts={}){const key=googleKey();
+  // Warm city: the day-old Google catalog answers at once, without waking the OpenStreetMap fallback.
+  const warm=key&&read(googleCacheKey(city,hotel));if(warm)return {catalog:warm,fallback:false,source:'google'};
+  // OpenStreetMap is the last resort: it only starts if Google fails or is still loading after OSM_HEAD_START,
+  // and it has a hard cap, so the worst case stays near 6 s.
+  let osmTask=null;const startOsm=()=>osmTask||(osmTask=cap(osm(city,hotel),OSM_CAP).then(c=>({catalog:c,fallback:false,source:'osm'}),()=>null));
+  if(key){const slow=setTimeout(startOsm,OSM_HEAD_START);try{const catalog=await google(city,hotel,key,opts);clearTimeout(slow);return {catalog,fallback:false,source:'google'};}catch(e){clearTimeout(slow);/* Fall through to OpenStreetMap. */}}
+  return (await startOsm())||{catalog:null,fallback:true};}
  function googleKey(){return String(options.googleKey!==undefined?options.googleKey:(root.GONOW_PLACES_CONFIG&&root.GONOW_PLACES_CONFIG.GOOGLE_PLACES_KEY)||'').trim();}
- // Places API (New) Text Search. Only the fields the cards use: rating and hours put this on the Enterprise SKU, so
- // there are just two searches per city, cached for a day. No reviews, website, phone or price.
- const FIELDS='places.id,places.displayName,places.location,places.primaryType,places.types,places.formattedAddress,places.googleMapsUri,places.photos.name,places.photos.authorAttributions,places.rating,places.userRatingCount,places.regularOpeningHours.periods,places.regularOpeningHours.weekdayDescriptions';
- function search(text,center,key){return json('https://places.googleapis.com/v1/places:searchText',{timeout:8000,method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':FIELDS},body:JSON.stringify({textQuery:text,maxResultCount:20,languageCode:'en',...(center?{locationBias:{circle:{center:{latitude:center.lat,longitude:center.lng},radius:10000}}}:{})})});}
- function google(city,hotel,key){const center=hotel&&Number.isFinite(hotel.lat)&&Number.isFinite(hotel.lng)?{lat:hotel.lat,lng:hotel.lng}:null;
-  return cached('google:'+normalize(city)+':'+(center?center.lat.toFixed(3)+','+center.lng.toFixed(3):''),DAY,async()=>{
-   const [sights,food]=await Promise.all([search('top sights and things to do in '+city,center,key),search('popular restaurants and cafes in '+city,center,key)]);
-   return googleCatalog(sights.places||[],food.places||[],city,center,key);});}
+ // App-side safety cap: at most LIMIT Places API requests per browser per day (Cloud quotas can't be lowered on
+ // the trial account). Past the cap the app quietly uses the cached city, the shared ID list or the fallback.
+ const LIMIT=options.dailyLimit||40, BUDGET='gonow:places-budget';
+ function today(){return new Date(now()).toISOString().slice(0,10);}
+ function budget(){try{const b=JSON.parse(storage.getItem(BUDGET)||'null');return b&&b.day===today()?b:{day:today(),n:0};}catch(e){return {day:today(),n:0};}}
+ function spend(n){const b=budget();if(b.n+n>LIMIT)return false;b.n+=n;try{storage.setItem(BUDGET,JSON.stringify(b));}catch(e){}return true;}
+ // Places API (New). Tight field masks: rating and hours put this on the Enterprise SKU; no reviews, website, phone or price.
+ const PLACE_FIELDS='id,displayName,location,primaryType,types,formattedAddress,googleMapsUri,businessStatus,photos.name,photos.authorAttributions,rating,userRatingCount,regularOpeningHours.periods,regularOpeningHours.weekdayDescriptions';
+ const FIELDS=PLACE_FIELDS.split(',').map(f=>'places.'+f).join(',');
+ // One Text Search per category for more precise results.
+ const CATEGORIES=[['sights','top sights and attractions in '],['restaurants','best restaurants in '],['cafes','best cafes and coffee in '],['outdoors','parks, beaches, hikes and wellness in ']];
+ function search(text,center,key){return json('https://places.googleapis.com/v1/places:searchText',{timeout:GOOGLE_TIMEOUT,method:'POST',headers:{'Content-Type':'application/json','X-Goog-Api-Key':key,'X-Goog-FieldMask':FIELDS},body:JSON.stringify({textQuery:text,maxResultCount:20,languageCode:'en',...(center?{locationBias:{circle:{center:{latitude:center.lat,longitude:center.lng},radius:10000}}}:{})})});}
+ function details(id,key){return json('https://places.googleapis.com/v1/places/'+encodeURIComponent(id),{timeout:GOOGLE_TIMEOUT,headers:{'X-Goog-Api-Key':key,'X-Goog-FieldMask':PLACE_FIELDS}});}
+ // Keep open, well-reviewed places, best first: rating × log(reviews).
+ const MIN_REVIEWS=30;
+ function score(p){const r=+p.rating||0,n=+p.userRatingCount||0;return r*Math.log10(n+1);}
+ function keep(list){return (list||[]).filter(p=>p&&(!p.businessStatus||p.businessStatus==='OPERATIONAL')&&(+p.userRatingCount||0)>=MIN_REVIEWS).sort((a,b)=>score(b)-score(a));}
+ function hotelCenter(hotel){return hotel&&Number.isFinite(hotel.lat)&&Number.isFinite(hotel.lng)?{lat:hotel.lat,lng:hotel.lng}:null;}
+function googleCacheKey(city,hotel){const center=hotelCenter(hotel);return 'google:'+normalize(city)+':'+(center?center.lat.toFixed(3)+','+center.lng.toFixed(3):'');}
+function google(city,hotel,key,opts={}){const center=hotelCenter(hotel);
+  return cached(googleCacheKey(city,hotel),DAY,async()=>{
+   // 1) A shared list of place IDs for this city (IDs are the only Google data stored long-term); details are fetched fresh.
+   let shared=null;if(!center&&options.sharedIds){try{shared=await cap(Promise.resolve(options.sharedIds(slug(city))),800);}catch(e){shared=null;}}
+   if(Array.isArray(shared)&&shared.length>=8){const list=shared.filter(x=>x&&/^[\w-]{10,300}$/.test(x.id)).slice(0,24);
+    if(list.length&&spend(list.length)){const got=await Promise.all(list.map(x=>details(x.id,key).then(p=>({p,cat:x.cat}),()=>null)));const ok=got.filter(Boolean);
+     if(ok.length>=6){const by=c=>keep(ok.filter(x=>x.cat===c).map(x=>x.p));return googleCatalog([...by('sights'),...by('outdoors')],[...by('restaurants'),...by('cafes')],city,center,key);}}}
+   // 2) Category searches in parallel. The first half that lands (sights+outdoors or food) can render while the rest loads.
+   if(!spend(CATEGORIES.length))throw Error('daily cap');
+   const results={};const tasks=CATEGORIES.map(([cat,q])=>search(q+city,center,key).then(r=>{results[cat]=keep(r.places);},()=>{results[cat]=[];}).then(()=>{
+    if(opts.onPartial&&results.sights&&results.outdoors&&!(results.restaurants&&results.cafes)){try{opts.onPartial(Object.assign(googleCatalog([...results.sights,...results.outdoors],[],city,center,key),{partial:true}));}catch(e){}}}));
+   await Promise.all(tasks);
+   const sights=[...results.sights,...results.outdoors],food=[...results.restaurants,...results.cafes];
+   // A thin result (small town, all under 30 reviews) is not cached; the OpenStreetMap fallback gets a turn.
+   if(sights.length+food.length<3)throw Error('too few places');
+   const out=googleCatalog(sights,food,city,center,key);
+   if(!center&&options.saveIds){const ids=[];const add=(list,cat)=>list.slice(0,6).forEach(p=>{if(!ids.some(x=>x.id===p.id))ids.push({id:p.id,cat});});add(results.sights,'sights');add(results.outdoors,'outdoors');add(results.restaurants,'restaurants');add(results.cafes,'cafes');
+    try{Promise.resolve(options.saveIds(slug(city),city,ids)).catch(()=>{});}catch(e){}}
+   return out;});}
  // Google periods -> the same {week:[[start,end],...]} shape parseHours returns (0 = Sunday, minutes from midnight).
  function googleHours(h){const periods=h&&Array.isArray(h.periods)?h.periods:null;if(!periods||!periods.length)return null;const week=[[],[],[],[],[],[],[]];
   for(const p of periods){const o=p&&p.open;if(!o||!Number.isInteger(o.day)||o.day<0||o.day>6)continue;const a=(o.hour||0)*60+(o.minute||0);
@@ -119,6 +161,9 @@ function create(options={}){
  return {load,geocode,nearby,enrich,catalog};
 }
 // Google photos are stored as key-free 'gplace:<photo name>' tokens; the URL (with the key) is built only at render time.
-function photoSrc(v){v=String(v||'');const m=/^gplace:(places\/[\w-]+\/photos\/[\w-]+)$/.exec(v);if(!m)return /^gplace:/.test(v)?'':v;const cfg=root.GONOW_PLACES_CONFIG,key=String(cfg&&cfg.GOOGLE_PLACES_KEY||'').trim();return key?'https://places.googleapis.com/v1/'+m[1]+'/media?maxWidthPx=480&key='+encodeURIComponent(key):'';}
+// Photo loads are billed too: at most PHOTO_LIMIT distinct Google photos per browser per day, then placeholders.
+const PHOTO_LIMIT=150;
+function photoAllowed(name){try{const ls=root.localStorage,day=new Date().toISOString().slice(0,10);let b=JSON.parse(ls.getItem('gonow:places-photos')||'null');if(!b||b.day!==day)b={day,seen:[]};if(b.seen.includes(name))return true;if(b.seen.length>=PHOTO_LIMIT)return false;b.seen.push(name);ls.setItem('gonow:places-photos',JSON.stringify(b));return true;}catch(e){return true;}}
+function photoSrc(v){v=String(v||'');const m=/^gplace:(places\/[\w-]+\/photos\/[\w-]+)$/.exec(v);if(!m)return /^gplace:/.test(v)?'':v;if(!photoAllowed(m[1]))return '';const cfg=root.GONOW_PLACES_CONFIG,key=String(cfg&&cfg.GOOGLE_PLACES_KEY||'').trim();return key?'https://places.googleapis.com/v1/'+m[1]+'/media?maxWidthPx=480&key='+encodeURIComponent(key):'';}
 window.GoNowPlaceSource={photoSrc,create,prune,parseHours,allows,estimates,durationLabel,cardLine,ratingLabel,placeholder,slug,normalize,CONTACT};
 })();

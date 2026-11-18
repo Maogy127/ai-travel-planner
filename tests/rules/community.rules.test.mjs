@@ -18,3 +18,16 @@ test('C5 size caps and field whitelist',async()=>{const db=as('sam');await asser
 test('C6 only the owner can update or delete',async()=>{await assertFails(deleteDoc(doc(as('sam'),'community/t_alex_trip1')));await assertFails(setDoc(doc(as('sam'),'community/t_alex_trip1'),trip('sam')));await assertSucceeds(deleteDoc(doc(as('alex'),'community/t_alex_trip1')));});
 test('R1 reports are create-only and unreadable',async()=>{const db=as('sam');await assertSucceeds(addDoc(collection(db,'reports'),{targetId:'t_alex_trip1',reason:'spam',by:'sam',at:serverTimestamp()}));await assertFails(getDocs(collection(db,'reports')));await assertFails(addDoc(collection(db,'reports'),{targetId:'t',reason:'other',by:'sam',at:serverTimestamp()}));await assertFails(addDoc(collection(db,'reports'),{targetId:'t',reason:'spam',by:'alex',at:serverTimestamp()}));await assertFails(addDoc(collection(anon(),'reports'),{targetId:'t',reason:'spam',by:'x',at:serverTimestamp()}));});
 test('P1 profile doc: owner only',async()=>{await assertSucceeds(setDoc(doc(as('sam'),'users/sam/profile/main'),{homeCity:'New York'}));await assertFails(getDoc(doc(as('alex'),'users/sam/profile/main')));});
+const ids=n=>Array.from({length:n},(_,i)=>({id:'ChIJplace'+i+'xxxx',cat:i%2?'sights':'restaurants'}));
+const list=(uid,extra={})=>({city:'Seattle',ids:ids(10),by:uid,updatedAt:serverTimestamp(),...extra});
+test('L1 place-ID lists: anyone reads; signed-in users write IDs only',async()=>{
+ await assertSucceeds(setDoc(doc(as('sam'),'placeLists/seattle'),list('sam')));
+ await assertSucceeds(getDoc(doc(anon(),'placeLists/seattle')));
+ await assertFails(setDoc(doc(anon(),'placeLists/tokyo'),list('sam')));
+ await assertFails(setDoc(doc(as('sam','anonymous'),'placeLists/tokyo'),list('sam')));
+ await assertFails(setDoc(doc(as('sam'),'placeLists/tokyo'),list('alex')),'by must be the writer');
+ await assertFails(setDoc(doc(as('sam'),'placeLists/tokyo'),list('sam',{photos:['x']})),'no other Google fields');
+ await assertFails(setDoc(doc(as('sam'),'placeLists/tokyo'),list('sam',{ids:ids(41)})));
+ await assertFails(setDoc(doc(as('sam'),'placeLists/Bad City'),list('sam')));
+ await assertFails(deleteDoc(doc(as('sam'),'placeLists/seattle')));
+});
