@@ -120,6 +120,9 @@ async def questions(browser, width, mode, personal=False):
         else:
             await pg.get_by_test_id('home-destination').fill('Oahu')
             await pg.get_by_test_id('start-new-trip').click()
+            # Guests see the once-per-session sign-in nudge first; "Not now" continues with the answers kept.
+            await pg.wait_for_timeout(150)
+            if await pg.get_by_test_id('signin-nudge').is_visible(): await pg.get_by_test_id('nudge-not-now').click()
             await topic_capture('origin-start')
             await pg.get_by_test_id('start-from').fill('Los Angeles')
             await pg.get_by_test_id('start-next').click()

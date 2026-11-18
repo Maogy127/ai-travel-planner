@@ -139,8 +139,10 @@ def is_place_url(url):
   host = urlparse(str(url)).hostname or ''
   return host in ('places.googleapis.com', 'nominatim.openstreetmap.org', 'overpass-api.de', 'overpass.kumi.systems', 'upload.wikimedia.org') or any(host == domain or host.endswith('.' + domain) for domain in ('wikipedia.org', 'wikidata.org'))
 
-async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False):
+async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False, nudge=False):
   ctx=await b.new_context(viewport={'width':w,'height':h}, reduced_motion=reduced_motion, has_touch=has_touch, is_mobile=has_touch and w<=600)
+  # The once-per-session guest sign-in nudge is covered by test_shell_nav (nudge=True); other suites start past it.
+  if not nudge: await ctx.add_init_script("try{sessionStorage.setItem('gonow:signin-nudge','1')}catch(e){}")
   await ctx.route("https://tile.openstreetmap.org/**", lambda route: route.fulfill(content_type="image/png", body=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGN4eXvnfwAIqwN9YzQAMgAAAABJRU5ErkJggg==")))
   # Offline by default; fixture suites override these with later page routes.
   await ctx.route(is_place_url, lambda route: route.abort())
@@ -201,6 +203,14 @@ async def choose_flight_time(pg, value):
 async def reopen(pg):
   # A reload lands on the dashboard when trips exist.
   await reopen_dashboard(pg)
+async def start_over(pg):
+  # In-page "Start over" exists only mid-flow (with a confirm); elsewhere ☰ → Home returns to the start.
+  so=pg.get_by_test_id('start-over')
+  if await so.count() and await so.is_visible():
+    await so.click(); await pg.get_by_test_id('start-over-yes').click()
+  else:
+    await pg.get_by_test_id('nav-toggle').click(); await pg.get_by_test_id('nav-home').click()
+  await pg.wait_for_timeout(200)
 async def open_form(pg):
   if await pg.get_by_test_id('start-from').count()==0:
     # Direct legacy route preserves destination validation fixtures. Home is covered by test_question_flow.
@@ -349,7 +359,7 @@ async def motion_checks(b,base,label):
   ok(f'{label} reduced flip disabled', await pg.locator('.question').evaluate("e=>getComputedStyle(e).animationName")=='none')
   ok(f'{label} reduced motion class', await pg.locator('html').evaluate("e=>e.classList.contains('reduce-motion')"))
   ok(f'{label} fonts', 'Fraunces Variable' in await pg.locator('h1').evaluate('e=>getComputedStyle(e).fontFamily') and 'Inter Variable' in await pg.locator('body').evaluate('e=>getComputedStyle(e).fontFamily'))
-  await pg.get_by_test_id('start-over').click(); await pg.get_by_test_id('demo-oahu').click(); await continue_prep(pg)
+  await start_over(pg); await pg.get_by_test_id('demo-oahu').click(); await continue_prep(pg)
   ok(f'{label} reduced plan flow and tile animation disabled', await pg.locator('.db-daycard').first.evaluate('e=>getComputedStyle(e).animationName')=='none')
   await ctx.close()
 async def run(base, label, shots):
@@ -552,7 +562,7 @@ async def batch_a_checks(b,base,label):
   await pg.get_by_test_id('modal-0').click()
   await pg.reload(); await reopen(pg); await continue_prep(pg)
   ok(f'{label} progress badge absent after reload', await pg.get_by_test_id('rank-badge').count()==0)
-  await pg.get_by_test_id('start-over').click()
+  await start_over(pg)
   ok(f'{label} progress badge absent after Start over', await pg.get_by_test_id('rank-badge').count()==0)
   await ctx.close()
   # Fresh recipient: no saved trip should be written before adoption.

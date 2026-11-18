@@ -18,9 +18,10 @@ async def checks(browser):
         # Any-city place source adds one versioned script.
         # Item I adds config, cloud client and account controls.
         # Nov 17 batch adds the Places config and the Community/Profile pages.
-        assert len(assets) == 31, len(assets)
+        # Compact-cards batch adds the app shell (☰ menu, Start over, sign-in nudge).
+        assert len(assets) == 32, len(assets)
         for path in assets:
-            assert path.endswith('?v=fixes-20261117'), path
+            assert path.endswith('?v=cards-20261117'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()

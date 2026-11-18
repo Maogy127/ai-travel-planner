@@ -30,32 +30,59 @@ function checkinPost(place,city,note){return {kind:'checkin',title:cut(place,80)
 const safeId=s=>String(s).replace(/[^A-Za-z0-9_-]/g,'-').slice(0,120);
 
 function create(app){
- let posts=null,loading=null,examples=null,tab='trip',status='';
+ let posts=null,loading=null,examples=null,tab='all',status='';
  const cloud=()=>root.goNowAccount,user=()=>cloud()&&cloud().user;
  function loadExamples(){if(examples)return Promise.resolve(examples);if(root.GONOW_COMMUNITY_EXAMPLES){examples=root.GONOW_COMMUNITY_EXAMPLES;return Promise.resolve(examples);}return new Promise(resolve=>{const s=document.createElement('script');s.src='js/community-examples.js?v='+(root.GONOW_CACHE_TAG||'1');s.onload=()=>{examples=root.GONOW_COMMUNITY_EXAMPLES||[];resolve(examples);};s.onerror=()=>{examples=[];resolve(examples);};document.head.append(s);});}
  function refresh(){if(loading)return loading;loading=Promise.all([loadExamples(),cloud()&&cloud().communityList?cloud().communityList().catch(()=>null):Promise.resolve(null)]).then(([ex,live])=>{posts=(live||[]).filter(p=>p&&(p.kind==='trip'||p.kind==='checkin')&&p.title);status=live?'':'offline';return posts;}).finally(()=>{loading=null;});return loading;}
  const all=()=>[...(posts||[]),...(examples||[]).map(p=>Object.assign({example:true},p))];
  function media(p){return p.photo&&/^images\/[a-z-]+\.jpg$/.test(p.photo)?'<img loading="lazy" src="'+esc(p.photo)+'" alt="">':'<span class="community-placeholder" aria-hidden="true">'+esc((p.destination||p.title||'?').trim()[0]||'?')+'</span>';}
- function card(p){return '<button class="community-card" data-testid="community-card" data-post="'+esc(p.id)+'"><span class="community-media">'+media(p)+(p.example?'<span class="example-tag" data-testid="example-tag">Example</span>':'')+'</span><strong>'+esc(p.title)+'</strong><small>'+esc(p.kind==='checkin'?(p.destination+(p.note?' · '+p.note:'')):p.line||p.destination)+'</small></button>';}
+ // Design preview (Xiaohongshu-style feed). Extra photos, likes and the extra cards below are example data only.
+ const EXTRA={'ex-oahu':['images/activity-diamond-head.jpg','images/activity-kualoa.jpg','images/activity-lanikai.jpg','images/food-giovannis.jpg'],'ex-lisbon':[],'ex-kyoto':[],'ex-c-giovannis':['images/activity-sharks-cove.jpg'],'ex-c-leonards':['images/activity-waikiki-sunset.jpg']};
+ const MOCK=[['ex-m-bali','Slow week in Bali','Rice terraces, yoga, sunsets','Bali','images/bali.jpg'],['ex-m-reykjavik','Reykjavik, lights & lagoons','Hot springs and the Golden Circle','Reykjavik','images/reykjavik.jpg'],['ex-m-barcelona','Barcelona long weekend','Tapas, Gaudí and the beach','Barcelona','images/barcelona.jpg'],['ex-m-banff','Banff lakes road trip','Moraine, Louise and easy hikes','Banff','images/banff.jpg'],['ex-m-capetown','Cape Town in 6 days','Table Mountain and the Cape','Cape Town','images/capetown.jpg']].map(([id,title,line,destination,photo])=>({id,kind:'trip',title,line,destination,photo,mock:true}));
+ const hash=s=>{let h=7;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return h;};
+ const likes=p=>p.example?18+hash(p.id)%420:null;
+ const photos=p=>[p.photo,...(EXTRA[p.id]||[])].filter(x=>x&&/^images\/[a-z-]+\.jpg$/.test(x));
+ const byline=p=>p.example?'Example':(p.ownerName||'Traveler');
+ const avatar=p=>'<span class="cx-avatar" aria-hidden="true">'+esc(byline(p).trim()[0]||'T')+'</span>';
+ function card(p){const tall=hash(p.id)%3;return '<button class="community-card cx-card cx-h'+tall+'" data-testid="community-card" data-post="'+esc(p.id)+'"><span class="community-media">'+media(p)+(p.example?'<span class="example-tag" data-testid="example-tag">Example</span>':'')+'</span><strong>'+esc(p.title)+'</strong><small class="cx-line">'+esc(p.kind==='checkin'?(p.destination+(p.note?' · '+p.note:'')):p.line||p.destination)+'</small><span class="cx-meta">'+avatar(p)+'<span class="cx-name">'+esc(byline(p))+'</span>'+(likes(p)!==null?'<span class="cx-likes" aria-label="'+likes(p)+' likes">♡ '+likes(p)+'</span>':'')+'</span></button>';}
  function mine(p){const u=user();return !!(u&&!p.example&&p.ownerId===u.uid);}
+ let query='';
+ const TABS=[['all','For you'],['trip','Nearby trips'],['checkin','Food']];
  function community(view){
-  const list=all().filter(p=>p.kind===tab);
-  view.innerHTML='<section class="shell community-page" data-testid="community-page"><h1 tabindex="-1" id="step-title">Community</h1><p class="muted">Trips and food stops travelers chose to share.</p>'+
-   '<div class="community-tabs" role="tablist">'+[['trip','Trips'],['checkin','Check-ins']].map(([k,l])=>'<button role="tab" data-testid="community-tab-'+k+'" aria-selected="'+(tab===k)+'" data-tab="'+k+'">'+l+'</button>').join('')+'</div>'+
+  if(!TABS.some(([k])=>k===tab))tab='all';
+  const q=query.trim().toLowerCase();
+  const list=all().concat(examples?MOCK.map(p=>Object.assign({example:true},p)):[]).filter(p=>tab==='all'||p.kind===tab).filter(p=>!q||[p.title,p.destination,p.line,p.note].join(' ').toLowerCase().includes(q));
+  view.innerHTML='<section class="shell community-page cx-page" data-testid="community-page"><h1 tabindex="-1" id="step-title">Community</h1><p class="muted cx-note">Design preview · cards marked Example use sample data.</p>'+
+   '<label class="cx-search"><span class="sr-only">Search community</span><input type="search" data-testid="community-search" placeholder="Search trips, cities, food" value="'+esc(query)+'"></label>'+
+   '<div class="community-tabs cx-tabs" role="tablist">'+TABS.map(([k,l])=>'<button role="tab" data-testid="community-tab-'+(k==='all'?'foryou':k)+'" aria-selected="'+(tab===k)+'" data-tab="'+k+'">'+l+'</button>').join('')+'</div>'+
    (tab==='checkin'?'<button class="outline" data-testid="checkin-start">Check in at a restaurant</button>':'')+
    (posts===null?'<p class="muted" data-testid="community-loading">Loading…</p>':'')+(status==='offline'&&posts!==null?'<p class="muted" data-testid="community-offline">Showing examples. Couldn’t reach the community right now.</p>':'')+
-   '<div class="community-grid" data-testid="community-grid">'+list.map(card).join('')+'</div>'+(posts!==null&&!list.length?'<p class="muted">Nothing shared yet.</p>':'')+'</section>';
+   '<div class="community-grid cx-feed" data-testid="community-grid">'+list.map(card).join('')+'</div>'+(posts!==null&&!list.length?'<p class="muted">Nothing shared yet.</p>':'')+
+   '<button class="cx-fab" data-testid="community-fab" aria-label="Share a trip">＋ Share</button></section>';
   view.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;community(view);});
-  view.querySelectorAll('[data-post]').forEach(b=>b.onclick=()=>details(all().find(p=>String(p.id)===b.dataset.post),view));
+  const search=view.querySelector('[data-testid=community-search]');search.oninput=()=>{query=search.value;const at=search.selectionStart;community(view);const again=view.querySelector('[data-testid=community-search]');again.focus();try{again.setSelectionRange(at,at);}catch(e){}};
+  const pool=()=>all().concat(MOCK.map(p=>Object.assign({example:true},p)));
+  view.querySelectorAll('[data-post]').forEach(b=>b.onclick=()=>details(pool().find(p=>String(p.id)===b.dataset.post),view));
   const start=view.querySelector('[data-testid=checkin-start]');if(start)start.onclick=()=>checkinForm(view);
+  view.querySelector('[data-testid=community-fab]').onclick=()=>shareSheet();
   if(posts===null)refresh().then(()=>{if(app.state.screen==='community')community(view);});
  }
+ function shareSheet(){if(!user()){root.GoNowAccounts&&root.GoNowAccounts.signin();return;}const trips=app.readTrips().filter(t=>t&&t.plan);
+  const s=sheet('<h2>Share a trip</h2>'+(trips.length?'<p class="muted">Only places and days are shared. Your hotel, notes, flights and bookings stay private.</p><div class="cx-share-list">'+trips.slice(0,12).map(t=>'<button class="outline" data-share-trip="'+esc(t.id)+'">'+esc(t.destination||t.title||'Trip')+'<small>'+esc(app.dateRange(t))+'</small></button>').join('')+'</div>':'<p class="muted">Plan a trip first, then share it here.</p>'),'community-share-sheet');
+  s.querySelectorAll('[data-share-trip]').forEach(b=>b.onclick=()=>{const want=b.dataset.shareTrip;s.close();app.openSaved(want,'plan');
+   // Share only once the chosen trip is the open one, never whichever trip was open before.
+   let n=0;const wait=setInterval(()=>{const t=app.currentTrip&&app.currentTrip();if(t&&t.id===want){clearInterval(wait);shareCurrent();}else if(++n>30){clearInterval(wait);app.toast('Couldn’t open that trip. Try again.');}},100);});}
  function sheet(html,testid){const s=document.getElementById('sheet');s.dataset.testid=testid;s.className='community-sheet';s.innerHTML='<button class="account-close" data-close aria-label="Close">×</button>'+html;s.querySelector('[data-close]').onclick=()=>s.close();if(!s.open)s.showModal();return s;}
- function details(p,view){if(!p)return;const days=p.kind==='trip'?(p.days||[]):[];
-  const s=sheet('<div class="community-detail-media">'+media(p)+'</div>'+(p.example?'<span class="example-tag">Example</span>':'')+'<h2>'+esc(p.title)+'</h2><p class="muted">'+esc(p.kind==='checkin'?p.destination:(p.destination+(p.ownerName&&!p.example&&p.ownerName!=='Traveler'?' · shared by '+p.ownerName:'')))+'</p>'+
-   (p.kind==='checkin'&&p.note?'<p>'+esc(p.note)+'</p>':'')+
-   (days.length?'<ol class="community-days" data-testid="community-days">'+days.map((d,i)=>'<li><details><summary>Day '+(i+1)+(d.theme?' · '+esc(d.theme):'')+'</summary><p>'+esc((d.stops||[]).join(' · ')||'Free time')+'</p></details></li>').join('')+'</ol>':'')+
-   '<div class="row community-actions">'+(p.kind==='trip'&&p.trip?'<button class="primary" data-testid="community-copy">Copy to my trips</button>':'')+(mine(p)?'<button class="outline" data-testid="community-remove">Remove from community</button>':'')+(!p.example&&!mine(p)?'<button class="link" data-testid="community-report">Report</button>':'')+'</div>','community-details');
+ function details(p,view){if(!p)return;const days=p.kind==='trip'?(p.days||[]):[];const pics=photos(p);
+  const carousel=pics.length?'<div class="cx-carousel" data-testid="community-photos" tabindex="0" aria-label="Photos, swipe for more">'+pics.map((src,i)=>'<img src="'+esc(src)+'" alt="Photo '+(i+1)+' of '+pics.length+'" loading="lazy">').join('')+'</div>'+(pics.length>1?'<p class="cx-dots" aria-hidden="true">'+pics.map((_,i)=>'<span'+(i?'':' class="on"')+'></span>').join('')+'</p>':''):'<div class="community-detail-media">'+media(p)+'</div>';
+  const s=sheet(carousel+(p.example?'<span class="example-tag">Example</span>':'')+'<h2>'+esc(p.title)+'</h2><p class="cx-meta cx-detail-by">'+avatar(p)+'<span>'+esc(byline(p))+'</span><span class="muted">· '+esc(p.destination||'')+'</span></p>'+
+   (p.line&&p.kind==='trip'?'<p>'+esc(p.line)+'</p>':'')+(p.kind==='checkin'&&p.note?'<p>'+esc(p.note)+'</p>':'')+
+   (days.length?'<h3 class="cx-sub">Trip days</h3><ol class="community-days" data-testid="community-days">'+days.map((d,i)=>'<li><details><summary>Day '+(i+1)+(d.theme?' · '+esc(d.theme):'')+'</summary><p>'+esc((d.stops||[]).join(' · ')||'Free time')+'</p></details></li>').join('')+'</ol>':'')+
+   '<div class="cx-actions" data-testid="community-social"><button type="button" class="cx-act" data-act="like" aria-pressed="false">♡ <span>'+(likes(p)??'Like')+'</span></button><button type="button" class="cx-act" data-act="save" aria-pressed="false">☆ Save</button><button type="button" class="cx-act" data-act="comment">💬 Comments</button></div><p class="muted cx-soon" hidden data-testid="community-soon">Likes, saves and comments are a design preview and aren’t saved yet.</p>'+
+   '<div class="row community-actions">'+(p.kind==='trip'&&p.trip?'<button class="primary" data-testid="community-copy">Copy this trip</button>':'')+(mine(p)?'<button class="outline" data-testid="community-remove">Remove from community</button>':'')+(!p.example&&!mine(p)?'<button class="link" data-testid="community-report">Report</button>':'')+'</div>','community-details');
+  s.classList.add('cx-detail');
+  const car=s.querySelector('.cx-carousel');if(car)car.onscroll=()=>{const i=Math.round(car.scrollLeft/Math.max(1,car.clientWidth));s.querySelectorAll('.cx-dots span').forEach((d,k)=>d.classList.toggle('on',k===i));};
+  s.querySelectorAll('.cx-act').forEach(b=>b.onclick=()=>{s.querySelector('[data-testid=community-soon]').hidden=false;if(b.dataset.act!=='comment')b.setAttribute('aria-pressed',String(b.getAttribute('aria-pressed')!=='true'));});
   const copy=s.querySelector('[data-testid=community-copy]');if(copy)copy.onclick=()=>{s.close();app.copyTrip(p);};
   const rm=s.querySelector('[data-testid=community-remove]');if(rm)rm.onclick=async()=>{try{await cloud().communityRemove(p.id);posts=(posts||[]).filter(x=>x.id!==p.id);forget(p.id);s.close();app.toast('Removed from community');community(view);}catch(e){app.toast('Couldn’t remove it. Try again.');}};
   const rep=s.querySelector('[data-testid=community-report]');if(rep)rep.onclick=()=>report(p);}
@@ -102,7 +129,7 @@ function create(app){
   view.querySelectorAll('[data-open]').forEach(b=>b.onclick=()=>app.openSaved(b.dataset.open,b.dataset.mode));
   view.querySelector('[data-signout]').onclick=()=>cloud().signOut().then(()=>app.go('home'));}
  function render(screen,view){if(screen==='profile')profile(view);else community(view);}
- document.addEventListener('click',e=>{if(e.target.closest('[data-testid=community-share]'))shareCurrent();if(e.target.closest('[data-testid=community-link]'))app.go('community');});
+ document.addEventListener('click',e=>{if(e.target.closest('[data-testid=community-share]'))shareCurrent();});
  const target=document.getElementById('view');if(target)new MutationObserver(shareItem).observe(target,{childList:true,subtree:true});
  return {render,refresh,tripPost,homeCity,_posts:()=>posts};
 }
