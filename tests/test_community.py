@@ -76,7 +76,7 @@ async def guest(b, w):
 async def signed_in(b, w):
     ctx, pg = await new(b, BASE, w); errs = []; pg.on('pageerror', lambda e: errs.append(str(e))); await mock_sdk(ctx)
     # Community writes are behind a launch switch (the published rules keep them closed); this suite tests the draft.
-    await ctx.add_init_script('window.GONOW_COMMUNITY_LIVE=true')
+    await ctx.add_init_script('window.GONOW_COMMUNITY_LIVE=true'); await pg.evaluate('window.GONOW_COMMUNITY_LIVE=true')
     await open_picks(pg); await pg.get_by_test_id('pick-next').click(); await pg.get_by_test_id('pick-next').click(); await continue_prep(pg)
     await sign_in(pg)
     # Share to community (opt-in), visible publicly, owner can remove.
