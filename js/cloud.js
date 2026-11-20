@@ -4,7 +4,10 @@ const SDK_BASE='https://www.gstatic.com/firebasejs/10.12.2/';
 const stamp=v=>v&&typeof v.toMillis==='function'?v.toMillis():v&&typeof v.seconds==='number'?v.seconds*1000+(v.nanoseconds||0)/1e6:typeof v==='number'?v:Date.parse(v)||0;
 // Newest copy of each trip wins. Tombstones (a deleted trip, locally or in the account) are final: an older copy,
 // another device or a late upload can never bring the trip back.
-function merge(local,remote,tombs={}){const rows=new Map(local.filter(t=>!tombs[t.id]).map(t=>[t.id,t]));remote.forEach(t=>{if(t.deleted){rows.delete(t.id);return;}if(tombs[t.id])return;if(!rows.has(t.id)||stamp(t.updatedAt)>stamp(rows.get(t.id).updatedAt))rows.set(t.id,t);});return [...rows.values()];}
+// A trip edited here and not yet confirmed by the account (dirty) keeps this device's copy.
+function merge(local,remote,tombs={},dirty={}){const rows=new Map(local.filter(t=>!tombs[t.id]).map(t=>[t.id,t]));remote.forEach(t=>{if(t.deleted){rows.delete(t.id);return;}if(tombs[t.id])return;if(rows.has(t.id)&&dirty[t.id])return;if(!rows.has(t.id)||stamp(t.updatedAt)>stamp(rows.get(t.id).updatedAt))rows.set(t.id,t);});return [...rows.values()];}
+// Firestore does not keep map key order: compare content, not key order.
+function stable(v){if(Array.isArray(v))return '['+v.map(stable).join(',')+']';if(v&&typeof v==='object'){if(typeof v.toMillis==='function')return String(v.toMillis());return '{'+Object.keys(v).filter(k=>v[k]!==undefined).sort().map(k=>JSON.stringify(k)+':'+stable(v[k])).join(',')+'}';}return JSON.stringify(v===undefined?null:v);}
 // What a group sees: the trip itself (places, days, times, order, locks via the day plan), never anyone's personal
 // answers (pace, diet, fitness, origin, budget, ages), feel check-ins, private notes, flights or confirmation snapshot.
 const SHARED_KEYS=['id','planId','title','destination','start','end','timeZone','plan','builder','tombstones','appliedChanges'];
@@ -33,19 +36,19 @@ function create(options={}){
  async function load(){if(sdk)return sdk;if(pending)return pending;pending=(async()=>{let timeout;try{const importer=options.importer||(url=>import(url));const base=root.GONOW_FIREBASE_SDK_BASE||SDK_BASE;const modules=await Promise.race([options.sdk?Promise.resolve([options.sdk]):Promise.all(['app','auth','firestore'].map(n=>importer(base+'firebase-'+n+'.js'))),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),options.timeout||8000);})]);sdk=Object.assign({},...modules);const app=sdk.initializeApp(root.GONOW_FIREBASE_CONFIG);auth=sdk.getAuth(app);db=sdk.getFirestore(app);sdk.onAuthStateChanged(auth,changed);return sdk;}catch(e){sdk=null;emit('unavailable');return null;}finally{clearTimeout(timeout);if(!sdk)pending=null;}})();return pending;}
  function groupIds(){if(!user)return [];const list=json('gonow:groups:'+user.uid,[]);const legacy=read('gonow:group:'+user.uid);if(legacy&&!list.includes(legacy))list.push(legacy);const left=json('gonow:left:'+user.uid,[]);return list.filter(id=>typeof id==='string'&&!left.includes(id));}
  function unwatchAll(){stops.forEach(stop=>{try{stop();}catch(e){}});stops.clear();groups.clear();}
- async function changed(next){if(disposed)return;user=next;saved=false;lastRemote=null;unwatchAll();if(stopTrips)stopTrips();baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));remember('gonow:account-session',user?'yes':'');emit('auth',user);if(!user){setStatus('idle');return;}restoreProfile();
+ async function changed(next){if(disposed)return;user=next;saved=false;lastRemote=null;unwatchAll();if(stopTrips)stopTrips();baseline=new Map(local().map(t=>[t.id,stable(t)]));remember('gonow:account-session',user?'yes':'');emit('auth',user);if(!user){setStatus('idle');return;}restoreProfile();
   const key='gonow:sync:'+user.uid;if(!['yes','no'].includes(read(key))&&local().length)emit('sync');
   groupIds().forEach(id=>watch(id));
   let first=true;stopTrips=sdk.onSnapshot(sdk.collection(db,'users',user.uid,'trips'),snap=>{const remote=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id}));lastRemote=remote;const t=tombs();let grew=false;remote.forEach(r=>{if(r.deleted&&!t[r.id]){t[r.id]=stamp(r.deletedAt)||Date.now();grew=true;}});if(grew)keep(TOMBS,t);const stale=remote.filter(r=>!r.deleted&&t[r.id]);
    // First snapshot after sign-in: local trips missing from (or newer than) the account copy are queued for upload.
    const ahead=first?local().filter(l=>!t[l.id]&&!remote.some(r=>r.id===l.id&&(r.deleted||stamp(r.updatedAt)>=stamp(l.updatedAt)))):[];first=false;
-   if((stale.length||ahead.length)&&read('gonow:sync:'+user.uid)==='yes'){const dirty=json(dirtyKey(),{});ahead.forEach(l=>{dirty[l.id]=dirty[l.id]||1;});stale.forEach(r=>{dirty[r.id]='deleted';});keep(dirtyKey(),dirty);clearTimeout(timer);timer=setTimeout(flush,350);}emit('trips',merge(local(),remote,t));},()=>{});
+   if((stale.length||ahead.length)&&read('gonow:sync:'+user.uid)==='yes'){const dirty=json(dirtyKey(),{});ahead.forEach(l=>{dirty[l.id]=dirty[l.id]||Date.now();});stale.forEach(r=>{dirty[r.id]='deleted';});keep(dirtyKey(),dirty);clearTimeout(timer);timer=setTimeout(flush,350);}emit('trips',merge(local(),remote,t,read('gonow:sync:'+user.uid)==='yes'?json(dirtyKey(),{}):{}));},()=>{});
   // Anything that failed to upload last time (offline, closed tab) is retried now.
   flush();
  }
  async function sync(yes){if(!user)return;saved=false;setStatus('saving');remember('gonow:sync:'+user.uid,yes?'yes':'no');if(yes){const dirty=json(dirtyKey(),{});
   // Only trips the account doesn't have, or has an older copy of: turning sync on never pushes a stale device copy.
-  local().filter(l=>!lastRemote||!lastRemote.some(r=>r.id===l.id&&(r.deleted||stamp(r.updatedAt)>=stamp(l.updatedAt)))).forEach(t=>{dirty[t.id]=1;});keep(dirtyKey(),dirty);await flush();}baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));saved=!!yes&&status==='saved';if(!yes)setStatus(groups.size?'saved':'idle');emit('synced');}
+  local().filter(l=>!lastRemote||!lastRemote.some(r=>r.id===l.id&&(r.deleted||stamp(r.updatedAt)>=stamp(l.updatedAt)))).forEach(t=>{dirty[t.id]=Date.now();});keep(dirtyKey(),dirty);await flush();}baseline=new Map(local().map(t=>[t.id,stable(t)]));saved=!!yes&&status==='saved';if(!yes)setStatus(groups.size?'saved':'idle');emit('synced');}
  function clean(trip){return JSON.parse(JSON.stringify(trip,(k,v)=>k==='group'?undefined:v));}
  // Firestore keeps offline writes pending instead of failing; past this the status says "Offline, will sync".
  const WRITE_WAIT=10000;
@@ -57,7 +60,7 @@ function create(options={}){
  async function bury(id){if(!user||!sdk)return;await timed(sdk.setDoc(sdk.doc(db,'users',user.uid,'trips',id),{id,deleted:true,deletedAt:sdk.serverTimestamp(),updatedAt:sdk.serverTimestamp()}));}
  // Local changes are marked dirty and kept until the account copy confirms them; failures retry with backoff.
  function write(trips){clearTimeout(timer);saved=false;if(!user)return;const uid=user.uid;const syncing=read('gonow:sync:'+uid)==='yes';const owning=[...groups.values()].some(g=>g.ownerId===uid);if(!syncing&&!owning)return;
-  if(syncing){const dirty=json(dirtyKey(),{});trips.filter(t=>baseline.get(t.id)!==JSON.stringify(t)).forEach(t=>{dirty[t.id]=1;});[...baseline.keys()].filter(id=>!trips.some(t=>t.id===id)).forEach(id=>{const t=tombs();if(!t[id]){t[id]=Date.now();keep(TOMBS,t);}dirty[id]='deleted';});keep(dirtyKey(),dirty);baseline=new Map(trips.map(t=>[t.id,JSON.stringify(t)]));}
+  if(syncing){const dirty=json(dirtyKey(),{});trips.filter(t=>baseline.get(t.id)!==stable(t)).forEach(t=>{dirty[t.id]=Date.now();});[...baseline.keys()].filter(id=>!trips.some(t=>t.id===id)).forEach(id=>{const t=tombs();if(!t[id]){t[id]=Date.now();keep(TOMBS,t);}dirty[id]='deleted';});keep(dirtyKey(),dirty);baseline=new Map(trips.map(t=>[t.id,stable(t)]));}
   setStatus('saving');timer=setTimeout(()=>{if(user&&user.uid===uid)flush();},350);}
  // Deleting a trip: a tombstone everywhere (local + account), and members simply leave the group copy.
  function remove(tripId){const t=tombs();t[tripId]=Date.now();keep(TOMBS,t);if(!user)return;const g=[...groups.values()].find(g=>g.trip&&g.trip.id===tripId);if(g&&g.ownerId!==user.uid)leave(g.id);if(read('gonow:sync:'+user.uid)==='yes'){const dirty=json(dirtyKey(),{});dirty[tripId]='deleted';keep(dirtyKey(),dirty);baseline.delete(tripId);setStatus('saving');clearTimeout(timer);timer=setTimeout(flush,350);}}
@@ -91,7 +94,7 @@ function create(options={}){
    const t=Object.assign({},g.trip.tombstones||{},next.tombstones||{});if(Object.keys(t).length){next.tombstones=t;next.builder=dropDead(next.builder,t);}
    const applied=[...new Set([...(g.trip.appliedChanges||[]),...(next.appliedChanges||[])])].slice(-300);if(applied.length)next.appliedChanges=applied;
    const done=Object.entries(g.planContent||{}).filter(([,c])=>c&&c.cid&&applied.includes(c.cid)).map(([k])=>k).filter(k=>SAFE.test(k));
-   if(JSON.stringify(next)===JSON.stringify(g.trip)&&!done.length)continue;
+   if(stable(next)===stable(g.trip)&&!done.length)continue;
    const before=Object.values(g.trip.builder?.days||{}).flatMap(d=>d.items||[]);const after=Object.values(next.builder?.days||{}).flatMap(d=>d.items||[]);const added=after.find(i=>!before.some(b=>b.id===i.id));
    const data={trip:next};done.forEach(k=>{data['planContent.'+k]=sdk.deleteField();});if(added)data.lastChange={by:user.uid,text:(user.displayName||'Traveler')+' added '+added.title,at:Date.now()};
    await timed(sdk.updateDoc(sdk.doc(db,'trips',g.id),data));groups.set(g.id,Object.assign({},g,{trip:next}));}}
@@ -162,5 +165,5 @@ function create(options={}){
  function groupList(){return [...groups.values()].map(g=>({id:g.id,tripId:g.trip&&g.trip.id,title:g.trip&&(g.trip.title||g.trip.destination),owner:owner(g),ownerName:g.ownerName,members:(g.memberIds||[]).length}));}
  return {placeIds,savePlaceIds,storageSummary,stopSharing,communityList,communityShare,communityRemove,report,saveProfile,get currentGroup(){return latest();},load,google,email,completeEmail,anonymous,sync,write,remove,leave,flush,pending:pendingCount,get status(){return status;},upload,invite,join,vote,sort,change,approve,lock,groups:groupList,groupFor:tripId=>{for(const g of groups.values())if(g.trip&&g.trip.id===tripId)return g;return null;},signOut:async()=>{if(sdk)await sdk.signOut(auth);},owner:()=>owner(),get user(){return user;},get group(){return current();},dispose(){disposed=true;clearTimeout(timer);clearTimeout(retryTimer);if(stopTrips)stopTrips();unwatchAll();}};
 }
-root.GoNowCloud={create,merge,shareable,dropDead,noteTombstones,builderItems,SDK_BASE};if(typeof module!=='undefined')module.exports=root.GoNowCloud;
+root.GoNowCloud={create,merge,stable,shareable,dropDead,noteTombstones,builderItems,SDK_BASE};if(typeof module!=='undefined')module.exports=root.GoNowCloud;
 })(typeof window==='undefined'?globalThis:window);

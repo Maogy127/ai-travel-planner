@@ -2401,11 +2401,11 @@
         acceptGroupNow:function(group){
             var acct=window.goNowAccount,tid=group&&group.trip&&group.trip.id;if(!tid)return;
             if((read('gonow:tombstones',{})||{})[tid])return;
-            var seen=groupSeen[group.id],first=!seen,version=JSON.stringify(group.trip),changed=!seen||seen!==version;groupSeen[group.id]=version;
+            var stable=(window.GoNowCloud&&window.GoNowCloud.stable)||JSON.stringify,seen=groupSeen[group.id],first=!seen,version=stable(group.trip),changed=!seen||seen!==version;groupSeen[group.id]=version;
             var owner=!!(acct&&(acct.user?group.ownerId===acct.user.uid:acct.owner&&acct.owner())),list=readTrips(),mine=list.find(function(t){return t.id===tid;});
             // The owner's device holds the real trip: never import the shared copy over it (it may be stale); a newer
             // local copy is pushed back instead. Members adopt only the shared part and keep their own answers and notes.
-            if(owner&&mine){if(typeof acct.write==='function'&&JSON.stringify(GC().shareable(mine))!==version)acct.write(readTrips());}
+            if(owner&&mine){if(typeof acct.write==='function'&&stable(GC().shareable(mine))!==version)acct.write(readTrips());}
             else if(changed||!mine){var shared=cloneData(group.trip);shared.builder=GC().dropDead(shared.builder,shared.tombstones);
                 var merged=Object.assign({},mine||{answers:{destination:shared.destination||'',start:shared.start||'',end:shared.end||''},updatedAt:Date.now()},shared);
                 if(mine&&mine.answers)merged.answers=mine.answers;

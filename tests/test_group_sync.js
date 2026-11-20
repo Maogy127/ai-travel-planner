@@ -15,6 +15,9 @@ const tick=(ms=0)=>new Promise(r=>setTimeout(r,ms));
  const store=()=>{const m=new Map();return {m,getItem:k=>m.has(k)?m.get(k):null,setItem:(k,v)=>m.set(k,String(v)),removeItem:k=>m.delete(k)};};
  const account=(uid,name,rows,opts={})=>{const storage=store(),events=[];let active=null;const c=Cloud.create(Object.assign({sdk:asUser({uid,displayName:name}),storage,local:()=>rows,activeTrip:()=>active,emit:(...e)=>events.push(e)},opts));return {c,storage,events,rows,open:id=>{active=id;}};};
 
+ // Firestore reorders map keys: comparisons are by content. An edit not yet confirmed keeps this device's copy.
+ assert.equal(Cloud.stable({a:1,b:{c:2,d:[1,{e:3,f:4}]}}),Cloud.stable({b:{d:[1,{f:4,e:3}],c:2},a:1}));
+ assert.equal(Cloud.merge([{id:'x',title:'new edit',updatedAt:1}],[{id:'x',title:'older upload echo',updatedAt:9}],{},{x:1})[0].title,'new edit');
  // 1) Share only the trip: personal answers, notes, check-ins, flights and snapshots never reach the group doc.
  const personal={id:'t1',planId:'p1',title:'Lisbon',destination:'Lisbon',start:'2026-12-01',end:'2026-12-03',timeZone:'Europe/Lisbon',updatedAt:1,
   answers:{pace:'slow',diet:'vegan',fitness:'low',origin:'SFO'},checkins:[{feel:2}],snapshot:{x:1},draftEdits:{note:'private'},
