@@ -1905,3 +1905,4 @@ html.reduce-motion .nav-panel{transition:none}
 .sync-status[data-state=failed]{color:#8a2d1c!important;background:#fbe3dc!important;text-decoration:underline}
 .group-badge{margin-left:6px;background:#e3eef0;color:#1f4a55}
 @media print{#cloud-notice,.sync-status{display:none!important}}
+.topbar .sync-status{margin-left:auto}.topbar .sync-status+[data-testid=account-button],.topbar .sync-status+[data-testid=sign-in]{margin-left:4px}
