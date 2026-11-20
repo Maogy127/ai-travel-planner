@@ -40,7 +40,7 @@ async def owner_invite(b, sync):
     await pg.evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>window.__invite=t}})")
     await pg.get_by_test_id('sign-in').click(); await pg.get_by_test_id('sign-in-google').click()
     await pg.get_by_test_id('sync-yes' if sync else 'sync-no').click(); await pg.wait_for_timeout(500)
-    await open_share_menu(pg); await pg.get_by_test_id('invite-friends').click(); await expect(pg.locator('#toast')).to_have_text('Invite link copied')
+    await open_share_menu(pg); await pg.get_by_test_id('invite-friends').click(); await expect(pg.locator('#cloud-notice')).to_have_text('Invite link copied')
     return ctx, pg
 
 async def cold_invite(b):
@@ -71,7 +71,7 @@ async def returning_member(b):
     await pg.evaluate('(l)=>location.hash=new URL(l).hash', link); await pg.wait_for_timeout(1200)
     sheet = pg.get_by_test_id('sign-in-sheet'); text = await sheet.inner_text() if await sheet.is_visible() else ''
     ok('returning member re-opening the invite gets no error', 'isn’t available' not in text and 'Couldn’t join' not in text, text)
-    ok('returning member sees "already in this trip"', 'already in this trip' in await pg.locator('#toast').inner_text())
+    ok('returning member sees "already in this trip"', 'already in this trip' in await pg.locator('#cloud-notice').inner_text())
     # Owner opening their own link: also no error.
     await opg.evaluate('(l)=>location.hash=new URL(l).hash', link); await opg.wait_for_timeout(1200)
     osheet = opg.get_by_test_id('sign-in-sheet')
@@ -253,4 +253,5 @@ async def checks(b):
     print(f'SUMMARY pass {len(RESULTS)-len(failed)} fail {len(failed)}')
     assert not failed, failed
 
-asyncio.run(serve_checks(8896, checks))
+if __name__ == '__main__':
+    asyncio.run(serve_checks(8896, checks))

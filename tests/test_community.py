@@ -134,7 +134,7 @@ async def signed_in(b, w):
     ok(f'{w} home city drives the time difference', await pg.get_by_test_id('time-diff').inner_text() == 'Honolulu is 5 hrs behind New York', await pg.get_by_test_id('time-diff').inner_text())
     # Group trips: an invite makes it a group trip.
     await pg.evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>window.__invite=t}})")
-    await open_share_menu(pg); await pg.get_by_test_id('invite-friends').click(); await expect(pg.locator('#toast')).to_have_text('Invite link copied')
+    await open_share_menu(pg); await pg.get_by_test_id('invite-friends').click(); await expect(pg.locator('#cloud-notice')).to_have_text('Invite link copied')
     await pg.get_by_test_id('account-button').click(); await pg.get_by_test_id('profile-group').wait_for()
     ok(f'{w} group trip listed', 'organizer' in await pg.get_by_test_id('profile-group').inner_text())
     await pg.get_by_test_id('sign-out').click(); await pg.wait_for_timeout(500)

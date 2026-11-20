@@ -275,7 +275,7 @@ async def accounts(browser, width):
         await pg.get_by_test_id('sync-yes').click()
         await open_share_menu(pg)
         await pg.get_by_test_id('invite-friends').click()
-        await expect(pg.locator('#toast')).to_have_text('Invite link copied')
+        await expect(pg.locator('#cloud-notice')).to_have_text('Invite link copied')
         link = await pg.evaluate('window.__invite')
         records = await pg.evaluate('window.__fbMock.dump()')
         trip_path = next(p for p in records if p.startswith('trips/'))
