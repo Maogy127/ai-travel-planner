@@ -30,6 +30,8 @@ function checkinPost(place,city,note){return {kind:'checkin',title:cut(place,80)
 const safeId=s=>String(s).replace(/[^A-Za-z0-9_-]/g,'-').slice(0,120);
 
 function create(app){
+ // Community writes stay off until launch (rules keep posts/reports closed); the page shows labeled examples.
+ const live=()=>root.GONOW_COMMUNITY_LIVE===true;
  let posts=null,loading=null,examples=null,tab='all',status='';
  const cloud=()=>root.goNowAccount,user=()=>cloud()&&cloud().user;
  function loadExamples(){if(examples)return Promise.resolve(examples);if(root.GONOW_COMMUNITY_EXAMPLES){examples=root.GONOW_COMMUNITY_EXAMPLES;return Promise.resolve(examples);}return new Promise(resolve=>{const s=document.createElement('script');s.src='js/community-examples.js?v='+(root.GONOW_CACHE_TAG||'1');s.onload=()=>{examples=root.GONOW_COMMUNITY_EXAMPLES||[];resolve(examples);};s.onerror=()=>{examples=[];resolve(examples);};document.head.append(s);});}
@@ -63,8 +65,8 @@ function create(app){
   const search=view.querySelector('[data-testid=community-search]');search.oninput=()=>{query=search.value;const at=search.selectionStart;community(view);const again=view.querySelector('[data-testid=community-search]');again.focus();try{again.setSelectionRange(at,at);}catch(e){}};
   const pool=()=>all().concat(MOCK.map(p=>Object.assign({example:true},p)));
   view.querySelectorAll('[data-post]').forEach(b=>b.onclick=()=>details(pool().find(p=>String(p.id)===b.dataset.post),view));
-  const start=view.querySelector('[data-testid=checkin-start]');if(start)start.onclick=()=>checkinForm(view);
-  view.querySelector('[data-testid=community-fab]').onclick=()=>shareSheet();
+  const start=view.querySelector('[data-testid=checkin-start]');if(start)start.onclick=()=>live()?checkinForm(view):app.toast('Check-ins open soon');
+  view.querySelector('[data-testid=community-fab]').onclick=()=>live()?shareSheet():app.toast('Sharing opens soon');
   if(posts===null)refresh().then(()=>{if(app.state.screen==='community')community(view);});
  }
  function shareSheet(){if(!user()){root.GoNowAccounts&&root.GoNowAccounts.signin();return;}const trips=app.readTrips().filter(t=>t&&t.plan);
@@ -79,7 +81,7 @@ function create(app){
    (p.line&&p.kind==='trip'?'<p>'+esc(p.line)+'</p>':'')+(p.kind==='checkin'&&p.note?'<p>'+esc(p.note)+'</p>':'')+
    (days.length?'<h3 class="cx-sub">Trip days</h3><ol class="community-days" data-testid="community-days">'+days.map((d,i)=>'<li><details><summary>Day '+(i+1)+(d.theme?' · '+esc(d.theme):'')+'</summary><p>'+esc((d.stops||[]).join(' · ')||'Free time')+'</p></details></li>').join('')+'</ol>':'')+
    '<div class="cx-actions" data-testid="community-social"><button type="button" class="cx-act" data-act="like" aria-pressed="false">♡ <span>'+(likes(p)??'Like')+'</span></button><button type="button" class="cx-act" data-act="save" aria-pressed="false">☆ Save</button><button type="button" class="cx-act" data-act="comment">💬 Comments</button></div><p class="muted cx-soon" hidden data-testid="community-soon">Likes, saves and comments are a design preview and aren’t saved yet.</p>'+
-   '<div class="row community-actions">'+(p.kind==='trip'&&p.trip?'<button class="primary" data-testid="community-copy">Copy this trip</button>':'')+(mine(p)?'<button class="outline" data-testid="community-remove">Remove from community</button>':'')+(!p.example&&!mine(p)?'<button class="link" data-testid="community-report">Report</button>':'')+'</div>','community-details');
+   '<div class="row community-actions">'+(p.kind==='trip'&&p.trip?'<button class="primary" data-testid="community-copy">Copy this trip</button>':'')+(mine(p)?'<button class="outline" data-testid="community-remove">Remove from community</button>':'')+(live()&&!p.example&&!mine(p)?'<button class="link" data-testid="community-report">Report</button>':'')+'</div>','community-details');
   s.classList.add('cx-detail');
   const car=s.querySelector('.cx-carousel');if(car)car.onscroll=()=>{const i=Math.round(car.scrollLeft/Math.max(1,car.clientWidth));s.querySelectorAll('.cx-dots span').forEach((d,k)=>d.classList.toggle('on',k===i));};
   s.querySelectorAll('.cx-act').forEach(b=>b.onclick=()=>{s.querySelector('[data-testid=community-soon]').hidden=false;if(b.dataset.act!=='comment')b.setAttribute('aria-pressed',String(b.getAttribute('aria-pressed')!=='true'));});
@@ -98,13 +100,13 @@ function create(app){
  const sharedKey=tripId=>'gonow:community:'+(user()?user().uid:'')+':'+tripId;
  const sharedId=tripId=>{try{return localStorage.getItem(sharedKey(tripId));}catch(e){return null;}};
  function forget(postId){try{Object.keys(localStorage).filter(k=>k.indexOf('gonow:community:')===0&&localStorage.getItem(k)===postId).forEach(k=>localStorage.removeItem(k));}catch(e){}}
- async function shareCurrent(){const trip=app.currentTrip();if(!trip||!trip.plan)return;if(!user()){root.GoNowAccounts&&root.GoNowAccounts.signin();return;}if(user().isAnonymous){app.toast('Sign in with Google or email to share publicly');return;}
+ async function shareCurrent(){if(!live())return;const trip=app.currentTrip();if(!trip||!trip.plan)return;if(!user()){root.GoNowAccounts&&root.GoNowAccounts.signin();return;}if(user().isAnonymous){app.toast('Sign in with Google or email to share publicly');return;}
   const existing=sharedId(trip.id);
   if(existing){try{await cloud().communityRemove(existing);forget(existing);posts=posts&&posts.filter(p=>p.id!==existing);app.toast('Removed from community');}catch(e){app.toast('Couldn’t remove it. Try again.');}shareItem();return;}
   const s=sheet('<h2>Share to community?</h2><p class="muted">Anyone can see its places and days. Your hotel, notes, flights and bookings stay private.</p><label class="checkrow"><input type="checkbox" data-testid="community-show-name"> <span>Show my first name</span></label><div class="row"><button class="primary" data-testid="community-share-confirm">Share</button><button class="outline" data-close-2>Cancel</button></div>','community-share-sheet');
   s.querySelector('[data-close-2]').onclick=()=>s.close();
   s.querySelector('[data-testid=community-share-confirm]').onclick=async()=>{const post=tripPost(trip,app.builderFor(trip));if(!post){s.close();app.toast('This trip is too large to share');return;}post.ownerName=s.querySelector('[data-testid=community-show-name]').checked?cut(String(user().displayName||'').split(/\s+/)[0],40)||'Traveler':'Traveler';post.id='t_'+safeId(user().uid)+'_'+safeId(trip.id);try{await cloud().communityShare(post);localStorage.setItem(sharedKey(trip.id),post.id);posts=null;s.close();app.toast('Shared to community');}catch(e){s.close();app.toast('Couldn’t share. Try again.');}shareItem();};}
- function shareItem(){const menu=document.querySelector('[data-testid=share-menu]');if(!menu)return;const trip=app.currentTrip();let item=menu.querySelector('[data-testid=community-share]');if(!trip||!trip.plan||app.state.shared){if(item)item.remove();return;}
+ function shareItem(){const menu=document.querySelector('[data-testid=share-menu]');if(!menu)return;if(!live()){const old=menu.querySelector('[data-testid=community-share]');if(old)old.remove();return;}const trip=app.currentTrip();let item=menu.querySelector('[data-testid=community-share]');if(!trip||!trip.plan||app.state.shared){if(item)item.remove();return;}
   if(!item){item=document.createElement('button');item.type='button';item.dataset.testid='community-share';item.setAttribute('role','menuitem');item.tabIndex=-1;menu.append(item);}const label=sharedId(trip.id)?'Remove from community':'Share to community';if(item.textContent!==label)item.textContent=label;}
  // Profile: signed-in users; guests get a one-line sign-in prompt.
  function homeCity(){try{return localStorage.getItem(HOME)||'';}catch(e){return '';}}

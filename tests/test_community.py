@@ -29,6 +29,8 @@ async def guest(b, w):
     ok(f'{w} masonry feed has 2+ columns', await pg.evaluate("parseInt(getComputedStyle(document.querySelector('.cx-feed')).columnCount)") >= 2)
     ok(f'{w} cards show avatar, name and likes', await cards.first.locator('.cx-avatar').count() == 1 and await cards.first.locator('.cx-likes').count() == 1)
     ok(f'{w} floating + Share button', (await pg.get_by_test_id('community-fab').inner_text()).strip().endswith('Share'))
+    await pg.get_by_test_id('community-fab').click(); await expect(pg.locator('#toast')).to_contain_text('Sharing opens soon')
+    ok(f'{w} before launch, + Share only says it opens soon (no write)', await pg.get_by_test_id('community-share-sheet').count() == 0)
     SHOTS.mkdir(exist_ok=True); await pg.screenshot(path=str(SHOTS / f'community-foryou-{w}.png'))
     await pg.get_by_test_id('community-search').fill('reykjavik'); await pg.wait_for_timeout(200)
     ok(f'{w} search filters the feed', await cards.count() == 1 and 'Reykjavik' in await cards.first.inner_text(), await cards.count())
@@ -73,6 +75,8 @@ async def guest(b, w):
 
 async def signed_in(b, w):
     ctx, pg = await new(b, BASE, w); errs = []; pg.on('pageerror', lambda e: errs.append(str(e))); await mock_sdk(ctx)
+    # Community writes are behind a launch switch (the published rules keep them closed); this suite tests the draft.
+    await ctx.add_init_script('window.GONOW_COMMUNITY_LIVE=true')
     await open_picks(pg); await pg.get_by_test_id('pick-next').click(); await pg.get_by_test_id('pick-next').click(); await continue_prep(pg)
     await sign_in(pg)
     # Share to community (opt-in), visible publicly, owner can remove.

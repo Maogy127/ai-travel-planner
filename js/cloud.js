@@ -54,8 +54,19 @@ function create(options={}){
  async function communityRemove(id){if(!user||!sdk)throw Error('signin');await sdk.deleteDoc(sdk.doc(db,'community',id));}
  // Shared per-city place-ID lists (Google ToS: only place IDs are kept long-term; details are fetched fresh).
  const CITY=/^[a-z0-9-]{1,80}$/,PLACE_ID=/^[\w-]{10,300}$/,CATS=['sights','restaurants','cafes','outdoors'];
- async function placeIds(slug){if(!sdk||!CITY.test(String(slug)))return null;const snap=await sdk.getDoc(sdk.doc(db,'placeLists',slug));if(!snap.exists())return null;const ids=snap.data().ids;return Array.isArray(ids)?ids.filter(x=>x&&PLACE_ID.test(x.id)&&CATS.includes(x.cat)):null;}
- async function savePlaceIds(slug,city,ids){if(!user||user.isAnonymous||!sdk||!CITY.test(String(slug)))return false;const list=(ids||[]).filter(x=>x&&PLACE_ID.test(x.id)&&CATS.includes(x.cat)).slice(0,40).map(x=>({id:x.id,cat:x.cat}));if(list.length<8)return false;await sdk.setDoc(sdk.doc(db,'placeLists',slug),{city:String(city||'').slice(0,80),ids:list,by:user.uid,updatedAt:sdk.serverTimestamp()});return true;}
+ // Shared per-city place-ID lists (Google ToS: IDs only). Stored as "category:placeId" strings, append-only, max 32.
+ const PLACE_CAP=32,ENTRY=/^(sights|restaurants|cafes|outdoors):([\w-]{10,300})$/;
+ const entries=ids=>(Array.isArray(ids)?ids:[]).map(x=>typeof x==='string'&&ENTRY.exec(x)).filter(Boolean).map(m=>({id:m[2],cat:m[1]}));
+ async function placeIds(slug){if(!sdk||!CITY.test(String(slug)))return null;const snap=await sdk.getDoc(sdk.doc(db,'placeLists',slug));if(!snap.exists())return null;const seen=new Set();return entries(snap.data().ids).filter(x=>!seen.has(x.id)&&seen.add(x.id));}
+ // Signed-in (non-guest) accounts only. Appends new IDs after the existing ones (never drops any); skips when full or
+ // nothing is new. A lost race or a rules denial is ignored: the shared list is only a speed-up.
+ async function savePlaceIds(slug,city,ids){try{if(!user||user.isAnonymous||!sdk||!CITY.test(String(slug)))return false;
+  const fresh=(ids||[]).filter(x=>x&&PLACE_ID.test(x.id)&&CATS.includes(x.cat)).map(x=>x.cat+':'+x.id);
+  const ref=sdk.doc(db,'placeLists',slug),snap=await sdk.getDoc(ref),old=snap.exists()&&Array.isArray(snap.data().ids)?snap.data().ids.filter(x=>typeof x==='string'):null;
+  const have=new Set((old||[]).map(x=>x.split(':')[1]));const add=[];fresh.forEach(x=>{const id=x.split(':')[1];if(!have.has(id)){have.add(id);add.push(x);}});
+  const next=(old||[]).concat(add).slice(0,PLACE_CAP);
+  if(old?next.length<=old.length:next.length<8)return false;
+  await sdk.setDoc(ref,{city:old?snap.data().city:String(city||slug).slice(0,80),ids:next,by:user.uid,updatedAt:sdk.serverTimestamp()});return true;}catch(e){return false;}}
  async function report(targetId,reason){if(!user||!sdk)throw Error('signin');await sdk.addDoc(sdk.collection(db,'reports'),{targetId:String(targetId).slice(0,200),reason,by:user.uid,at:sdk.serverTimestamp()});return true;}
  async function saveProfile(p){if(!user||!sdk)throw Error('signin');if(p.displayName){await sdk.updateProfile(user,{displayName:p.displayName});emit('auth',user);}if(p.homeCity!==undefined)await sdk.setDoc(sdk.doc(db,'users',user.uid,'profile','main'),{homeCity:String(p.homeCity).slice(0,60),updatedAt:sdk.serverTimestamp()});}
  async function restoreProfile(){try{if(read('gonow:home-city'))return;const snap=await sdk.getDoc(sdk.doc(db,'users',user.uid,'profile','main'));const city=snap.exists()&&snap.data().homeCity;if(city)remember('gonow:home-city',String(city).slice(0,60));}catch(e){}}

@@ -41,7 +41,7 @@ const place=(id,name,type,extra={})=>({id,displayName:{text:name},location:{lati
   assert.equal(JSON.parse(st.getItem('gonow:places-budget')).n,4);}
  // Shared per-city ID list: details by ID with a field mask (no 'places.' prefix); new searches publish IDs only.
  {const dc=[];let saved=null;const ids=Array.from({length:10},(_,i)=>({id:'ChIJ'+'abcdefghij'[i]+'xxxxxxxx',cat:i<6?'sights':'restaurants'}));
-  const sh=S.create({storage:memory(),googleKey:'K',sleep:async()=>{},sharedIds:async slug=>{assert.equal(slug,'seattle');return ids;},saveIds:(...a)=>{saved=a;},fetch:async(url,init)=>{if(!url.includes('googleapis'))throw Error('offline');dc.push({url,init});const id=decodeURIComponent(url.split('/places/')[1]);return {ok:true,json:async()=>place(id,'P '+id,/^ChIJ[g-j]/.test(id)?'restaurant':'museum')};}});
+  const sh=S.create({storage:memory(),googleKey:'K',sleep:async()=>{},sharedIds:async slug=>{assert.equal(slug,'seattle');return ids;},saveIds:(...a)=>{saved=a;},fetch:async(url,init)=>{if(!url.includes('googleapis'))throw Error('offline');dc.push({url,init});const id=decodeURIComponent(url.split('/places/')[1]);return {ok:true,json:async()=>place(id,'P '+id,/^ChIJ[g-j]/.test(id)?'restaurant':'museum',{formattedAddress:'1 Pike St, Seattle, WA 98101, USA'})};}});
   const res=await sh.load('Seattle');assert.equal(res.source,'google');assert.equal(dc.length,10,'one details call per ID');
   assert(dc.every(c=>!c.init.method&&!/places\./.test(c.init.headers['X-Goog-FieldMask'])&&/businessStatus/.test(c.init.headers['X-Goog-FieldMask'])));
   assert.equal(res.catalog.activities.length,6);assert.equal(res.catalog.restaurants.length,4);assert.equal(saved,null,'IDs only published after a search');
@@ -49,6 +49,18 @@ const place=(id,name,type,extra={})=>({id,displayName:{text:name},location:{lati
   let partial=null;await pub.load('Seattle',null,{onPartial:c=>{partial=c;}});
   assert.equal(saved[0],'seattle');assert(saved[2].every(x=>Object.keys(x).sort().join()==='cat,id'),'only place IDs + category are shared');
   assert(partial===null||partial.partial===true);}
+ // Shared lists come from other users: fetched places must really be in/near the city, or they are dropped.
+ {const ids=Array.from({length:10},(_,i)=>({id:'ChIJ'+'abcdefghij'[i]+'xxxxxxxx',cat:i<6?'sights':'restaurants'}));
+  const far=new Set(['ChIJaxxxxxxxx','ChIJgxxxxxxxx']);let searches=0;
+  const mk=addr=>S.create({storage:memory(),googleKey:'K',sleep:async()=>{},sharedIds:async()=>ids,fetch:async(url,init)=>{if(!url.includes('googleapis'))throw Error('offline');if(url.includes('searchText')){searches++;return {ok:true,json:async()=>({places:[place('s1','Space Needle','tourist_attraction'),place('s2','Pike Place','market'),place('s3','Kerry Park','park')]})};}
+   const id=decodeURIComponent(url.split('/places/')[1]);const junk=far.has(id);return {ok:true,json:async()=>place(id,'P '+id,/^ChIJ[g-j]/.test(id)?'restaurant':'museum',junk?{formattedAddress:'Shibuya, Tokyo, Japan',location:{latitude:35.66,longitude:139.7}}:{formattedAddress:addr})};}});
+  const r1=await mk('1 Pike St, Seattle, WA').load('Seattle');
+  assert.equal(r1.source,'google');assert.equal(searches,0,'shared list used');
+  assert(![...r1.catalog.activities,...r1.catalog.restaurants].some(p=>far.has(p.placeId)),'far-away junk IDs dropped');
+  assert.equal(r1.catalog.activities.length+r1.catalog.restaurants.length,8);
+  const r2=await mk('1 Main St, Springfield').load('Seattle');
+  assert.equal(searches,4,'a list whose places are not in the city is ignored; fresh category searches instead');
+  assert.equal(r2.source,'google');}
  // Google down + OSM slow: the OSM fallback is capped, so the worst case stays near 5 s (simulated with a hanging fetch).
  {const st0=Date.now();const slow=S.create({storage:memory(),googleKey:'K',sleep:async()=>{},fetch:(url)=>url.includes('googleapis')?Promise.reject(Error('down')):new Promise(()=>{})});
   const out=await slow.load('Lagos');assert(out.fallback,'both down: clear fallback');const took=Date.now()-st0;assert(took<6000&&took>=4500,'capped at about 5 s: '+took);}

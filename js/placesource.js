@@ -109,6 +109,16 @@ function create(options={}){
  function score(p){const r=+p.rating||0,n=+p.userRatingCount||0;return r*Math.log10(n+1);}
  function keep(list){return (list||[]).filter(p=>p&&(!p.businessStatus||p.businessStatus==='OPERATIONAL')&&(+p.userRatingCount||0)>=MIN_REVIEWS).sort((a,b)=>score(b)-score(a));}
  function hotelCenter(hotel){return hotel&&Number.isFinite(hotel.lat)&&Number.isFinite(hotel.lng)?{lat:hotel.lat,lng:hotel.lng}:null;}
+// Shared lists are written by other users, so a fetched place only counts if it really is in/near the city:
+// the anchor is the median position of places whose fresh Google address names the city (at least 3 needed),
+// and every kept place must be within 50 km of it. Junk or far-away IDs never show up.
+function fold(t){return String(t||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
+function inCity(rows,city){const name=fold(String(city).split(',')[0]).trim();if(name.length<2)return [];
+ const pos=r=>r.p&&r.p.location&&Number.isFinite(+r.p.location.latitude)&&Number.isFinite(+r.p.location.longitude)?{lat:+r.p.location.latitude,lng:+r.p.location.longitude}:null;
+ const named=rows.filter(r=>pos(r)&&fold(r.p.formattedAddress).includes(name));if(named.length<3)return [];
+ const mid=v=>{const a=v.slice().sort((x,y)=>x-y);return a[Math.floor(a.length/2)];};const anchor={lat:mid(named.map(r=>pos(r).lat)),lng:mid(named.map(r=>pos(r).lng))};
+ return rows.filter(r=>{const p=pos(r);return p&&km(anchor,p)<=50;});}
+function km(a,b){const R=6371,d=x=>x*Math.PI/180,dl=d(b.lat-a.lat),dg=d(b.lng-a.lng),h=Math.sin(dl/2)**2+Math.cos(d(a.lat))*Math.cos(d(b.lat))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
 function googleCacheKey(city,hotel){const center=hotelCenter(hotel);return 'google:'+normalize(city)+':'+(center?center.lat.toFixed(3)+','+center.lng.toFixed(3):'');}
 function google(city,hotel,key,opts={}){const center=hotelCenter(hotel);
   return cached(googleCacheKey(city,hotel),DAY,async()=>{
@@ -116,7 +126,7 @@ function google(city,hotel,key,opts={}){const center=hotelCenter(hotel);
    let shared=null;if(!center&&options.sharedIds){try{shared=await cap(Promise.resolve(options.sharedIds(slug(city))),800);}catch(e){shared=null;}}
    if(Array.isArray(shared)&&shared.length>=8){const list=shared.filter(x=>x&&/^[\w-]{10,300}$/.test(x.id)).slice(0,24);
     if(list.length&&spend(list.length)){const got=await Promise.all(list.map(x=>details(x.id,key).then(p=>({p,cat:x.cat}),()=>null)));const ok=got.filter(Boolean);
-     if(ok.length>=6){const by=c=>keep(ok.filter(x=>x.cat===c).map(x=>x.p));return googleCatalog([...by('sights'),...by('outdoors')],[...by('restaurants'),...by('cafes')],city,center,key);}}}
+     const near=inCity(ok,city);if(near.length>=6){const by=c=>keep(near.filter(x=>x.cat===c).map(x=>x.p));return googleCatalog([...by('sights'),...by('outdoors')],[...by('restaurants'),...by('cafes')],city,center,key);}}}
    // 2) Category searches in parallel. The first half that lands (sights+outdoors or food) can render while the rest loads.
    if(!spend(CATEGORIES.length))throw Error('daily cap');
    const results={};const tasks=CATEGORIES.map(([cat,q])=>search(q+city,center,key).then(r=>{results[cat]=keep(r.places);},()=>{results[cat]=[];}).then(()=>{
