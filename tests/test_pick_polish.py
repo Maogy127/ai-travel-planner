@@ -36,7 +36,7 @@ async def checks(browser):
                 await sheet.locator('#pick-close').click()
             await pg.locator('[data-pick-info=senia]').click()
             await expect(pg.locator('#pick-detail-toggle')).to_have_count(0)
-            await expect(pg.get_by_test_id('pick-details')).to_contain_text('🔒 Booked')
+            await expect(pg.get_by_test_id('pick-details')).to_contain_text('Booked')  # v2: line lock icon replaces 🔒
             await pg.locator('#pick-close').click()
             await pg.evaluate("""()=>{const a=window.__gonow.state.answers;a.level='gentle';a.picks.activities=['diamond-head','hanauma'];a.picks.restaurants.push('leonards');}""")
             await pg.get_by_test_id('pick-next').click()

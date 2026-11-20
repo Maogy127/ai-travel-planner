@@ -363,7 +363,8 @@ async def motion_checks(b,base,label):
   await pg.get_by_test_id('start-from').fill('Seattle'); await pg.get_by_test_id('start-to').fill('Oahu'); await pg.get_by_test_id('start-next').click()
   ok(f'{label} reduced flip disabled', await pg.locator('.question').evaluate("e=>getComputedStyle(e).animationName")=='none')
   ok(f'{label} reduced motion class', await pg.locator('html').evaluate("e=>e.classList.contains('reduce-motion')"))
-  ok(f'{label} fonts', 'Fraunces Variable' in await pg.locator('h1').evaluate('e=>getComputedStyle(e).fontFamily') and 'Inter Variable' in await pg.locator('body').evaluate('e=>getComputedStyle(e).fontFamily'))
+  # v2 type: Fraunces display + Hanken Grotesk UI (self-hosted).
+  ok(f'{label} fonts', 'Fraunces' in await pg.locator('h1').evaluate('e=>getComputedStyle(e).fontFamily') and 'Hanken Grotesk' in await pg.locator('body').evaluate('e=>getComputedStyle(e).fontFamily'))
   await start_over(pg); await pg.get_by_test_id('demo-oahu').click(); await continue_prep(pg)
   ok(f'{label} reduced plan flow and tile animation disabled', await pg.locator('.db-daycard').first.evaluate('e=>getComputedStyle(e).animationName')=='none')
   await ctx.close()

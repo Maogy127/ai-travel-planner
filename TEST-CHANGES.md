@@ -1839,3 +1839,37 @@ Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deploy
   - The share menu has "Share to community".
   - The asset count is 31.
   - New any-city failure copy.
+
+## v2 design "Color is your weather" (cache tag `v2design-20261120`)
+- **New suite**: `test_v2_theme.js` (node). It checks:
+  - Every text pair stays AA at all 101 dial positions and in Focus.
+  - The Tired T2, Calm C2 and Energized anchors match the spec hex values exactly.
+  - The state thresholds.
+  - No pure white or black.
+  - The blend runs in OKLCH.
+  - The static `:root` tokens equal the engine's Energized output.
+  - `test_v2_design.py` (Playwright, port 8880; 390 + 1280, with and without reduced motion, 66 checks). It checks:
+    - The default Energized palette and no emoji in the shell.
+    - The dial is a 44px target with a one-line label.
+    - Low → Tired T2 and Steady → Calm C2.
+    - The re-tint animates (and is instant with reduced motion).
+    - The feel is remembered per day, survives switching days and reloads.
+    - The date strip.
+    - An opened stop uses the Focus surface.
+    - Line icons are 1.5px.
+    - The press-spring is off with reduced motion.
+    - Ring values are readable from the first frame.
+    - No page errors.
+- **Updated expectations** (each has a comment in the test):
+  - `contrast_tokens.cjs`: the 3:1 checks on ring *fills* (`--sleep`/`--move`/`--rec`) are dropped. Ring fills are bright, fill-only colours by design, and every ring value is printed as text in its `*-text` colour, which keeps 4.5:1.
+  - `test_full.py`, `test_wellness_home.py`: the self-hosted fonts are now Fraunces + Hanken Grotesk (they were Fraunces Variable + Inter Variable).
+  - `test_travel_time.py`: the asset count is 33 (`js/v2.js` added).
+  - `test_contrast.py`: the Move ring is tomato, the same as the Energized accent (spec). The hue check now asserts that the three rings differ from each other by at least 20°.
+  - `check-ui.cjs`, `test_pick_restaurants.py`, `test_pick_polish.py`: line icons replace the 🌿 / 🔒 emoji. The "GoNow Pick" and "Booked …" labels are unchanged.
+- **COPY-AUDIT** (new or changed visible strings):
+  - "How do you feel?"
+  - Low / Steady / High
+  - "Nothing planned yet · rest easy" (an empty day)
+  - Date tiles now read Day N / weekday / date numeral, with the same accessible name, plus " · nothing planned" on an empty day.
+  - Group votes over 3 read "A B C · 5" (was "A B C 👍 5").
+  - Community buttons drop the ♡ ☆ 💬 glyphs for line icons. Their labels are unchanged.

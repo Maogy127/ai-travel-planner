@@ -22,9 +22,9 @@ async def checks(browser):
             await expect(pg.locator('[data-pick-id=poke]')).to_be_visible()
             await expect(pg.locator('[data-pick-id=poke]')).to_contain_text('Ono Seafood')
             await pg.get_by_test_id('pick-search').fill('Senia')
-            await expect(pg.get_by_text('🌿 GoNow Pick',exact=True)).to_be_visible()
+            await expect(pg.get_by_text('GoNow Pick',exact=True).first).to_be_visible()  # v2: line leaf icon replaces 🌿
             card=pg.locator('[data-pick-id=senia]')
-            await expect(card).to_contain_text('🔒 Booked Fri')
+            await expect(card).to_contain_text('Booked Fri')  # v2: line lock icon replaces 🔒
             assert await card.locator('.pick-toggle > span > small').count()==2
             print('PASS restaurant sections, locked bookings, sample menu and mixed-view tag',width)
         finally: await ctx.close()

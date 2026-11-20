@@ -19,7 +19,8 @@ async def checks(browser):
         # Item I adds config, cloud client and account controls.
         # Nov 17 batch adds the Places config and the Community/Profile pages.
         # Compact-cards batch adds the app shell (☰ menu, Start over, sign-in nudge).
-        assert len(assets) == 32, len(assets)
+        # v2 design (Nov 20, 2026) adds js/v2.js (theme, icons, motion).
+        assert len(assets) == 33, len(assets)
         for path in assets:
             assert path.endswith('?v=declutter-20261119'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200

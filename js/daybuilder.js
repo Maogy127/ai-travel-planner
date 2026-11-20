@@ -834,9 +834,9 @@ function mount(root, ctx = {}) {
         const swapAction = !tray && !print && ((!i.locked&&!i.booked)||groupMember) && !['prep','flight','travel','hotel'].includes(i.kind) && !/^check[ -]?(in|out)\b/i.test(i.title||'') && ctx.swapCatalog ? '<button data-testid="db-swap" data-db-action="swap">Swap</button>' : '';
         const availableActions = actions;
         const memberRemove=i.locked&&groupMember?button('remove',title).replace('</button>','<span>Remove from day</span></button>'):'';
-        const menuItems = (swapAction + menuMoves + memberRemove + availableActions.replace('>Add it again', '><span aria-hidden="true">＋</span> Add it again').replace('>Move to another day', '><span aria-hidden="true">↗</span> Move to another day')).replace(/<button /g, '<button role="menuitem" ');
+        const menuItems = (swapAction + menuMoves + memberRemove + availableActions.replace('>Add it again', '>'+(window.GoNowIcons ? window.GoNowIcons.icon('plus',16) : '')+' Add it again').replace('>Move to another day', '>'+(window.GoNowIcons ? window.GoNowIcons.icon('arrow',16) : '')+' Move to another day')).replace(/<button /g, '<button role="menuitem" ');
         const hasMenu = !tray && !print && (i.custom || i.kind !== 'prep');
-        const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}" aria-label="More actions for ${esc(title)}">⋯</button>` : '';
+        const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}" aria-label="More actions for ${esc(title)}">${window.GoNowIcons ? window.GoNowIcons.icon('more',20) : ''}</button>` : '';
         const menu = hasMenu ? `<div hidden id="db-more-${uid}" data-testid="db-more-menu" role="menu">${menuItems}</div>` : '';
         const controls = moves || canLock || hasMenu ? `<div class="db-controls">${tray ? moves : menuButton}${canLock ? lockButton(i, title, uid) : ''}</div>` : '';
         const durationText = `${i.estimate ? '~' : ''}${i.duration} min`;
@@ -848,7 +848,7 @@ function mount(root, ctx = {}) {
             : `<strong id="db-title-${uid}" title="${esc(title)}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}>${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}`;
         const compact=(a,b)=>{const [x,xm]=clock(a).split(' '),[y,ym]=clock(b).split(' ');return `<span>${x}<span class="${xm===ym?'db-mer-dup':''}"> ${xm}</span></span><span>–${y} ${ym}</span>`;};
         const timeEl = tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight||i.flightDirection ? (flightDirection==='arrival'?'Arrival':'Return') : i.textTime ? esc(i.textTime) : compact(i.start,i.end)+(showArrivalEstimate ? '<span> est.</span>' : '')}</${canEditTime ? 'button' : 'div'}>`;
-        const plus = detail && !tray && !print ? `<button type="button" class="db-plus" data-db-action="expand" aria-expanded="${open}" aria-controls="db-detail-${uid}" aria-label="Details for ${esc(title)}">＋</button>` : '';
+        const plus = detail && !tray && !print ? `<button type="button" class="db-plus" data-db-action="expand" aria-expanded="${open}" aria-controls="db-detail-${uid}" aria-label="Details for ${esc(title)}">${window.GoNowIcons ? window.GoNowIcons.icon('plus',18) : ''}</button>` : '';
         const lockedLabel = !fixedBooking(i) ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
             ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt=""${ctx.photoCredit && ctx.photoCredit(src) ? ` title="${esc(ctx.photoCredit(src))}"` : ''}>` : ''}
@@ -1127,7 +1127,9 @@ function mount(root, ctx = {}) {
         const chips = sourcePlan().days.map((day, index) => {
             const weekday = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', timeZone: 'UTC'});
             const label = weekday + ' ' + Number(day.date.slice(-2));
-            return `<button type="button" data-db-action="day" data-date="${day.date}" data-testid="db-day-${day.date}" aria-pressed="${day.date === date}"${ctx.dayHead ? ` aria-label="Day ${index + 1} · ${label}"` : ''}>${ctx.dayHead ? `<span class="db-day-num">Day ${index + 1}</span> ` : ''}${label}</button>`;
+            // v2 date strip: weekday, big date numeral, and a dot when the day has stops (no dot = empty day).
+            const filled = (day.date === date ? result : dayResult(days[day.date] || buildSuggested(day.date), day.date)).items.length > 0;
+            return `<button type="button" data-db-action="day" data-date="${day.date}" data-testid="db-day-${day.date}" aria-pressed="${day.date === date}"${ctx.dayHead ? ` aria-label="Day ${index + 1} · ${label}${filled ? '' : ' · nothing planned'}"` : ''} class="db-date${filled ? '' : ' db-date-empty'}">${ctx.dayHead ? `<span class="db-day-num">Day ${index + 1}</span> ` : ''}<span class="db-wd">${weekday}</span> <span class="db-dn">${Number(day.date.slice(-2))}</span></button>`;
         }).join('');
         const index = dayIndex(date);
         const card = inner => ctx.dayHead
@@ -1137,7 +1139,7 @@ function mount(root, ctx = {}) {
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
             ${card(`<div class="day-primary-actions"><button type="button" data-testid="day-reset" data-db-action="reset">Reset to suggested</button><button type="button" data-testid="day-add-own" data-db-action="add-own">+ Add my own</button></div>
             ${resetOpen ? '<div class="day-reset-prompt"><span>Reset this day? Locked and booked items stay.</span><div><button type="button" data-db-action="reset-confirm" data-testid="day-reset-confirm">Reset</button><button type="button" data-db-action="reset-cancel" data-testid="day-reset-cancel">Cancel</button></div></div>' : ''}
-            <div class="db-day" data-testid="db-day-list">${timelineHTML(result)}</div>
+            <div class="db-day" data-testid="db-day-list">${result.items.length ? timelineHTML(result) : '<p class="db-empty" data-testid="day-empty">Nothing planned yet · rest easy</p>'}</div>
             ${ctx.dayExtras ? ctx.dayExtras(date) : ''}
             ${ctx.shared && d.unscheduled.length ? `<section data-testid="unscheduled-section"><h3>Unscheduled</h3><ul>${d.unscheduled.map(i => `<li>${esc(i.title)}</li>`).join('')}</ul></section>` : ''}
 `)}`;

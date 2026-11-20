@@ -249,8 +249,9 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert(pickApi.state.answers.picks.restaurants.includes('lamer'));
   node('view input').oninput({target:{value:'Senia'}});
   const mixedCard=node('pick-results').innerHTML;
-  assert(mixedCard.includes('<small>🌿 GoNow Pick</small>'));
-  assert(mixedCard.includes('<small>🔒 Booked Fri'));
+  // v2: a 1.5px line leaf icon replaces the 🌿 emoji; the label text is unchanged.
+  assert(/<small>(?:<svg[^>]*>[\s\S]*?<\/svg>)?GoNow Pick<\/small>/.test(mixedCard));
+  assert(/<small>(?:<svg[^>]*>[\s\S]*?<\/svg>)?Booked Fri/.test(mixedCard)); // v2: line lock icon replaces 🔒
   assert.equal((mixedCard.match(/<small>/g)||[]).length,2,'name plus tag plus booking: three lines');
   click('pick-next');assert.equal(pickApi.state.screen,'plan');assert.equal(pickApi.state.plan.id,'oahu-picks-2026-11-25');
   assert.equal(pickApi.state.plan.curatedMismatch,false);
