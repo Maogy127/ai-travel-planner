@@ -2,7 +2,16 @@ rules_version = '2';
 service cloud.firestore {
  match /databases/{database}/documents {
   function signed() { return request.auth != null; }
-  match /users/{uid}/{document=**} { allow read, write: if signed() && request.auth.uid == uid; }
+  // Everything under users/{uid} is private to that account. Trips are kept separately so a deleted trip's
+  // tombstone ({deleted:true}) is final: it can't be deleted or overwritten by an older copy from another device.
+  match /users/{uid} { allow read, write: if signed() && request.auth.uid == uid; }
+  match /users/{uid}/{coll}/{document=**} { allow read, write: if signed() && request.auth.uid == uid && coll != 'trips'; }
+  match /users/{uid}/trips/{tripId} {
+   allow read, create: if signed() && request.auth.uid == uid;
+   allow update: if signed() && request.auth.uid == uid
+     && (resource.data.get('deleted', false) != true || request.resource.data.get('deleted', false) == true);
+   allow delete: if false;
+  }
   match /invites/{inviteId} {
    allow get: if signed();
    allow list: if false;
@@ -12,6 +21,14 @@ service cloud.firestore {
   }
   match /trips/{tripId} {
    function owner() { return signed() && resource.data.ownerId == request.auth.uid; }
+   // The shared copy holds only the trip itself: places, days, times, order, deleted-item tombstones and applied
+   // change ids. Personal answers (pace, diet, fitness, origin), check-ins and notes stay in each user's own doc.
+   function sharedTrip(t) {
+    return t is map && t.keys().hasOnly(['id','planId','title','destination','start','end','timeZone','plan','builder','tombstones','appliedChanges'])
+      && (!('plan' in t) || (t.plan is map && !('answers' in t.plan)))
+      && (!('tombstones' in t) || (t.tombstones is map && t.tombstones.size() <= 500))
+      && (!('appliedChanges' in t) || (t.appliedChanges is list && t.appliedChanges.size() <= 300));
+   }
    function member() { return signed() && request.auth.uid in resource.data.memberIds; }
    function joining() {
     let uid = request.auth.uid;
@@ -77,8 +94,11 @@ service cloud.firestore {
    allow create: if signed() && request.resource.data.ownerId == request.auth.uid && request.resource.data.memberIds == [request.auth.uid] && request.resource.data.members.keys() == [request.auth.uid]
      && request.resource.data.keys().hasOnly(['ownerId','ownerName','members','memberIds','inviteId','inviteExpiresAt','trip','votes','locks','suggestions','createdAt'])
      && request.resource.data.ownerName is string && request.resource.data.ownerName.size() <= 40
-     && tripId == 'group-' + request.resource.data.inviteId;
-   allow update: if signed() && ((owner() && request.resource.data.ownerId == resource.data.ownerId) || (member() && memberChange()) || joining());
+     && tripId == 'group-' + request.resource.data.inviteId
+     && sharedTrip(request.resource.data.trip);
+   allow update: if signed() && ((owner() && request.resource.data.ownerId == resource.data.ownerId
+       && (!('trip' in request.resource.data.diff(resource.data).affectedKeys()) || sharedTrip(request.resource.data.trip)))
+     || (member() && memberChange()) || joining());
    allow delete: if owner();
   }
   // Shared per-city place-ID lists. Google Places ToS: only place IDs (plus our own category label) are stored
