@@ -64,6 +64,7 @@ async def trip_only_and_day_plans(b):
     ok('group doc has no personal answers or check-ins', 'answers' not in json.loads(shared) and 'vegan' not in shared and 'tired' not in shared and 'SFO' not in shared, shared[:200])
     # Day plans from the account (another device) reach the open plan.
     tid = await pg.evaluate("__gonow.state.tripId")
+    await pg.wait_for_function("goNowAccount.pending()===0", timeout=10000); await pg.wait_for_timeout(500)
     plan_id = await pg.evaluate("__gonow.state.plan.id")
     changed = await pg.evaluate("""(()=>{const t=JSON.parse(localStorage.getItem('gonow:trips')).find(x=>x.id===__gonow.state.tripId);const raw=DayBuilder.importForPlan(DayBuilder.exportState(),__gonow.state.plan);__gonow.state.plan.days.forEach(d=>{if(!raw.days[d.date])raw.days[d.date]=DayBuilder.buildSuggested(d.date);});const day=Object.keys(raw.days)[1];const items=raw.days[day].items;items.reverse();raw.days[day].chronological=false;raw.days[day].unscheduled=[...(raw.days[day].unscheduled||[])];__fbMock.seed('users/owner/trips/'+t.id,Object.assign({},t,{builder:raw,updatedAt:Date.now()+600000}));return {day,ids:items.map(i=>i.id)};})()""")
     await pg.wait_for_timeout(800)
