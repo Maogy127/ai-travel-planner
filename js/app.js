@@ -2384,10 +2384,12 @@
     // A member's day-plan edits (order, tray, hand-set times) go to the group as small changes; the owner folds them in.
     function GC(){return window.GoNowCloud||{shareable:function(t){return t;},dropDead:function(b){return b;},noteTombstones:function(t){return t;}};}
     function clockText(m){var h=Math.floor(m/60)%24,mm=m%60;return ((h%12)||12)+':'+(mm<10?'0':'')+mm+' '+(h<12?'AM':'PM');}
-    function memberEdits(trip,prev,next){var acct=window.goNowAccount;if(applyingGroup||!acct||!acct.groupFor||!acct.user)return;var g=acct.groupFor(trip.id);if(!g||g.ownerId===acct.user.uid||!next||!next.days)return;
+    // Only a person's own edits count: saves from re-rendering or adopting the group copy never become group changes.
+    var lastUserInput=0;['pointerdown','keydown','drop','touchend'].forEach(function(t){document.addEventListener(t,function(){lastUserInput=Date.now();},true);});
+    function memberEdits(trip,prev,next){var acct=window.goNowAccount;if(applyingGroup||!acct||!acct.groupFor||!acct.user||Date.now()-lastUserInput>4000)return;var g=acct.groupFor(trip.id);if(!g||g.ownerId===acct.user.uid||!next||!next.days)return;
         var idOf=function(i){return i&&i.id;},prevDays=(prev&&prev.days)||{},prevItems=[];Object.values(prevDays).forEach(function(d){(d.items||[]).forEach(function(i){prevItems.push(i);});});
         Object.keys(next.days).forEach(function(date){var b=next.days[date],a=prevDays[date];if(!b||!Array.isArray(b.items))return;
-            var was=a?[(a.items||[]).map(idOf),(a.unscheduled||[]).map(idOf)]:[window.DayBuilder.buildSuggested?window.DayBuilder.buildSuggested(date).items.map(idOf):[],[]],now=[b.items.map(idOf),(b.unscheduled||[]).map(idOf)];
+            if(!a)return;var was=[(a.items||[]).map(idOf),(a.unscheduled||[]).map(idOf)],now=[b.items.map(idOf),(b.unscheduled||[]).map(idOf)];
             if(JSON.stringify(was)!==JSON.stringify(now))acct.change('day_'+String(date).replace(/[^A-Za-z0-9_-]/g,''),{action:'order',date:date,ids:now[0].join(','),tray:now[1].join(',')});
             b.items.forEach(function(i){var old=prevItems.find(function(x){return x.id===i.id;});if(old&&i.manualTime&&Number.isFinite(i.preferred)&&i.preferred!==old.preferred&&!(g.locks||{})[i.id])acct.change(i.id,{time:clockText(i.preferred),title:String(i.title||'').slice(0,100)});});});
         // Removed from the plan entirely (not moved to another day or the tray): the owner removes it too.
