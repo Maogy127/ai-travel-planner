@@ -36,7 +36,10 @@ function create(options={}){
  async function changed(next){if(disposed)return;user=next;saved=false;unwatchAll();if(stopTrips)stopTrips();baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));remember('gonow:account-session',user?'yes':'');emit('auth',user);if(!user){setStatus('idle');return;}restoreProfile();
   const key='gonow:sync:'+user.uid;if(!['yes','no'].includes(read(key))&&local().length)emit('sync');
   groupIds().forEach(id=>watch(id));
-  stopTrips=sdk.onSnapshot(sdk.collection(db,'users',user.uid,'trips'),snap=>{const remote=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id}));const t=tombs();let grew=false;remote.forEach(r=>{if(r.deleted&&!t[r.id]){t[r.id]=stamp(r.deletedAt)||Date.now();grew=true;}});if(grew)keep(TOMBS,t);const stale=remote.filter(r=>!r.deleted&&t[r.id]);if(stale.length&&read('gonow:sync:'+user.uid)==='yes'){const dirty=json(dirtyKey(),{});stale.forEach(r=>{dirty[r.id]='deleted';});keep(dirtyKey(),dirty);clearTimeout(timer);timer=setTimeout(flush,350);}emit('trips',merge(local(),remote,t));},()=>{});
+  let first=true;stopTrips=sdk.onSnapshot(sdk.collection(db,'users',user.uid,'trips'),snap=>{const remote=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id}));const t=tombs();let grew=false;remote.forEach(r=>{if(r.deleted&&!t[r.id]){t[r.id]=stamp(r.deletedAt)||Date.now();grew=true;}});if(grew)keep(TOMBS,t);const stale=remote.filter(r=>!r.deleted&&t[r.id]);
+   // First snapshot after sign-in: local trips missing from (or newer than) the account copy are queued for upload.
+   const ahead=first?local().filter(l=>!t[l.id]&&!remote.some(r=>r.id===l.id&&(r.deleted||stamp(r.updatedAt)>=stamp(l.updatedAt)))):[];first=false;
+   if((stale.length||ahead.length)&&read('gonow:sync:'+user.uid)==='yes'){const dirty=json(dirtyKey(),{});ahead.forEach(l=>{dirty[l.id]=dirty[l.id]||1;});stale.forEach(r=>{dirty[r.id]='deleted';});keep(dirtyKey(),dirty);clearTimeout(timer);timer=setTimeout(flush,350);}emit('trips',merge(local(),remote,t));},()=>{});
   // Anything that failed to upload last time (offline, closed tab) is retried now.
   flush();
  }
