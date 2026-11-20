@@ -67,7 +67,8 @@ function create(options={}){
   if(op.type==='lock')return {['locks.'+op.itemId]:op.value};
   if(op.type==='approve'){const data={['suggestions.'+op.id]:sdk.deleteField()};if(op.change)data['planContent.'+op.itemId]=op.change;return data;}return null;}
  const offlineError=e=>!e||e.code==='unavailable'||e.code==='deadline-exceeded'||/offline|network|unavailable/i.test(String(e.message||e));
- async function flush(){if(!user||!sdk)return;if(flushing)return flushing;clearTimeout(retryTimer);flushing=(async()=>{let failed=null;const uid=user.uid;
+ let again=false;
+ async function flush(){if(!user||!sdk)return;if(flushing){again=true;return flushing;}clearTimeout(retryTimer);again=false;flushing=(async()=>{let failed=null;const uid=user.uid;
   if(root.navigator&&root.navigator.onLine===false){setStatus('offline');schedule();return;}
   // 1) Personal trips (account sync on).
   if(read('gonow:sync:'+uid)==='yes'){const dirty=json(dirtyKey(),{});for(const id of Object.keys(dirty)){try{if(dirty[id]==='deleted'||tombs()[id])await bury(id);else{const trip=local().find(t=>t.id===id);if(trip)await upload(trip);}const now=json(dirtyKey(),{});if(now[id]===dirty[id])delete now[id];keep(dirtyKey(),now);}catch(e){failed=failed||e;}}if(!failed)saved=true;}
@@ -75,7 +76,9 @@ function create(options={}){
   try{await pushGroups(local());}catch(e){failed=failed||e;}
   // 3) Group changes (votes, edits, suggestions, approvals, locks), each sent once by its change id.
   for(const op of json(outboxKey(),[])){const g=groups.get(op.gid);if(!g&&stops.size){const box=json(outboxKey(),[]).filter(o=>o.cid!==op.cid);keep(outboxKey(),box);continue;}try{const data=opData(op);if(data)await timed(sdk.updateDoc(sdk.doc(db,'trips',op.gid),data));keep(outboxKey(),json(outboxKey(),[]).filter(o=>o.cid!==op.cid));}catch(e){if(!offlineError(e)){keep(outboxKey(),json(outboxKey(),[]).filter(o=>o.cid!==op.cid));emit('rejected',op);}failed=failed||e;}}
-  if(failed){setStatus(offlineError(failed)?'offline':'failed');schedule();emit('sync-failed');}else{retryN=0;setStatus('saved');emit('saved');}})();try{await flushing;}finally{flushing=null;}}
+  if(failed){setStatus(offlineError(failed)?'offline':'failed');schedule();emit('sync-failed');}else{retryN=0;setStatus('saved');emit('saved');}})();try{await flushing;}finally{flushing=null;}
+  // Changes made while a flush was running go out right after it.
+  if(again){again=false;await flush();}}
  function schedule(){clearTimeout(retryTimer);const wait=[2000,5000,15000,30000,60000][Math.min(retryN++,4)];retryTimer=setTimeout(flush,wait);}
  if(root.addEventListener)root.addEventListener('online',()=>{if(user)flush();});
  function pendingCount(){return Object.keys(json(dirtyKey(),{})).length+json(outboxKey(),[]).length;}
