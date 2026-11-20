@@ -42,7 +42,7 @@ async def checks(browser):
             await open_share_menu(pg)
             await expect(menu).to_be_visible()
             # Item I adds Invite friends as the final keyboard menu action.
-            await expect(menu.get_by_role('menuitem')).to_have_text(['Print / Save as PDF', 'Copy as text', 'Share link', 'Download calendar', 'Invite friends', 'Share to community'])
+            await expect(menu.get_by_role('menuitem')).to_have_text(['Print / Save as PDF', 'Copy as text', 'Share link', 'Download calendar', 'Invite friends'])  # Share to community stays hidden until the Community launch
             await expect(pg.get_by_test_id('print-plan')).to_be_focused()
             await pg.keyboard.press('ArrowUp')
             await expect(pg.get_by_test_id('invite-friends')).to_be_focused()
@@ -98,7 +98,7 @@ async def checks(browser):
             await expect(pg.get_by_test_id('finished-banner')).to_be_visible()
             await check_header(pg)
             await open_share_menu(pg)
-            await expect(menu.get_by_role('menuitem')).to_have_count(6)
+            await expect(menu.get_by_role('menuitem')).to_have_count(5)  # no Share to community before launch
             # Shared copies render the same header actions, rather than a separate footer.
             await pg.goto(url)
             await continue_prep(pg)
