@@ -21,7 +21,7 @@ function dropDead(builder,t){if(!builder||!t||!Object.keys(t).length)return buil
 // An id that is back in the plan (Undo, re-added) clears its tombstone.
 function noteTombstones(trip,next){const before=builderItems(trip.builder).filter(i=>i&&(i.custom||i.c)).map(itemId),now=new Set(builderItems(next).map(itemId));const t=Object.assign({},trip.tombstones||{});let changed=false;before.forEach(id=>{if(id&&!now.has(id)&&!t[id]){t[id]=Date.now();changed=true;}});Object.keys(t).forEach(id=>{if(now.has(id)){delete t[id];changed=true;}});if(changed){if(Object.keys(t).length)trip.tombstones=t;else delete trip.tombstones;}return trip;}
 function create(options={}){
- const DAY=86400000;let sdk,auth,db,pending,user=null,stopTrips,timer,baseline=new Map(),disposed=false,saved=false,status='idle',retryTimer,retryN=0,flushing=null,lastGroupId=null;
+ const DAY=86400000;let sdk,auth,db,pending,lastRemote=null,user=null,stopTrips,timer,baseline=new Map(),disposed=false,saved=false,status='idle',retryTimer,retryN=0,flushing=null,lastGroupId=null;
  // One listener per group trip the user belongs to (owner or member); switching trips never drops another group.
  const groups=new Map(),stops=new Map();
  const storage=options.storage||root.localStorage,emit=options.emit||(()=>{}),local=options.local||(()=>[]);
@@ -33,26 +33,26 @@ function create(options={}){
  async function load(){if(sdk)return sdk;if(pending)return pending;pending=(async()=>{let timeout;try{const importer=options.importer||(url=>import(url));const base=root.GONOW_FIREBASE_SDK_BASE||SDK_BASE;const modules=await Promise.race([options.sdk?Promise.resolve([options.sdk]):Promise.all(['app','auth','firestore'].map(n=>importer(base+'firebase-'+n+'.js'))),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),options.timeout||8000);})]);sdk=Object.assign({},...modules);const app=sdk.initializeApp(root.GONOW_FIREBASE_CONFIG);auth=sdk.getAuth(app);db=sdk.getFirestore(app);sdk.onAuthStateChanged(auth,changed);return sdk;}catch(e){sdk=null;emit('unavailable');return null;}finally{clearTimeout(timeout);if(!sdk)pending=null;}})();return pending;}
  function groupIds(){if(!user)return [];const list=json('gonow:groups:'+user.uid,[]);const legacy=read('gonow:group:'+user.uid);if(legacy&&!list.includes(legacy))list.push(legacy);const left=json('gonow:left:'+user.uid,[]);return list.filter(id=>typeof id==='string'&&!left.includes(id));}
  function unwatchAll(){stops.forEach(stop=>{try{stop();}catch(e){}});stops.clear();groups.clear();}
- async function changed(next){if(disposed)return;user=next;saved=false;unwatchAll();if(stopTrips)stopTrips();baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));remember('gonow:account-session',user?'yes':'');emit('auth',user);if(!user){setStatus('idle');return;}restoreProfile();
+ async function changed(next){if(disposed)return;user=next;saved=false;lastRemote=null;unwatchAll();if(stopTrips)stopTrips();baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));remember('gonow:account-session',user?'yes':'');emit('auth',user);if(!user){setStatus('idle');return;}restoreProfile();
   const key='gonow:sync:'+user.uid;if(!['yes','no'].includes(read(key))&&local().length)emit('sync');
   groupIds().forEach(id=>watch(id));
-  let first=true;stopTrips=sdk.onSnapshot(sdk.collection(db,'users',user.uid,'trips'),snap=>{const remote=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id}));const t=tombs();let grew=false;remote.forEach(r=>{if(r.deleted&&!t[r.id]){t[r.id]=stamp(r.deletedAt)||Date.now();grew=true;}});if(grew)keep(TOMBS,t);const stale=remote.filter(r=>!r.deleted&&t[r.id]);
+  let first=true;stopTrips=sdk.onSnapshot(sdk.collection(db,'users',user.uid,'trips'),snap=>{const remote=snap.docs.map(d=>Object.assign({},d.data(),{id:d.id}));lastRemote=remote;const t=tombs();let grew=false;remote.forEach(r=>{if(r.deleted&&!t[r.id]){t[r.id]=stamp(r.deletedAt)||Date.now();grew=true;}});if(grew)keep(TOMBS,t);const stale=remote.filter(r=>!r.deleted&&t[r.id]);
    // First snapshot after sign-in: local trips missing from (or newer than) the account copy are queued for upload.
    const ahead=first?local().filter(l=>!t[l.id]&&!remote.some(r=>r.id===l.id&&(r.deleted||stamp(r.updatedAt)>=stamp(l.updatedAt)))):[];first=false;
    if((stale.length||ahead.length)&&read('gonow:sync:'+user.uid)==='yes'){const dirty=json(dirtyKey(),{});ahead.forEach(l=>{dirty[l.id]=dirty[l.id]||1;});stale.forEach(r=>{dirty[r.id]='deleted';});keep(dirtyKey(),dirty);clearTimeout(timer);timer=setTimeout(flush,350);}emit('trips',merge(local(),remote,t));},()=>{});
   // Anything that failed to upload last time (offline, closed tab) is retried now.
   flush();
  }
- async function sync(yes){if(!user)return;saved=false;setStatus('saving');remember('gonow:sync:'+user.uid,yes?'yes':'no');if(yes){const dirty=json(dirtyKey(),{});local().forEach(t=>{dirty[t.id]=1;});keep(dirtyKey(),dirty);await flush();}baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));saved=!!yes&&status==='saved';if(!yes)setStatus(groups.size?'saved':'idle');emit('synced');}
+ async function sync(yes){if(!user)return;saved=false;setStatus('saving');remember('gonow:sync:'+user.uid,yes?'yes':'no');if(yes){const dirty=json(dirtyKey(),{});
+  // Only trips the account doesn't have, or has an older copy of: turning sync on never pushes a stale device copy.
+  local().filter(l=>!lastRemote||!lastRemote.some(r=>r.id===l.id&&(r.deleted||stamp(r.updatedAt)>=stamp(l.updatedAt)))).forEach(t=>{dirty[t.id]=1;});keep(dirtyKey(),dirty);await flush();}baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));saved=!!yes&&status==='saved';if(!yes)setStatus(groups.size?'saved':'idle');emit('synced');}
  function clean(trip){return JSON.parse(JSON.stringify(trip,(k,v)=>k==='group'?undefined:v));}
  // Firestore keeps offline writes pending instead of failing; past this the status says "Offline, will sync".
  const WRITE_WAIT=10000;
  function timed(p){let t;return Promise.race([p,new Promise((_,no)=>{t=setTimeout(()=>no(Object.assign(Error('offline'),{code:'unavailable'})),WRITE_WAIT);})]).finally(()=>clearTimeout(t));}
  async function upload(trip){if(!user||!sdk)return;const ref=sdk.doc(db,'users',user.uid,'trips',trip.id);
   // Never overwrite a tombstone left by another device.
-  try{const cur=await timed(sdk.getDoc(ref));if(cur.exists()&&cur.data().deleted){const t=tombs();t[trip.id]=stamp(cur.data().deletedAt)||Date.now();keep(TOMBS,t);emit('trips',merge(local(),[Object.assign({},cur.data(),{id:trip.id})],t));return;}
-   // A newer account copy (another device) wins; this older one is not uploaded over it.
-   if(cur.exists()&&stamp(cur.data().updatedAt)>stamp(trip.updatedAt)+1000){emit('trips',merge(local(),[Object.assign({},cur.data(),{id:trip.id})],tombs()));return;}}catch(e){if(e&&e.code==='unavailable')throw e;}
+  try{const cur=await timed(sdk.getDoc(ref));if(cur.exists()&&cur.data().deleted){const t=tombs();t[trip.id]=stamp(cur.data().deletedAt)||Date.now();keep(TOMBS,t);emit('trips',merge(local(),[Object.assign({},cur.data(),{id:trip.id})],t));return;}}catch(e){if(e&&e.code==='unavailable')throw e;}
   await timed(sdk.setDoc(ref,Object.assign({},clean(trip),{updatedAt:sdk.serverTimestamp()})));}
  async function bury(id){if(!user||!sdk)return;await timed(sdk.setDoc(sdk.doc(db,'users',user.uid,'trips',id),{id,deleted:true,deletedAt:sdk.serverTimestamp(),updatedAt:sdk.serverTimestamp()}));}
  // Local changes are marked dirty and kept until the account copy confirms them; failures retry with backoff.
