@@ -1190,3 +1190,652 @@ COPY-AUDIT
 | ` · leave by {time}` | Late connector | Existing wording preserved; derived departure. |
 
 Existing notes, transfer names/fallback (“Local transfer — confirm route”), proposal text and handwritten demo labels retain their wording. Removed repeated all-trip transfer/date headings.
+
+## origin-fix
+
+Changes:
+- Added `js/places.js`: shared case-insensitive exact aliases, uppercase fallback for unknown three-letter airport codes, and validation accepting any input with at least two Unicode letters. Full names remain as entered (apart from surrounding whitespace).
+- Origin and destination normalize on Next, including stored answers and visible fields. Home destinations normalize before the origin screen; short custom destinations also get the “Trip to …” summary. Empty destination messages retain the “I’m not sure yet” option.
+- Engine matching preserves Oahu for HNL and New York for NYC/JFK/EWR/LGA normalized labels. Los Angeles and San Francisco remain custom destinations because the catalog does not support them.
+- Extended jetlag time zones for NYC, Hong Kong, Kuala Lumpur and Washington DC/IAD/DCA. Existing airport aliases remain supported.
+- Updated all 24 existing index assets and the new places script to `?v=originfix-20261116`.
+
+Tests:
+- PASS: all 28 Node suites (`node` on each `tests/*.js` and `tests/*.cjs`). New `test_places.js` covers exact/case-insensitive aliases, full names, junk, two-letter custom places, unknown codes, supported engine destinations and normalized-name time-zone offsets.
+- PASS: `py_compile` on all 47 Python test files recursively under tests.
+- PASS: static verification of all 25 local assets, cache suffixes, file existence and places-before-jetlag/app ordering.
+- Added `tests/test_origin_alias.py`, port 8870, using `test_full.new` and `test_wellness_home.serve_checks`. Covers 1280/390 widths, origin aliases and Back values, destination aliases, junk, home HNL → Oahu, unsure destination, overflow and one-line helpers/errors.
+- Updated `test_travel_time.py` suffix/count and `test_full.py` validation assertion. The latter now uses `1` instead of `zz`, with a comment explaining that two-letter custom places are valid.
+- Playwright was not run: Chromium is unavailable in this sandbox; supervisor execution is required. No network access or git operations were used.
+
+Proofread notes:
+- Source copy reviewed for origin/destination at the requested desktop/mobile widths: the shorter placeholder identifies the input; “We use this to estimate flights.” explains its purpose without repeating it. The destination suggestion helper explains “I’m not sure yet”. No typos found.
+- Visual verification at 1280/390 remains pending supervisor Playwright execution; the new suite asserts one-line helper/error layout and no horizontal overflow.
+
+COPY-AUDIT of changed strings:
+- Origin placeholder: `City or airport (e.g., Seattle, SEA)` → `City or airport code` (shorter and consistent with accepted aliases/codes).
+- Empty-origin error: `Add where you're flying from so we can estimate flights.` → `Enter a city or airport code.`
+- Junk origin/destination error: `We couldn’t find that place. Try a nearby city or airport code.` → `Enter a city or airport code.` The same concise message now validates junk in the home destination field.
+- Normalized values/summary labels use the shared canonical place labels (for example `Los Angeles (LAX)`, `New York (NYC)`, `Honolulu (HNL)`). Helpers and separate empty-destination messages are unchanged.
+
+Origin-fix proofread follow-up COPY-AUDIT:
+- Combined-mode heading: `Where are you flying from?` → `Plan your trip`; retains the single heading helper/h1 and no subtitle.
+- Combined-mode origin label: screen-reader-only `Where are you flying from?` → visible `Flying from`. Destination label remains `Where do you want to go?`.
+- From-home mode retains `Where are you flying from?`, `Trip to {destination} · Edit destination`, and the sr-only origin label without a visible duplicate.
+- Helpers remain unchanged and one line. Extended `test_origin_alias.py` assertions at 390/1280 cover both modes, single h1, combined labels, no visible duplicate from-home label, and one-line headings/labels/helpers/errors. Chromium execution remains with the supervisor.
+- Follow-up validation: PASS all 28 Node suites, `node --check js/app.js`, `py_compile` on all 47 Python test files, and `git diff --check`. No browser or network used; changes remain uncommitted.
+
+## any-city batch
+
+### Item A — Any-city picks
+
+Changes:
+- Added on-demand `js/placesource.js` with injectable fetch, clock, sleep and storage. Nominatim runs only after entering non-Oahu picks, with a 300 ms settling delay, serialized requests at least 1 second apart, a normalized-query 180-day cache, a persisted last-request timestamp, and one contact constant (`gonow-preview@users.noreply.github.com`). Browser Referer identifies the site; there is no autocomplete or background lookup.
+- One combined, bounded Overpass query covers named activities and restaurants/cafes within 10 km of known hotel coordinates or the geocoded centre. Queries serialize, abort on timeout, retry at most once after 1.5 seconds, and cache for 7 days by rounded coordinates/radius. Rank by Wikipedia/Wikidata presence, tag richness, then distance; deduplicate names.
+- Non-Oahu pick screens use the same selection, Draft → Confirm → Trip prep flow and destination-specific pick IDs. Restaurants have one nonempty “Popular nearby” section. Loading, empty and failure states stay concise; failure offers the existing generator. Oahu's curated catalog, photos and GoNow Picks remain intact and make no place-source requests.
+- Visible cards lazily enrich from Wikipedia summaries or Wikidata/Commons (30-day cache). Missing/unavailable photos use category illustrations, never stock place photos. Details carry hours, estimates, known address/area, map link and source-photo credit; pick pages credit OpenStreetMap.
+- Common weekly hours, daily hours, split intervals, 24/7 and off are parsed conservatively. Unsupported forms remain unenforced and show “Hours not listed”. Weekly hours/closures survive scheduler → DayBuilder conversion. Non-Oahu airport transfers no longer say HNL; unknown per-place prices are hidden rather than invented. Generic restaurant swaps use the restaurant selection list.
+- Added one versioned script and updated the asset-count assertion with its reason. Every asset reference in index.html retains `?v=originfix-20261116`.
+
+Data provenance and estimates:
+- Live names, coordinates, categories, cuisine, addresses and opening_hours come from OpenStreetMap; intros and photos come from Wikipedia/Wikimedia Commons when available. They are source data, not a verification of current operating conditions. Source intros are reduced to one sentence in the tap sheet.
+- Duration (museum/zoo/aquarium 2 h; other categories 1 h) and effort (Easy/Moderate) are category estimates explicitly marked “est.”. No researched price is available from this source, so price is hidden; the existing trip budget remains an estimate. No fabricated reviews, menus or photos are added.
+- Seattle/Tokyo JSON files are deterministic mocked examples of source response shapes, not a claimed live scrape or verified source snapshot. Thumbnail bytes in browser tests are mocked as well. No network access was used during implementation.
+- Public-service limits apply per browser; persistent caching and serialized requests reduce usage, but this static implementation cannot coordinate a global limit across unrelated visitors. Review hosting/public-service capacity before scaling traffic.
+
+Tests:
+- `tests/test_placesource.js`: Seattle/Tokyo fixtures, ranking/tie breakers, deduplication, normalized caching, cache expiry, photo caching/laziness, category placeholders, estimate copy, injected-clock ≥1-second Nominatim spacing/contact parameter, known-hotel centre, empty results, bounded retry/failure signal, opening-hours parsing, weekly scheduler/DayBuilder constraints and actual app checkout IDs.
+- `tests/test_any_city.py` (supervisor, port 8871; `test_full.new` and `test_wellness_home.serve_checks`): intercepted source/photo requests, Seattle at 1280/390, photos/placeholders, hours/map/credit details, Popular nearby only, all selected stops scheduled, Confirm → Trip prep, Tokyo checkout, aborted-source fallback, and zero place-source requests for Oahu. Screenshots are saved under `/tmp/any-city-seattle-{width}.png`.
+- Validation: all 29 Node suites passed, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs; all Python test files compile. Chromium/Playwright execution and screenshot review are reserved for the supervisor.
+
+COPY-AUDIT (all new/changed visible strings; existing Oahu copy remains unchanged):
+- States: `Finding places near {city}…`, `No places found nearby`, `Couldn’t load places`, `Plan without picks`. One short status line; the failure action enters the existing plan generator.
+- Non-Oahu restaurant heading: `Popular nearby`; never renders an empty heading or GoNow Picks section.
+- Card categories: `Park`, `Beach`, `Museum`, `Viewpoint`, `Attraction`, `Zoo`, `Aquarium`, `Gallery`, `Restaurant`, `Cafe`. Card secondary line: `{Category} · {1|2} h est.` or `{Category} · {cuisine}`; cafes without cuisine use `Coffee`. Cuisine is source text with underscores/semicolons changed to spaces. Names/source cuisine can truncate on small cards; details retain the full name.
+- Details: source intro, source hours when parsed, `Hours not listed`, `How long · {1|2} h est.`, `Effort · Easy est.`, `Effort · Moderate est.`, known source address or city/area, `Open in map`, `Photo: Wikipedia/Wikimedia Commons`. Price, menus and reviews are omitted when unavailable. No duplicate card metadata is added to cards; expanded information requires a tap.
+- Attribution: `Map data © OpenStreetMap contributors` (small text, linked copyright page).
+- Generic scheduled transfer: `Leave for the airport` replaces Oahu's `Uber to HNL` only for generic catalogs. Existing transfer detail `Leave for the airport.` is retained.
+- Reused controls: `Pick activities`, `Pick restaurants`, `All`, category chips, `Breakfast`, `Lunch`, `Dinner`, `Snacks`, `Search`, `Back`, `Next: restaurants`, `Check out`, `Picked {n}` / existing day-count copy, `Add`, `Remove`, `×` (`Close` accessible label), `ⓘ` (`Details: {name}` accessible label). Placeholders have `{Category} illustration` accessible labels and a category symbol. No service names, developer terminology, unknown-price filler, fake reviews or fake menus appear in the new UI.
+
+
+### Item A follow-up — Lookup rendering and offline browser helpers
+
+Changes:
+- Fixed nearby results, count and detail-sheet lookups to use their HTML IDs. The shared `get()` helper selects testids, which caused loaded catalogs to stop rendering after chips appeared.
+- Loading renders immediately with `place-loading`; rejected lookups and fallback results render `place-failure` plus the existing `pick-fallback` action. Loading/failure screens contain no chips. Stale lookup completions cannot replace another screen or destination.
+- Fixture JSON responses include `Access-Control-Allow-Origin: *`, including Overpass POST responses; OPTIONS has a local response if needed. Overpass remains a simple form POST with a `data=` body.
+- `test_full.new()` blocks place/photo hosts by default, including Wikipedia/Wikidata subdomains and Wikimedia uploads; fixture page routes override the defaults. Expected blocked-host errors are excluded from shared error collection; other errors remain checked. `through_picks()` waits for either loaded controls or failure, then uses `pick-fallback` for offline destinations. The curated Oahu selection path remains intact.
+
+Tests:
+- PASS all 29 Node suites, including the requested daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- Extended the Node regression to execute the actual nearby screen function: immediate loading without chips, rejected lookup failure without chips, fallback action, and loaded cards/count without testid lookup errors. Asserted simple Overpass POST headers/body.
+- Extended supervisor browser checks for immediate loading, failure testid and absence of chips during loading/failure. Existing card, details, fallback and plan assertions remain.
+- PASS py_compile on all 48 Python test files, node --check js/app.js, and git diff --check. Browser execution/screenshots remain with the supervisor; no network access, commits, pushes or remote changes.
+
+COPY-AUDIT:
+- No visible strings added or changed. Existing `Finding places near {city}…`, `Couldn’t load places`, and `Plan without picks` now reliably appear in their intended states. Existing card/detail/attribution copy remains unchanged; new testids are invisible.
+
+### Item B — Edit picks
+
+Changes:
+- Added a compact Edit picks header action for Draft and Ready pick plans, including any-city plans. Both pick pages reuse current selections. Builder locks and bookings stay selected, have a Locked tag and an inert aria-disabled toggle; detail sheets cannot remove them. Back from the first edit page cancels selection changes.
+- Added deterministic `PickScheduler.update`: reads exported or raw DayBuilder state, removes deselected unlocked picks, preserves locks/custom bookings/manual times, and tries free slots before releasing movable existing picks. Retries constrained ordering before reporting additions that cannot fit; locked items never enter the overflow warning.
+- Updates retain confirmation and Trip prep checks, refresh booking tasks/counts, and preserve raw builder entries for surviving times. Undo restores the previous plan, picks, builder storage, and Trip prep state.
+- No assets added or renamed; existing version tags/count stay unchanged.
+
+Tests:
+- `tests/test_edit_picks.js`: locked and booked times/days unchanged, manually edited time retained, removed pick absent, additions scheduled, existing unlocked slot retained when free space exists, deterministic results.
+- `tests/test_edit_picks.py`: supervisor-only port 8872 using `test_full.new` and `test_wellness_home.serve_checks`; Oahu at 1280/390, two real day-view locks, Draft and Ready updates, immutable ticked Locked cards, add two/remove one, confirmation retained, toast fit, exact serialized plan/builder/picks/prep Undo; mocked Seattle edit smoke reuses `test_any_city.routes`.
+- Updated fresh-checkout VM fixtures in `test_pickflow.js` and `test_placesource.js` to supply the new editing-session state/lock predicate; assertions remain intact with explanatory comments.
+- Local validation: every `tests/*.js` and `tests/*.cjs` suite passes, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. Python tests compile. Browser suites/screenshots require the supervisor and were not run here.
+
+COPY-AUDIT (every added/changed visible string):
+- “Edit picks”: compact header button; one line at 390px.
+- “Locked”: small card tag replaces the booking summary during editing, avoiding duplicate lock status; selected toggle is aria-disabled.
+- “Update plan”: last pick page primary action during editing only; one line.
+- “Plan updated · Undo”: existing toast with actionable Undo; explicitly nowrap and sized for 390px. No technical language or extra heading.
+- Existing booking task text and “N left” counts are reused without new wording. All remaining card/details copy is unchanged.
+
+### Item C — Swap
+
+Changes:
+- Added Swap to the existing DayBuilder more menu for editable activities, meals and free-time cards; locked/booked items do not offer it.
+- The sheet searches the trip's curated or any-city catalog, excluding scheduled picks. Candidates fit duration, known hours/closures and the outgoing road estimate, sorted by proximity. Up to five appear.
+- Swapping preserves the exact start and all other displayed times; removing leaves a gap. Both synchronize Edit picks and offer exact Undo through the existing plan toast. Confirmed status is preserved.
+- No assets were added or renamed.
+
+Tests:
+- `tests/test_swap.cjs`: duration boundary, known/unknown hours, weekly closures, dated/weekday closures, outgoing travel, nearest ordering and in-plan exclusion.
+- `tests/test_swap.py`: supervisor Playwright suite on port 8873 using `test_full.new` and `test_wellness_home.serve_checks`, 1280/390, curated demo Day 2, Draft/confirmed, one-line rows, exact slot, unchanged other times, Undo, free gap and locked La Mer.
+- All `tests/*.js` and `tests/*.cjs` passed, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. All Python tests compiled. Chromium execution is reserved for the supervisor.
+
+COPY-AUDIT (every added/changed visible string):
+- “Swap”: concise menu action and sheet title.
+- “×” / “Close”: existing close convention and accessible label.
+- “Search places”: one-line search placeholder and accessible label.
+- “[place name] · [duration] min · [Walk/Uber/Drive] ~[minutes] min”: one-line candidate, sourced name and estimated outgoing travel; long names ellipsize.
+- “No matches”: concise empty search result with the free-time action still available.
+- “Remove, keep time free”: single-line free-slot action.
+- “Swapped · Undo”: single-line toast using the existing Undo button.
+
+### Item C follow-up — Locked demo Swap test
+
+Changes:
+- Updated `tests/test_swap.py` to assert Day 2 Diamond Head (`2026-11-26-1`) starts locked with “Unlock time” and no Swap in its open more menu, then unlock it before the existing swap checks. The demo's default lock is unchanged.
+- `open_swap` now closes an already-open more menu (including one restored by Undo), verifies it closed, then opens it and verifies visibility before selecting Swap.
+
+Tests:
+- Retained desktop/mobile and Draft/confirmed coverage, exact start slot, unchanged other times, Undo, Remove keep time free, and locked La Mer without Swap. Continues using the shared browser/server helpers on port 8873.
+- PASS all 31 Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs; PASS py_compile for all 50 Python test files. Playwright execution remains with the supervisor.
+
+COPY-AUDIT:
+- No visible strings added or changed. “Unlock time” is an assertion of existing accessible copy. No production code or assets changed.
+
+### Item C follow-up 2 — Source locks and confirmed bookings
+
+Changes:
+- Diamond Head's planned entry slot now unlocks directly; locking pins its displayed time and unlocking persists through storage/share state.
+- Confirmed La Mer and Senia reservations, custom Booked items, both fixed Kualoa shuttle legs and flights retain fixed locks. They show one small non-interactive Locked tag, with no unlock button semantics. Fixed times and move-day actions no longer offer an unusable unlock path; flight-time entry remains available.
+- User-created time locks retain their confirmation step. No assets added or renamed.
+
+Tests:
+- Added Node coverage for source-slot unlock/relock, state round-trip, and immutable confirmed/custom/flight/transfer locks.
+- Updated full.py and plan-render booking assertions with dead-toggle comments; retained lock-button aria and 44px checks. Dayview checks distinguish static tags from buttons.
+- Swap browser suite retains shared helpers and port 8873, desktop/mobile and Draft/confirmed checks, exact-slot replacement, unchanged other times, Undo and Remove keep time free; adds reload persistence and explicit La Mer no-unlock/static-tag assertions.
+- All Node suites passed, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. All Python tests compiled. Playwright/screenshot execution remains with the supervisor.
+
+COPY-AUDIT (every visible/accessibility string added or changed):
+- “Locked”: reused single small tag for confirmed bookings, with no button role, tab stop or pressed state; short enough for 390px.
+- “Lock <title>”: accessible unlocked-toggle label now identifies its activity; icon-only visible control remains compact. Locked toggle retains “Unlock time”.
+- “Locked time — unlock to move”: existing accessible row description now also describes planned source locks accurately. Confirmed rows retain “Locked booking — times are fixed”.
+- Removed unusable “Move to another day” and “Edit time:” controls from fixed bookings; no replacement reading burden or extra headings.
+
+### Item C follow-up 3 — Booking actions and lock indicator compatibility
+
+Changes:
+- Restored booked cards’ existing more-menu Move to another day action and time-edit entry. Explicit move/time confirmation works again; declining keeps the reservation unchanged. The static Locked tag has no unlock action.
+- Kept one `db-lock` indicator on each fixed booking as a non-interactive span, retaining the nested `db-locked-tag` identifier and compact icon/text alignment. Button-only aria-prefix and 44px checks exclude static indicators.
+- Swap tests now use `test_full.show_day` after confirmation and reload to reopen the live plan before selecting Day 2. Shared browser/server helpers and port 8873 remain unchanged.
+- Preserved existing uncommitted work. No assets added or renamed.
+
+Tests:
+- PASS all 31 `tests/*.js` and `tests/*.cjs` suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- Extended actual-builder Node regression for La Mer’s more menu, move-day and time-edit controls, inert lock indicator, declined move confirmation and accepted time-edit confirmation.
+- Checkout and Swap assert one static indicator without pressed/action semantics. Dayview/full checks retain button aria and 44px assertions, plus static booking coverage.
+- PASS py_compile for all 50 Python tests. Browser execution/screenshots remain supervisor-only.
+
+COPY-AUDIT (every visible/accessibility string added or changed):
+- No new wording. “Locked” remains one compact static indicator, with no button label or pressed state.
+- Restored “Move to another day” in the existing tapped more menu and “Edit time: {time range}” on the existing time button. The menu action is unchanged and short; the time label is accessible copy.
+- Existing confirmation copy is reachable again for booking edits: “Unlock this item’s reserved time before changing it?”, “Unlock this item”, “Keep reserved time”. Details remain behind an explicit action.
+- Existing move dialog and time-editor copy is reused unchanged after confirmation, including “Target date”, “Time on new day — optional”, “Move”, “Cancel”, “Edit scheduled time”, “Activity time”, “Start”, “End”, “Duration (minutes)”, “Save activity time”, and “Close time editor”. No duplicate card copy, new headings or technical terminology added.
+
+### Item D — Optional flights step and travel-day windows
+
+Changes:
+- Inserted Flights immediately after Dates, with two compact rows, optional verbatim flight numbers, destination-local arrival/return clock fields, the shared time picker, and Skip. Trip progress is now nine steps; local-day flow stays at three. A hidden `data-flight-booking-hook` reserves the later booking-link integration; no booking link or lookup was added.
+- Added local route estimates using the existing origin regions, destination catalog and jet-lag city/time-zone tables, including date-specific offsets. Estimates assume a morning outbound departure and an early-evening arrival home for the return calculation; these are approximate planning assumptions, never looked-up flights. Unknown routes use regional fallbacks. Flight numbers retain their case and spacing.
+- Canonical answers are `arrivalFlight`, `arrivalTime`, `returnFlight`, `returnTime`; normalization migrates saved `answers.flightTime` into `returnTime` without replacing an existing new value. The builder's existing serialized `flightTime` remains a compatibility field; supplied return answers take precedence when mounting.
+- Day 1 starts no earlier than landing + 75 minutes and stays light. Late landings do not create after-midnight same-day stops. Departure cutoffs reserve two hours domestically or three internationally, plus the shared road estimate. The airport ride uses that road duration. An 8 AM return leaves no unlocked activities on the last day.
+- Pick plans for Oahu and any city display explicit arrival/return anchors, with “Est.” when the corresponding clock was skipped. The legacy template generator also honors both windows.
+- Each flight anchor has one visible Edit flight action. Its small sheet reuses the question's fields and picker; save reflows the two travel days. Locked stops retain their exact times and get one compact conflict notice with a working Edit action. Long notice text truncates on one line; the full text remains in its title and accessible text. Stops that no longer fit remain available in ideas.
+- Untouched curated-demo schedules remain unchanged. The sample arrival is labeled as a sample, and the unspecified departure gets no invented flight time. Editing separates its formerly combined departure/airport card into an airport ride and a flight. Flight anchors reconstruct before saved/shared builder imports and survive remounts. Existing `add-flight-time` and `db-flight-time` test IDs are retained alongside `edit-flight`.
+- No assets added or renamed; all index.html cache-bust references and the 26-asset assertion remain unchanged. No network, browser execution, commits, pushes or remote changes.
+
+Tests:
+- `tests/test_flights.js`: route and time-zone estimates; route-derived return estimate; invalid clock parsing; domestic/international cutoff math; saved-answer migration and precedence; verbatim flight number; Oahu/generic and legacy cutoffs; late landing; locked conflict; middle-day stability; actual demo sheet save; separate airport ride; persistence/remount, shared builder import, and migration of a saved demo combined airport/flight card.
+- `tests/test_flights_step.py`: supervisor-only Playwright at port **8874**, using `test_full.new` and `test_wellness_home.serve_checks`. Covers 1280/390, Dates → Flights progress/order, shared picker to 5:30 PM, Skip/Est. arrival and departure, Oahu and mocked Seattle picks, 6:45 PM minimum day-1 activity start, one-line locked conflict and its Edit action, 8 AM return with only airport/flight items, unchanged middle days, verbatim flight number, overflow, demo editing, and screenshots under `/tmp/flights-*.png`.
+- Updated existing answer helpers, question-topic/progress audits, copy/wrapping audits, six-step core loops and transport editing/persistence assertions with comments explaining the changed flight flow. The default demo render assertion now checks its sample departure label and one shared editor instead of the removed old prompt.
+- PASS all **32** top-level Node suites (`tests/*.js` and `tests/*.cjs`), including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. PASS `py_compile` for all **51** Python test files. Chromium/Playwright and screenshot inspection remain supervisor-run.
+
+COPY-AUDIT (every added/changed visible or accessibility string):
+- Question: “Add your flights?”, “Optional · skip if you’re still deciding.”, “Keep your first evening easy.”, and “Times at your destination”. Each is a short standalone line at 390px; the flights question has no redundant fieldset heading.
+- Rows/fields: “Arrival”, “Return”, “Flight number (optional)”, example “HA 11”, return placeholder “Flight number”, “Lands · day 1”, and “Departs · last day”. Times use the existing picker and its unchanged “Choose time”/clock controls. No lookup claim or technical terminology is shown.
+- Progress: “Step {N} of 9” and matching accessible progress labels replace the trip flow's eight-step count. Existing “Skip”, “Continue →”, and “← Back” are reused.
+- Plan labels: “{typed number} · lands {time}”, “{typed number} · departs {time}”, “Est. lands ~{time}”, and “Est. departs ~{time}”; an entered number with an estimated clock keeps both the typed number and “Est.”. The clock column uses “Arrival” or “Return” to avoid repeating the time. Untouched demo labels are “Sample lands ~5:30 PM” and “Sample departure”; old “Add flight time”/“Flight (add your time)” prompts are replaced in the visible flight controls.
+- Sheet/actions: “Edit flight”, “Edit flights”, “Save flights”, “Cancel”, and live announcement “Flights updated”. Existing accessible “Flight time” is retained on the compatibility value. All details remain behind a tap.
+- Conflict: “{stop} conflicts with your flight · Edit”. One line with the action kept visible; full stop text remains available to assistive technology and in the text title. No silent move of a lock.
+- Travel-day fallback copy reuses existing “Check in and settle in”, “Evening meal near hotel”, “Leave for the airport”, “About 30 min. Settle in.”, and “About 60 min. Choose nearby.” New road-duration detail is “About {minutes} min.” and appears in the existing tapped card detail. No empty headings or visible booking-link placeholder.
+
+### Item D follow-up — Flight browser helper fixes
+
+Changes:
+- Changed the flight-step day selector to JavaScript `.at(i)` so `-1` selects the return day. Audited the remaining suite: its other negative indexes operate on Python lists, and Playwright `.first` is a valid Python property.
+- Fixed the shared flight-time helper's picker arithmetic to step the total minute difference. Previously, changing the sample arrival from 17:30 to 18:00 added an hour and then another 30 minutes, producing 19:00.
+- Verified the helper chooses arrival on day 1 and return on the last day. Added assertions for the chosen sheet field, completed save/sheet removal, exactly one retained hidden `db-flight-time` value, and canonical saved answer. Transport checks retain reload coverage and now also assert visible flight labels and canonical answers after reload.
+- App sheet save/reflect behavior is covered by the existing actual-builder Node regression; no production code, assets, test IDs, or existing uncommitted work were replaced. No network, browser execution, commits, pushes or remote changes.
+
+Tests:
+- PASS all 32 top-level `tests/*.js` and `tests/*.cjs` Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS `py_compile` for all 51 Python test files after the final test edits.
+- PASS all 9,216 quarter-hour start/target picker calculations, including 17:30 → 18:00 and noon → 09:00.
+- Existing browser suites retain shared `test_full.new` / `test_wellness_home.serve_checks` helpers and their existing ports (8874 flights, 8850 transport). Chromium and reload execution remain supervisor-run.
+
+COPY-AUDIT:
+- No visible or accessibility strings added or changed. New assertions verify existing “lands 6:00 PM” and “departs 9:00 AM” labels. No production copy or assets changed.
+
+### Item D follow-up 2 — Open flight demo from home
+
+Changes:
+- Fixed the curated-demo setup in `tests/test_flights_step.py` to use `open_home_flow` before clicking `demo-oahu`; the start form has no demo button. Added a comment explaining the corrected setup.
+- Changed the entered flight number and its visible-label/storage assertions to realistic `HA 11`. Retained all assertions; a comment points to the Node suite's existing verbatim-casing coverage.
+- Preserved existing uncommitted work. No production code, assets, test IDs, ports, commits, pushes or git remotes changed.
+
+Tests:
+- PASS all 32 top-level `tests/*.js` and `tests/*.cjs` Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS `python3` py_compile for all 51 Python test files. Browser execution/screenshots remain supervisor-run; flight checks retain shared helpers and port 8874.
+
+COPY-AUDIT:
+- No production visible or accessibility strings added or changed. Test-entered flight text changes from “hA 11” to “HA 11”; the expected existing flight label becomes “HA 11 · lands 5:30 PM”. No new UI copy or reading burden.
+
+### Item E — Ring trim
+
+Changes:
+- Pace rings show at most one priority suggestion: short sleep, a working rest-break button, or an easy-walk line. Removed duplicate recovery messages and the return-to-stay, pace-goal and exclusions paragraphs.
+- “How we count” preserves the disclosure testids and keyboard behavior. Its panel contains only nonempty Movement/Recovery groups with one credited-minute line per activity and one sleep-estimate sentence.
+- Last-day departure rings show sleep and the existing flight label, with no movement/recovery rings, values, goals or day-pace control. Individual traveler rings follow the same rule.
+- The rest action opens the existing Add booking form, prefills its name and focuses it. Existing short-night adjustment controls remain available without an additional ring suggestion.
+
+Tests:
+- Updated ring/check-in Node assertions and existing breakdown, ring-card and check-in Python assertions with comments explaining the copy trim; retained sleep calculation, goal personalization and nudge coverage.
+- Added Node checks for suggestion priority/count, removed paragraphs, empty-group omission, one disclaimer, and flight-day ring/goal omission.
+- Added `tests/test_ring_trim.py`, using `test_full.new` and `test_wellness_home.serve_checks` on port 8875 at 1280/390: Oahu normal/arrival/fly-home days, unique visible lines, disclosure opening, nonempty groups, removed prose, working prefilled rest form, no fly-home movement/goals, and overflow.
+- All `tests/*.js` and `tests/*.cjs` pass, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs. All Python tests compile. Chromium/Playwright and screenshots are reserved for the supervisor; no network used.
+
+COPY-AUDIT — every added/changed visible string:
+- `How we count`: short tap label; replaces “Details”/“Activity breakdown”.
+- `Sleep estimate: {bedtime}–{wake time}, with time to wind down and get ready.` / `Sleep estimate allows time to wind down and get ready.`: one sentence behind the tap; replaces the long return/departure explanation.
+- `{activity} · {credited minutes} min`: one activity per list row; replaces formulas/cap prose. Existing activity names remain source content; Movement/Recovery headings appear only with entries.
+- `Short night · {hours}h{minutes} sleep` / `Short night · {hours}h{minutes} before your flight`: one priority line, with the flight variant using the preceding sleep window.
+- `No rest today · Add a pool break?`: one-line actionable button; opens a prefilled form.
+- `Pool or stretch break`: editable name in that form.
+- `Easy day — a short walk is plenty.`: one-line fallback when recovery exists and movement is low.
+- `Sleep {hours}h{minutes} · {existing flight label}`: fly-home compact value, with the existing estimated departure wording when applicable; `Flight time not set` is the standalone renderer fallback.
+- `Sleep`, `Movement`, `Recovery`, existing normal-day values/goals and `Plan estimates, not medical advice` retain their wording; the disclaimer is rendered once per caption-enabled ring block.
+- Removed entirely: “From getting back to…”, “Goals come from…”, “Not counted:…”, both “No recovery block…” variants and verbose per-activity math. No developer terms added to the UI. The advice and tap labels are sized for one line at 390px; activity/sleep details stay behind the tap.
+
+
+### Item E follow-up — Shared fly-home ring context
+
+Changes:
+- Traced all day-head rings: ordinary day cards, DayBuilder's selected-day card and print cards all use dayHeadHTML → paceDayHTML. Their scheduled items can replace the original airport ride with an untimed flight placeholder.
+- Added dayFlightContext, shared by dayRingContext, the day header and individual traveler rings. Detects the final plan day from its date and both raw/scheduled items, including airport rides, pick-path and any-city flight items. Does not depend on a potentially stale plan.end.
+- Preserve scheduled times and recover omitted raw departure items. For the untouched Oahu demo's relative-time ride, use its explicit “leave 4:55 AM” description when no numeric time exists. Sleep now uses the preceding night (5h55 in the demo), rather than an untimed default of 8h.
+- Fly-home headers omit move/recovery rings, the rest action, day pace and duplicate sleep-adjustment suggestions. Traveler rings share detection and sleep inputs.
+- Updated the pace disclosure assertion and the all-day pace-control assertion with comments explaining Item E. Audited all Python tests for removed copy; remaining matches are negative assertions and are retained.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all Python tests.
+- Added actual-app/DayBuilder Node regression coverage for the original Oahu departure, an omitted raw airport ride, sleep-only rings, flight label, no rest action/day pace and the exact 5h55 preflight sleep line. Existing template/pick and group suites cover other plan paths.
+- Extended supervisor-run test_ring_trim.py (existing shared new/serve_checks helpers, port 8875, 1280/390) to assert the exact short-night message and absent rest button. Browser execution/screenshots remain supervisor-run.
+- No assets added/renamed; cache tags and asset counts unchanged. Existing uncommitted changes retained; no commits, pushes, remote changes or network access.
+
+COPY-AUDIT — every visible string added/changed:
+- No new copy. Correctly displays the existing “Sleep {hours}h{minutes} · {flight label}” and “Short night · 5h55 before your flight” on the demo departure; existing flight labels remain unchanged. Short-night advice stays a single line; calculation details remain behind “How we count”.
+- Removes departure-day movement/recovery values and goals, “No rest today · Add a pool break?”, day pace and sleep-adjustment controls. Other days retain them.
+- The updated test expects the existing Item E label “How we count” instead of “Details”. No testids or accessibility strings renamed; no developer terminology added.
+
+### Item F — Simplify day actions
+
+Changes:
+- Replaced the day Add disclosure, ideas chest and inline booking form with one row under the day header: Reset to suggested / + Add my own. Shared DayBuilder rendering covers curated demo, legacy merged plans, pick-path, any-city and draft days. Kept Day options only when rain/relax controls exist; removed the duplicate legacy custom-item form and handler.
+- Reset uses inline Reset/Cancel confirmation, restores suggestions, preserves locked/booked items and their stored times, and avoids duplicating protected suggestions.
+- Added a compact modal sheet with required Name/Start, optional End/free-text Place, Booked, Add and Cancel. No place search. Missing fields show one validation line; invalid end times keep the existing validation. Optional end estimates one hour. Items use the existing custom-item insertion, blocking, conflict and reflow paths. Booked items have a static Locked tag; unbooked choices survive compact export/import.
+- Escape/Cancel closes the sheet and restores focus. Opening focuses Name; the pool-break shortcut prefills Pool or stretch break and focuses Start. Preserved the separate draft Activities library and untimed-item scheduling controls.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all Python tests.
+- Extended test_plan_render.cjs to drive real reset confirmation/cancel, check protected booked/user-locked items, restore missing suggestions without duplicates, verify old controls absent and preserve booked/unbooked sharing and tags.
+- Added supervisor-run tests/test_add_simplify.py using test_full.new and test_wellness_home.serve_checks, port 8876, at 1280 and 390: removed controls, action row, validation, optional fields, timed items with/without Booked, static Locked tag, protected reset, persistence, focus, Escape/Cancel and overflow.
+- Ported legacy reset/booking/tray flows and screenshot targets with Item F comments. Reflow/drag fixtures remain; removed day-chest checks now assert its absence or exercise Swap/the separate draft activity library. Ring test now expects the prefilled sheet and Start focus.
+- Chromium/Playwright and screenshots remain supervisor-run; none executed in this sandbox. No network, commits, pushes or remote changes. No assets added/renamed; existing cache tags and asset count unchanged.
+
+COPY-AUDIT — every visible string added/changed:
+- `Reset to suggested`, `+ Add my own`: the only two day action labels, on one row at 390px.
+- `Reset this day? Locked and booked items stay.`: one inline confirmation line; `Reset` / `Cancel` are explicit actions. `Reset to suggested.` replaces the longer reset announcement.
+- `Add my own`: sheet title. `Name`, `Start`, `End`, `Place`, `(optional)`, `Booked`: short field labels; End and Place show the optional hint. Place is plain free text.
+- `Add` / `Cancel`: sheet actions. `Add a name and start time`: one-line required-field validation. `End must be after start`: existing validation retained in the sheet.
+- `Item added.`: short live announcement; an overlap appends the existing `Overlaps {item title}` feedback. Existing day conflict notices remain available after the sheet closes.
+- `Locked`: existing static booking tag, now only for Booked custom items; unbooked custom items can use the normal lock control.
+- `Pool or stretch break`: existing editable prefill, now in the sheet with Start focused.
+- `Day options`, `Make this day more relaxing`, `Rain backup`: retained only where those options exist; no empty heading or duplicate add action.
+- Removed day copy: `+ Add`, `Activity ideas {N}`, `+ Add booking`, `Anchor it`, `+ Add your own item`, and the legacy `Add your own item` form. No developer terminology or place-search hints added. Details stay in the modal; no duplicate day instructions.
+
+### Item F follow-up — Supervisor failures
+
+Changes:
+- Feature-detect content.querySelector before mounting untimed scheduling controls; retain the minimal Node stub unchanged.
+- Keep the four-child day header assertion and verify the separate action row is visible immediately below it. Scope the builder-level add-own modal to the page.
+- Reset regression now preserves La Mer's edited 6:00 PM–8:00 PM booking and explicitly removes/restores a non-booked suggestion.
+- Add-own detects locked overlaps from displayed schedule intervals, announces the short venue name, and retains one visible conflict notice without repeating the same rendered note.
+- Custom-item browser locators target the item title, with explicit count-one assertions to catch duplicate rendering rather than matching neighboring text in a pair.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all Python tests, including the updated dayview, time-entry, full-suite overlap and add-simplify checks (existing new/serve_checks helpers, port 8876).
+- Browser execution and screenshots remain supervisor-run. No assets added/renamed; cache tags and asset counts unchanged. Existing uncommitted changes retained; no commits, pushes, remote changes or network access.
+
+COPY-AUDIT — every visible string added/changed:
+- `Overlaps {short venue name}`: uses the existing short venue helper, yielding `Overlaps La Mer` instead of its long activity title. One conflict notice remains visible on the custom item; duplicate matching notes are suppressed.
+- `Item added. Overlaps {short venue name}`: existing live feedback now uses the same short venue name and displayed booking interval. No other labels, headings, instructions or validation strings changed; no developer terminology added.
+
+### Item F follow-up 2 — Plain suggestion reset checks
+
+Changes:
+- Updated test_add_simplify.py and test_time_entry.py to remove the plain Grab-and-go breakfast suggestion (`2026-11-26-4`). Comments explain that generated return transport re-derives after removal and can change title.
+- Both checks capture the strong activity title before removal, assert absence after removal, and assert exactly one restored item with that same title after Reset. Retained reset-cancel and protected-item assertions.
+- Tests and this log only; existing uncommitted app changes retained. No assets or testids changed.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 53 Python test files.
+- Playwright execution remains supervisor-run; existing shared helpers and ports unchanged. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Only test locators, assertions, explanatory comments and this log changed; no UI copy added or changed.
+
+### Item F follow-up 3 — Removal destination and reset zones
+
+Changes:
+- Scope breakfast day-list assertions in test_add_simplify.py and test_time_entry.py to data-db-zone=day. Assert the removed item is visible in the Needs a time tray; after Reset assert one restored day row, its original title, and no tray copy. Comments explain the destination and reset behavior; existing cancel/protection checks remain.
+- Replace both removal action labels (visible menu text and accessible label/title) with Remove from day. Preserve existing testids and scheduling actions.
+- Case-insensitive audit of js/ for ideas/Activity ideas found no remaining removed-tray UI references. Remaining matches are internal comments, local-plan catalog guidance and the working recommendation refresh button; these describe their actual content/actions.
+- Added Node render assertions and supervisor browser assertions for the new removal label. No assets added/renamed; cache tags and asset counts unchanged. Existing uncommitted changes retained; no network, commits, pushes or remote changes.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 53 Python test files.
+- Playwright and screenshots remain supervisor-run; updated browser tests retain shared helpers and existing ports.
+
+COPY-AUDIT — every visible string added/changed:
+- `Remove from day`: replaces `Move to ideas` in the tapped action menu; short enough for one line at 390px, with no duplicate destination instructions.
+- `Remove from day {activity title}`: replaces `To ideas {activity title}` in the action's aria-label and title. Identifies the same action and item for assistive technology.
+- No other UI strings changed. Removed items appear under the existing `Needs a time` heading with existing scheduling actions; no dead ideas-tray control or developer terminology added.
+
+### Item F follow-up 4 — Time whitespace and tray scope
+
+Changes:
+- Compare the locked photo time using text_content() with all whitespace removed on both sides, avoiding inner_text layout line breaks. Added an explanatory comment; the reset-preservation assertion remains.
+- Locate the pending breakfast from the page's Needs a time section because it sits outside db-day-list. Added an explanatory comment; removal and reset assertions remain.
+- Tests and this log only; existing uncommitted changes retained. No assets, testids or application code changed.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 53 Python tests using python3.
+- Playwright remains supervisor-run. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- None. No UI strings added or changed.
+
+### Item G — Header Share menu
+
+Changes:
+- Replaced the bottom export row and heading with one icon + Share button beside the trip title. The title truncates to keep the button on the same row at 390px.
+- Kept existing action and wrapper testids and export handlers. The shared and finished plan render the same header menu. Added an internal Item I insertion hook without an Invite friends action.
+- Added menu semantics, expanded state, arrow/Home/End navigation, Escape/outside/action dismissal and toggle focus restoration. Hide Share controls in print.
+- Updated existing export tests to open the menu first, with an explanatory helper comment. No assets added or renamed; existing cache tags and asset counts remain unchanged.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 54 Python tests.
+- Added tests/test_share_menu.py using test_full.new and test_wellness_home.serve_checks, port 8877: desktop/mobile header placement, footer removal, overflow, menu keyboard/focus/dismissal, print invocation, copy toast, calendar download, share modal, print hiding, finished/shared headers.
+- Browser execution and screenshots remain supervisor-run; Chromium was not run. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- `Share`: new single header button and menu accessible name; one short line at 390px, inline icon hidden from assistive technology.
+- `Print / Save as PDF`, `Copy as text`, `Share link`, `Download calendar`: existing labels moved unchanged into the tapped menu, each on one line.
+- `Share link`: replaces the modal title `Share & export` to describe the selected action.
+- Removed the bottom `Share & export` heading and export row entirely. No empty footer or duplicate action labels remain visible. No developer terminology added.
+
+### Item G follow-up — Visible outside-click target and mobile title
+
+Changes:
+- Replaced the hidden mobile subtitle outside-click target with the visible trip heading. The comment explains the mobile behavior; assert the opened menu closes, restores toggle focus, and resets aria-expanded.
+- Added header checks for title ellipsis styles, positive title width, no title/Share overlap, and Share within the viewport. At 390px, temporarily exercise a long title, assert actual text overflow and button visibility/placement, then restore the original title.
+- Retained existing uncommitted changes, shared browser helpers and port 8877. No application code, assets, testids, cache tags or asset counts changed in this follow-up.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 54 Python tests.
+- Playwright execution and screenshots remain supervisor-run; Chromium was not run. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- No product UI copy added or changed. The temporary browser-test fixture `A long trip title with plenty of room to explore Oahu` exercises truncation and is restored immediately afterward; it is not shipped UI copy.
+
+
+### Item H — Good to know + book links
+
+Changes:
+- Moved local guidance out of the plan footer into one collapsed Good to know row in Trip prep, with an aria-expanded toggle. Long static facts expand individually; added an official entry-guidance link and destination emergency numbers.
+- Removed Booking searches, Book this, secondary search blocks, the redundant Bookable badge and the dead demo booking modal. Contextual links reuse the partner URL builder with target="_blank" and rel="noopener sponsored". The single fee disclosure is inside Good to know.
+- Added Book flights to the flights step and arrival/return item details; Find a hotel beside the hotel control only without a hotel; Book for ticketed activities and Reserve for meals. Locked/booked stops have no Book/Reserve action. Flight searches remain available on fixed flight anchors.
+- Unified booking eligibility with persisted Trip prep checks, deduplicated venue labels and retained checked rows. Removed or locked/booked stops drop out of prep; checking a need keeps its plan link. Ticket flags survive any-city place results, scheduling and builder conversion. Existing ride checklist migration remains covered.
+- No assets added or renamed; index cache tags and the travel-time asset count are unchanged.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 55 Python test files.
+- Added tests/test_book_links.py using test_full.new and test_wellness_home.serve_checks, port 8878, at 1280 and 390: collapsed/expanded guidance, footer removal, Kualoa Book, restaurant Reserve, locked La Mer suppression, flight links and step, conditional hotel link/checklist, checked-state reload persistence, unique prep rows, safe external links and overflow checks.
+- Updated prior affiliate/local-guidance checks for the single prep disclosure and distributed links; updated fixed checklist counts with comments explaining the new needs. Added Node eligibility checks for ticket flags, tours, free stops, meals and locked/booked suppression.
+- Chromium/Playwright and screenshots remain supervisor-run. No browser, network, commits, pushes or remote changes performed.
+
+COPY-AUDIT — every visible string added/changed:
+- `Good to know` replaces `Travel info`; one collapsed row in Trip prep.
+- `We may earn a fee` replaces the old long partner disclosure; appears once behind Good to know.
+- `Book flights`, `Find a hotel`, `Book`, `Reserve`: concise contextual link labels, one line at 390px.
+- `Book <activity>` and `Reserve <restaurant>`: dynamic checklist labels use existing venue/booking names, limited to eight words and 48 characters; long labels stay on one line. Existing Kualoa Jurassic Adventure, intro dive, Waikiki parasail and grouped Uber Reserve labels remain.
+- `Entry rules · Check official guidance`: one official-guidance link inside Good to know.
+- `Emergency: 911` (Oahu, Cancun, Banff, Costa Rica, New York), `Emergency: 112` (Lisbon, Reykjavik, Bali, Barcelona), `Emergency: 110 police · 119 ambulance` (Kyoto), `Emergency: 112 from mobile` (Cape Town): one destination fact, expandable if long.
+- Removed visible `Booking searches`, `Book this`, `Find/Book this · Secondary search options`, `Bookable`, partner headings and footer booking instructions. Removed the unused demo booking modal's title, explanation and buttons; no replacement dead UI.
+- Existing local time, currency, languages, plugs, voltage, tipping, weather/rate status and source copy are unchanged; static fact text now expands in place on tap without duplicating it.
+
+
+### Item H follow-up — Booking detail targets and guidance facts
+
+Changes:
+- Target the Kualoa Jurassic Adventure card by its exact data-db-id, rather than the locked shuttle. Assert Book inside its expanded DayBuilder detail panel; retain locked La Mer suppression and add Senia/food-court suppression checks. Use Dinner at the Kahala for the unlocked sit-down reservation check.
+- Carry ticket/tour booking metadata from the current DayBuilder item into itemArticle; both builder details and legacy itemArticle reuse bookingLink. Exclude food courts, counter spots, food stalls and grab-and-go meals from reservation eligibility.
+- Render static local facts as paragraphs under one collapsed Good to know disclosure. Remove empty fact disclosures and their obsolete styles; retain full fact text, the live clock node and the single fee disclosure. Wire the toggle to its content region with aria-controls.
+- Fix the full-suite disclosure check to reset the helper-opened row before clicking it. Count attraction links across mounted days, including Lisbon; explicitly assert the locked Diamond Head card has no booking action and the unlocked Kualoa expanded panel does.
+- Preserve existing testids, assets, cache tags and asset count. Keep prior uncommitted changes.
+
+Tests:
+- PASS all 32 tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 55 Python test files.
+- Extend existing tests/test_book_links.py (test_full.new + test_wellness_home.serve_checks, unique port 8878) and tests/test_full.py; add Node eligibility regressions for takeaway/food-court exclusion and sit-down dinner inclusion.
+- Browser execution and screenshots remain supervisor-run. No Chromium, network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- No visible strings added or rewritten. Existing Good to know, We may earn a fee, local facts, guidance/source/status copy, Book, Reserve and Book flights retain their text.
+- Static guidance, timezone, local time, currency/languages, plugs/voltage, emergency and tipping facts move from empty summary rows to paragraphs behind the single Good to know tap; no duplicate copy or empty fact headings remain. The collapsed row stays one line at 390px.
+- Reserve is removed from food-court/counter/grab-and-go stops; eligible sit-down restaurant and ticketed activity actions remain within their expanded detail panels.
+
+### Item I — Accounts + group trips
+
+Changes:
+- Add the public gonow-8e9e8 configuration and lazy Firebase v10 modular client. SDK imports happen on account intent, an email-link return, or a remembered session; rejected imports and timeouts preserve guest planning. A configurable SDK base and injectable SDK/importer isolate tests.
+- Add Google and email-link sign-in, name-only anonymous joining, an initials account button next to Share, account details/sign-out, and per-user first-device sync choices. Debounced edits and deletions sync private trips; newer timestamps win dashboard merges, including serialized Firestore timestamps. Not now does not bulk-upload existing trips.
+- Add Invite friends to the existing accessible Share menu. Create owner/member group documents and 36-character random invites; join by reading the invite, updating only self with joinInvite, then subscribing. Reuse existing invites and restore subscriptions for remembered sessions.
+- Add live votes, up to three voter initials plus a total, member checkout waiting state, vote-prioritized scheduling, owner locks, member time/move/remove/swap suggestions, and owner approval/dismissal. Remote additions announce one debounced polite toast. Account and longer group text remain single-line; email details open on tap.
+- Add Firestore rules and Firestore-only emulator configuration, with no hosting/deployment targets. Keep all existing testids and cache tags; asset-count regression now expects 29 assets.
+
+Tests:
+- PASS all 33 top-level tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS Python compilation for all tests, including new tests/test_accounts.py.
+- Add tests/test_cloud.js for rejected/timed-out loading, identity transitions, passwordless email settings/completion, once-per-user sync choices, upload/decline/edit/delete behavior, newer-wins merges, invite-read → self-update ordering, stable vote sorting, member suggestions and owner application.
+- Add local ESM Firebase fixtures with in-memory identities/documents, snapshot relays, remote Alex additions, and load-failure controls. No Firebase requests, real accounts, or production writes are used in these tests.
+- Add tests/test_accounts.py using test_full.new and test_wellness_home.serve_checks on unique port 8879 at 1280/390: blocked SDK guest planning, mocked sign-in/sync, invite copying, a separate name-only member context, remote announcement, card voting, owner lock/member time suggestion/owner approval. Separate contexts explicitly relay mock snapshots.
+- Add tests/rules/firestore.rules.test.mjs for supervisor execution with @firebase/rules-unit-testing v3 against the local emulator: private account access, owner creation/deletion, member read/votes, forbidden membership/lock/owner changes, valid/invalid joins, forged additional members, and authenticated/unauthenticated invite access. It is isolated from the plain Node runner.
+- Real-versus-mocked: Node SDK behavior is mocked; browser tests are authored for the same local mocks. Chromium, screenshots, and emulator rule execution remain supervisor-run and have not run here. No installation, network, deployment, commit, push, or remote changes.
+- Update existing Share keyboard/menu assertions with an explanatory Item I comment: Invite friends is now the fifth/final action; preserve export and focus checks.
+
+COPY-AUDIT — every visible string added/changed:
+- `Sign in`, `Continue with Google`, `Email me a link`, `Email`, `Send`: short account entry/button labels; the email form sits behind one tap.
+- `Check your email for the link`, `Sign-in isn’t available right now`: single-line sheet feedback; blocked loading leaves guest planning usable.
+- `Name`, `Join with just a name`: invite-only name entry and anonymous-join action.
+- `Save your trips on this device to your account?`, `Yes`, `Not now`: one compact line plus two actions; remembered separately for each account.
+- `Account` (accessible avatar label), `Sign out`, dynamic initials and the account name/email: one account identity line inside the sheet; long identities truncate. `Traveler` is the fallback name when a profile has none.
+- `Invite friends`, `Invite link copied`, `Couldn’t copy the invite link`: one menu action and one-line feedback.
+- `<name> added <place>`: one debounced, polite, single-line announcement; long names/places truncate visually.
+- Voter initials and `👍 <N>`: compact card annotation, up to three initials followed by the total when needed; no extra heading.
+- `Waiting for <owner> to check out`: replaces the member’s checkout action; single line with truncation for long names.
+- `Time`, `Send suggestion`, `Cancel`: member’s locked-time sheet uses concise existing-style controls.
+- `<name> suggests <time/change> for <place> ·`, `Approve`, `Dismiss`: one suggestion row with truncated venue text and visible actions. Change labels are `a new day`, `moving up`, `moving down`, `a new place`, `a swap`, `removing it`, or `a change`; internal action identifiers never appear as copy.
+- `Sent to <owner> for OK`: one-line member feedback after a locked-item suggestion.
+- `Close` and `×`: sheet dismissal label/icon. Existing Share/export, planner, lock, move and swap labels retain their copy and testids.
+
+### Item I follow-up review — consent, invitations and group permissions
+
+Changes:
+- Confirmed run26 already moves the single account button into the Share action cluster, with topbar fallback. Added browser assertions for placement and uniqueness.
+- Local account writes now require the per-UID `yes` choice, including when the debounce fires; auth changes preserve choices. Remote trips still load. Owner group snapshots and private uploads strip nested group objects and undefined fields.
+- Groups use random document IDs, separate from local trip IDs. Per-owner/per-trip saved associations reuse invitations across auth changes without resetting members, votes or locks. Existing booked/locked items seed locks.
+- Join completion is serialized, waits for the entered name, and retains the invitation until joining succeeds. SDK failure leaves guest boot quiet and the sign-in action available; feedback retains the existing short line without internal error codes.
+- Rules deny invite enumeration and preserve invite ownership and referenced-trip ownership. Members cannot write trip snapshots, ownership, membership or locks; votes can change only their own entry, suggestions cannot replace/delete another person's suggestion, and plan changes target one unlocked item. Owner approval remains required for locked changes.
+- Fixed emulator setup by caching the admin database and reused authenticated databases. Mock writes reject undefined/deep recursive shapes.
+
+Tests:
+- PASS all 33 top-level Node JS/CJS suites, including every specifically requested suite; PASS compilation of all 56 Python tests. Rechecked after final changes.
+- Expanded mocked cloud coverage for negative/unanswered consent, later explicit consent, sanitized documents, random group IDs for identical local IDs, preserved repeat invitations, existing booking locks and entered member names.
+- Expanded supervisor browser coverage on port 8879 at 1280/390: explicit PASS output, a visible pick-card vote, single Alex join, real booked La Mer retaining its visible time before approval, then owner/member visible updates after approval. Existing dinner assertions were changed because the regression must cover a pre-existing booked item rather than a newly toggled generic dinner.
+- Expanded supervisor emulator cases for exact authenticated invite GET, unauthenticated GET denial, collection query denial, invite ownership/retargeting, snapshot and locked-content bypasses, impersonated votes/suggestions, deletion of another person's suggestion and multi-item edits.
+- Playwright/screenshots and emulator execution remain supervisor-side; none ran here. No network, commits, pushes or remotes used.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Existing account, sharing, error, voting and suggestion copy is retained. New change metadata is internal and produces no empty notice. Test PASS lines are console output, not product copy.
+
+### Item I targeted-test follow-up — whitespace and empirical rules results
+
+Changes:
+- Preserve existing app changes; fix the booked La Mer comparison in tests/test_accounts.py by removing all whitespace from both text_content values. Check unchanged time before owner approval and equal owner/member time after approval, retaining the visible 7:00 PM and saved-plan assertions.
+- Audit other captured inner_text comparisons: normalize reset-title comparisons in test_add_simplify.py and test_time_entry.py and the unchanged-traveler check in test_checkin.py. Add comments explaining that layout whitespace must not affect content equality; retain the assertions.
+- No app behavior, testids, assets, cache tags or asset-count changes.
+
+Tests:
+- Local validation: PASS all 33 top-level tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs; PASS py_compile for all 56 Python tests.
+- Supervisor run27 empirical result: all 12 Firestore rules tests PASS, 0 fail against the local Firestore emulator using Java 21 and project demo-gonow-rules. Tests were copied unchanged into ../fbtools/tests/rules/ to resolve installed npm dependencies, with firestore.rules copied into ../fbtools/firestore.rules. Command in ../fbtools: `node --test --test-reporter=tap tests/rules/firestore.rules.test.mjs`.
+- Real versus mocked: the 12 rules tests exercised actual local emulator rule enforcement. Node account/client tests and authored Playwright account flows use local SDK mocks and relayed in-memory snapshots; they do not verify production authentication. No real anonymous sign-in attempted, real accounts, production writes, deployment or authentication.
+- Playwright and screenshots remain supervisor-run; these Python changes were compiled here, not browser-executed. No network access, commits, pushes, git writes or remote changes performed.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Only test comparisons, explanatory test comments and this log changed; all visible product copy remains unchanged.
+
+### Item I test-only follow-up — approved dinner schedule shape
+
+Changes:
+- Correct tests/test_accounts.py to read DayBuilder.schedule().days by date and its items by ID. exportState() returns compact share data, not the resolved schedule shape.
+- Validate both La Mer's resolved start and preferred time equal 1140 (7:00 PM) after owner approval. Retain the cloud.planContent check and all following visible owner/member time assertions, including equality after relaying approval. Add an explanatory comment for the changed assertion.
+- No application code, testids, assets or cache tags changed.
+
+Tests:
+- PASS all 33 top-level tests/*.js and tests/*.cjs Node suites, including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS py_compile for all 56 Python tests. Playwright execution remains supervisor-run; no browser execution attempted here.
+- No network access, commits, pushes, git writes or remote changes performed.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Only a test assertion, its explanatory comment and this log changed; product copy remains unchanged.
+
+### Item I actual approval fix — local booked dinner updates
+
+Changes:
+- Convert DayBuilder's compact share export with importForPlan before applying accepted changes or member locks. Materialize untouched dates so approval also reaches an unchanged booked item. Persist runtime days/items and remount to update the visible schedule while retaining booked/locked state.
+- Invalidate applied-change signatures when a different trip snapshot arrives and remount the owner's builder too. Reapply accepted planContent over older snapshot content; record signatures before rendering so duplicate approval events do not apply twice.
+- Preserve the existing 1140 and visible 7:00 PM browser assertions; strengthen owner/member runtime checks to require booked and locked.
+
+Tests:
+- PASS all 33 top-level tests/*.js and tests/*.cjs Node suites, including all specifically requested suites.
+- PASS py_compile of all 56 Python tests; recompiled test_accounts.py after strengthening its assertions.
+- Added real-builder Node regression coverage for owner approval, duplicate apply events, stale trip snapshots, member snapshot handling and reopening, checking preferred/start 1140 and booked/locked throughout.
+- Existing supervisor Playwright flow retains port 8879 and visible owner/member 7:00 PM checks. Browser execution/screenshots remain supervisor-side. No network, commits, pushes or remote changes.
+
+COPY-AUDIT — every visible string added/changed:
+- None. Product copy, assets, cache tags and testids remain unchanged.
+
+### Final audit pass — ring deduplication, flight titles, reusable browser evidence
+
+Changes:
+- Fly-home rings show the sleep duration once in visible copy, retain the flight summary, and offer one concise wind-down action. The SVG label now includes meaningful sleep and flight information; no movement or goals return.
+- Flight cards keep the Arrival/Return row labels and shorten their visible titles to flight number plus time (or an explicit estimate/sample). Full direction, number and time remain accessible and in the existing expanded details. Flight-only phone layout reserves room for the time; unusually long manually entered identifiers can ellipsize while retaining their full accessible label. No global body text reduction.
+- Added `tests/test_batch_audit.py`, supervisor-only port 8894, using `test_full.new` and `test_wellness_home.serve_checks`. It captures full-page PNGs, adjacent visible-text files and `audit-records.json` at 1280/390, reports PASS/FAIL per capture, preserves failure evidence and continues independent cases. Default output is `/workspace/gonow-origin-fix/shots-batch/audit/`; `GONOW_AUDIT_DIR` overrides it.
+- Audit covers both home modes; origin start; every reachable question; fork-no and fork-yes paths; stay within musts; curated activity/food picks and details; estimated/provided/sample flights; confirm draft; prep collapsed/expanded and its booking checklist; normal/fly-home days; expanded attraction/restaurant/flight cards; flight/custom-item sheets; ring breakdown; Share; dashboard summary; draft and generated finished plan; November 28 check-in questions and saved state; sign-in/email and group name join/member suggestion/owner suggestion using local SDK fixtures.
+- The current app has no separate Moments/evening/completed-day routes. The evidence records explicitly document these unavailable states and capture the actual post-save day summary instead of inventing routes or completion data.
+- All SDK/auth data are explicitly labeled MOCKED local ESM fixtures; weather/local data use existing deterministic fixtures and Austin offline fallback. External requests are blocked before initial navigation; no real SDK, auth, email, accounts or cloud writes.
+- No assets added/renamed; index.html asset cache tags and travel-time asset count remain unchanged. No git writes, remotes, commits, pushes or deployment.
+
+Tests:
+- PASS all 33 top-level Node suites (`tests/*.js` and `tests/*.cjs`), including daybuilder_logic.js, check-engine.cjs, check-ui.cjs, test_photo_provenance.cjs and contrast_tokens.cjs.
+- PASS Python compilation: all 56 existing tests plus the new audit script (57 total).
+- Updated Node renderer/ring regressions and Python ring/flight/transport/full assertions with explanatory comments. Flight geometry checks compare real text-range height against computed line-height and full text width/scrollWidth against available width; standard HA 11, skipped estimates and curated samples must fit without clipping.
+- [ ] Supervisor: run relevant Python suites and `python3 tests/test_batch_audit.py`.
+- [ ] Supervisor: review generated desktop/390px images and JSON/text evidence, including failures. Browser execution, geometric fit and visual checklist completion remain PENDING; no supervisor images were reviewed here.
+
+COPY-AUDIT — every visible string added/changed:
+- Fly-home short-night advice: `Short night · 5h55 before your flight` (duration varies) → `Wind down early tonight`. The existing `Sleep 5h55 · Est. departs ~10:00 AM` summary remains the sole visible duration.
+- Provided flight titles: `HA 11 · lands 5:30 PM` → `HA 11 · 5:30 PM`; departure equivalents remove `departs` while preserving the provided identifier and full time. Arrival/Return supplies direction.
+- Estimated flight titles: `Est. lands ~11:30 AM` → `Est. ~11:30 AM`; `Est. departs ~10:00 AM` → `Est. ~10:00 AM` (times vary). `Est.` and `~` remain explicit.
+- Curated sample arrival: `Sample lands ~5:30 PM` → `Sample ~5:30 PM`. Curated sample return: `Sample departure` → `Sample ~10:00 AM`. Both retain their sample status and accessible direction.
+- Existing expanded explanatory wording remains available on tap. No other visible product strings added or changed; audit filenames, diagnostics and mock labels are test evidence only.
+
+## Final batch completion (box, Grok Bot — no Codex), 2026-11-16
+
+Repair:
+- `js/accounts.js` `refreshStorage()` only writes `textContent` when the text changes (the unconditional write re-triggered its own MutationObserver → browser hang). Same guard for the member "Waiting for … to check out" label.
+- Save-state copy: guest home `Saved on this device. Sign in to sync.`; signed-in with sync on and last upload succeeded → `Saved to your account`; Not now / failed upload → `Saved on this device`. New `tests/test_storage_summary.js`.
+
+Any-city robustness:
+- Overpass: second attempt uses an alternate public instance (`overpass.kumi.systems`), 25 s per attempt. Failures are never cached.
+- Loading screen offers `Skip · plan without picks`; failure screen offers `Try again` + `Plan without picks`.
+- `Popular nearby` heading shown on both any-city pick pages (GoNow Picks still Oahu-only).
+
+Swap:
+- Meals swap only for restaurants serving that meal (a meal may shorten to the slot: ≥15 min breakfast, ≥30 min lunch/dinner); activities never get restaurants. Without coordinates on both ends the plan's existing gap is kept instead of a guessed 30-min ride. A swapped-in restaurant keeps kind `meal`. No Swap on check-in/check-out rows. Empty state `Nothing else fits this time`. Tests in `tests/test_swap.cjs`.
+
+COPY-AUDIT (visible strings changed in this pass):
+- Check-in (group): `You's movement goal eased…` → `Your movement goal eased…`; `You is sore — offer a gentle X instead of Y for You; others keep their plan.` → `You’re sore · Gentle X?` + `Details` tap: `Replaces Y for you only. Others keep their plan.` Named travelers: `Alex is sore · Gentle X?`. Button `Swap for You` → `Swap for you`.
+- Pace summary: no trailing ` · ` when no activities are chosen.
+- Sleep question: one line (`Helps us ease you into local time.` / local mode `Helps us keep plans out of your sleep.`) + `About sleep times` tap holding the 10:30 PM–6:30 AM default and clear-both rule.
+- Local-mode style option `Staying at the hotel / Pool, spa, great food on site` → `Taking it easy / A quiet break, pool or spa` (same value `hotel`; trip mode unchanged).
+- Fly-home ring: `Wind down early tonight` → `Short night · Rest on your flight`. Normal-day sleep nudge: `Short night · 6h10 sleep` → `Short night` (duration already in the ring summary once).
+- Good to know: `Currency: USD · Languages…` + `Uses US dollars (USD)` → single `Uses US dollars (USD) · Languages…`.
+- Forecast labels: `These dates are inside the live forecast window…` → `Live forecast when it loads.`; seasonal → `Typical for the season, not a forecast.`
+- Plan header: `Edit picks` sits in the Draft/Confirm (or Trip prep) row; hotel button reads `Add your hotel` when no hotel is set; non-Oahu `Local times` → `Times shown are local`; `Find a hotel` and the hotel button have an 8px gap; titles may use two lines at ≤600px instead of `Oahu, ...`.
+- Sample flight titles: `Sample ~10:00 AM` → `Sample · ~10:00 AM` (arrival likewise; still one line at 390).
+- Trip prep budget: removed the duplicate inner `Estimates` heading.
+- Sign-in sheet: lead line `Sync your trips and plan with friends.`, Google button primary; sync dialog `Sync your trips?` / `Copies trips on this device to your account.` / `Yes, sync` · `Not now`.
+- Cache tag `originfix-20261116` → `anycity-20261116`.
+
+Tests updated with comments (not weakened): test_book_links (USD once), test_rings_card / test_track_mode (duration once), test_rings / test_plan_render / test_ring_trim (fly-home line), test_share_menu (two-line clamp ≤600px), test_full / test_plan_render (sample flight title), test_travel_time (cache tag), test_any_city (retry + alternate host), test_placesource (alternate endpoint, 502 recovery).
+Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deployed.
+
+## Nov 17 fix batch (cache tag `fixes-20261117`)
+- **New suites**:
+  - `test_fixes_batch.py` (186 checks):
+    - A cold-load `#join` invite.
+    - A returning member and the owner reopening an invite.
+    - A malformed suggestion.
+    - Stop sharing.
+    - An owner choosing "Not now" plus a stale snapshot.
+    - Scoped Undo.
+    - Any-city Edit picks/Swap after reload.
+    - Reopening a Draft.
+    - Edit time: Start/End/Duration sync, Leonard's 6–8 AM, a locked booking, persistence after reload.
+    - The time difference.
+    - Plug adapter.
+    - Sample bookings.
+    - Copy-text flights.
+  - `test_community.py` (62 checks, 390 + 1280): Community and Profile pages.
+  - `test_google_places.js`: Places (New) mask, mapping, hours, rating, fallback, cache, prune.
+  - `test_community_unit.js`: public-post scrubbing and caps.
+  - `tests/rules/security.rules.test.mjs` and `tests/rules/community.rules.test.mjs`: emulator only.
+- **`tests/serve_site.py`**: the test server serves an empty Places key, so no suite calls Google. `GONOW_LIVE_PLACES=1` uses the real config. `test_full.is_place_url` also aborts `places.googleapis.com`.
+- **Updated expectations**:
+  - Good to know is removed. `local_info_checks` now checks the time-difference line and the plug adapter.
+  - Affiliate disclosure removed.
+  - Locked and booked items open the time editor directly (no unlock step) and keep their lock.
+  - Moving Start keeps the duration and moves End.
+  - Sample Senia "outside your dates" is no longer flagged.
+  - The share menu has "Share to community".
+  - The asset count is 31.
+  - New any-city failure copy.

@@ -4,7 +4,8 @@
         return JSON.parse(JSON.stringify(x));
     };
     function matchDestination(text) {
-        var t=(text||'').toLowerCase().trim();
+        var normalized=window.GoNowPlaces?window.GoNowPlaces.normalize(text).name:(text||'');
+        var t=normalized.toLowerCase().trim().replace(/ \((?:NYC|JFK|EWR|LGA|HNL)\)$/i,'');
         var aliases= {
             oahu:['oahu', 'honolulu', 'waikiki', 'hawaii'], kyoto:['kyoto', 'japan'], lisbon:['lisbon', 'portugal'], cancun:['cancun', 'cancún', 'mexico', 'riviera maya'], reykjavik:['reykjavik', 'reykjavík', 'iceland'], bali:['bali', 'indonesia'], barcelona:['barcelona', 'spain'], banff:['banff', 'canada'], costarica:['costa rica', 'arenal', 'la fortuna'], capetown:['cape town', 'south africa'], newyork:['new york', 'nyc', 'new york city']
         };
@@ -212,12 +213,21 @@
             var rejected=[];
             day.items=day.items.filter(function(item){
                 Object.assign(item,window.DayBuilder.operatingRules(item));
-                var reason=window.DayBuilder.blockedOn(Object.assign({},item,{preferred:window.DayBuilder.parseClock(item.time||'')}),day.date,{departureDate:days[n-1].date,flightTime:a.flightTime});
+                var reason=window.DayBuilder.blockedOn(Object.assign({},item,{preferred:window.DayBuilder.parseClock(item.time||'')}),day.date,{departureDate:days[n-1].date,flightTime:a.returnTime||a.flightTime});
                 if(reason)rejected.push(Object.assign({},item,{blockedReason:reason}));
                 return !reason;
             });
             day.unscheduled=rejected;
         });
+        if(window.GoNowFlights&&(a.flightsStep||a.arrivalTime||a.returnTime||a.flightTime)){
+            var fw=window.GoNowFlights.windowFor(a),f=window.GoNowFlights;
+            days[0].items=[{id:'arrival-flight',title:f.label(a,'arrival'),kind:'flight',flightDirection:'arrival',time:f.clock(fw.landing),duration:0,locked:true,prep:[],bring:[],sources:[]},
+                {id:'arrival-stay',title:'Check in and settle in',kind:'stay',time:f.clock(fw.arrivalStart),desc:'About 30 min. Settle in.',prep:[],bring:[],sources:[]}];
+            if(fw.arrivalStart>=1440)days[0].items=days[0].items.filter(function(i){return i.kind==='flight';});
+            if(fw.arrivalStart+90<1440)days[0].items.push({id:'arrival-meal',title:'Evening meal near hotel',kind:'meal',time:f.clock(fw.arrivalStart+30),desc:'About 60 min. Choose nearby.',prep:[],bring:[],sources:[]});
+            days[n-1].items=[{id:'pick-airport',title:'Leave for the airport',kind:'travel',time:f.clock(fw.leave),desc:'About '+fw.road+' min.',duration:fw.road,locked:true,prep:[],bring:[],sources:[]},
+                {id:'return-flight',title:f.label(a,'return'),kind:'flight',flightDirection:'return',time:f.clock(fw.departure),duration:0,locked:true,prep:[],bring:[],sources:[]}];
+        }
         var w=d.climate[month(a)-1];
         return {
             id:'template-'+d.id+'-'+start, title:d.name, image:d.image, start:start, end:days[n-1].date, meta:dateRange(start, days[n-1].date)+' · '+n+' days · '+((a.who||'Couple').replace(/^./,function(c){return c.toUpperCase();}))+' ('+(a.ages||[25, 25]).join(' & ')+')', stay:a.stayUnsure?(d.center||'city center'):a.stay||d.center||'city center', banner:'Sample/template plan — live AI generation coming soon', weather: {

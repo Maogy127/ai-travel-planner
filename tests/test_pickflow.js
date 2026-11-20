@@ -73,7 +73,7 @@ const exportIds=JSON.parse(exportFixture.replace(/'/g,'"'));
 const exportAnswers={...a,level:'unsure',picks:{activities:exportIds.filter(id=>c.activities.some(i=>i.id===id)),restaurants:['lamer','senia',...exportIds.filter(id=>c.restaurants.some(i=>i.id===id))]}};
 const exportPlan=ctx.PickScheduler.schedule(exportAnswers,c);
 assert.equal(exportPlan.unfit.length,0,JSON.stringify(exportPlan.unfit));
-assert.equal(exportPlan.days.flatMap(d=>d.items).length,16,'13 picks plus check-in, arrival meal and airport transfer');
+assert.equal(exportPlan.days.flatMap(d=>d.items).length,17,'13 picks plus check-in, arrival stroll, arrival meal and airport transfer');
 assert.deepEqual(exportPlan.days.map(d=>d.date),['2026-11-25','2026-11-26','2026-11-27','2026-11-28','2026-11-29']);
 console.log('PASS Python ICS fixture schedules every pick across Nov 25–29 with 16 stops after removal');
 
@@ -83,7 +83,8 @@ for(const name of ['styles','catalog','engine','diet'])vm.runInContext(fs.readFi
 function appFunction(name,next){const start=app.indexOf('    function '+name+'(');const end=app.indexOf('    function '+next+'(',start);assert(start>=0&&end>start);vm.runInContext(app.slice(start,end),ctx);}
 vm.runInContext(app.slice(app.indexOf('    function isPickPlan('),app.indexOf('    var KEY=')),ctx);
 ctx.state={answers:{...exportAnswers,destination:'Oahu',mode:'trip',styles:[]},edits:{items:{'diamond-head':{note:'Meet, then hike; together'}}},tripId:null};
-ctx.readTrips=()=>[];ctx.pickCatalog=()=>c;ctx.ITEM_PHOTOS={};ctx.showPlan=p=>{ctx.state.plan=p;};
+// Checkout now also dispatches editing sessions; this fixture covers fresh checkout.
+ctx.editingPicks=null;ctx.readTrips=()=>[];ctx.pickCatalog=()=>c;ctx.ITEM_PHOTOS={};ctx.showPlan=p=>{ctx.state.plan=p;};
 appFunction('checkoutPicks','pickScreen');ctx.checkoutPicks();
 const pickedPlan=ctx.state.plan;
 assert.equal(pickedPlan.id,'oahu-picks-2026-11-25');ctx.checkoutPicks();assert.equal(ctx.state.plan.id,pickedPlan.id);
@@ -147,7 +148,8 @@ assert(result.days.at(-1).items.some(i=>i.id==='pick-airport'&&i.start===295));
 assert.equal(result.days.find(d=>d.items.some(i=>i.id==='lamer')).date,'2026-11-26');
 assert(big.unfit.every(i=>!i.reservation&&!i.locked&&!i.booked));
 const short=ctx.PickScheduler.schedule({...a,end:'2026-11-26'},c);
-assert(short.bookingIssues.some(i=>i.id==='senia'));
+// The sample Senia booking (Nov 27) falls outside a trip ending Nov 26: no warning, and it is not forced into the plan.
+assert(!short.bookingIssues.some(i=>i.id==='senia'));assert(!short.days.some(d=>d.items.some(i=>i.id==='senia')));
 assert(!short.unfit.some(i=>i.reservation));
 assert.equal(ctx.PickScheduler.pace({level:'gentle',pace:'Full-on'}),'gentle');
 assert.equal(ctx.PickScheduler.pace({level:'unsure',pace:'Easy'}),'gentle');

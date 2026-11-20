@@ -1,3 +1,4 @@
+from pathlib import Path
 """Real Leaflet map and offline regressions; all external requests are intercepted."""
 from test_full import open_home_flow
 import asyncio
@@ -120,7 +121,7 @@ async def checks(browser):
 
 
 async def main():
-    server = subprocess.Popen([sys.executable, '-m', 'http.server', '8821', '--bind', '127.0.0.1'], cwd=SITE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    server = subprocess.Popen([sys.executable, str(Path(__file__).parent / 'serve_site.py'), '8821'], cwd=SITE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(50):
             try:

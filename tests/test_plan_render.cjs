@@ -70,6 +70,48 @@ function smoke(label){
  assert.equal(JSON.parse(memory.get('gonow:trips'))[0].confirmed,true);
  click('prep-continue');
  smoke('demo');
+ // Approval must edit runtime days, preserve bookings, and survive duplicate/stale snapshots.
+ const originalBuilder=ctx.DayBuilder.importForPlan(ctx.DayBuilder.exportState(),api.state.plan);
+ for(const day of api.state.plan.days)originalBuilder.days[day.date] ||= ctx.DayBuilder.buildSuggested(day.date);
+ const groupTrip=JSON.parse(JSON.stringify(api.currentTrip()));groupTrip.builder=originalBuilder;
+ const group={id:'approval-regression',trip:groupTrip,locks:{lamer:true},planContent:{lamer:{time:'7:00 PM'}}};
+ ctx.goNowAccount={owner:()=>true};
+ function approvedDinner(){
+  const dinner=ctx.DayBuilder.schedule().days.find(d=>d.date==='2026-11-26').items.find(i=>i.id==='lamer');
+  assert.equal(dinner.preferred,1140);assert.equal(dinner.start,1140);
+  assert.equal(dinner.locked,true);assert.equal(dinner.booked,true);
+ }
+ api.acceptGroup(group);approvedDinner();
+ api.applyGroupChange({itemId:'lamer',change:{time:'7:00 PM'}});approvedDinner();
+ group.trip.updatedAt='later-stale-builder';api.acceptGroup(group);approvedDinner();
+ ctx.goNowAccount.owner=()=>false;
+ group.trip.updatedAt='member-snapshot';api.acceptGroup(group);approvedDinner();
+ api.go('plan');approvedDinner();
+ delete ctx.goNowAccount;
+ memory.set('gonow:daybuilder:'+api.state.plan.id,JSON.stringify(originalBuilder));api.go('plan');
+
+ // Item E: builder headers must detect the raw ride even when scheduling omits it.
+ const lastDay=api.state.plan.days.at(-1);
+ function assertFlyHome(day){
+  const html=ctx.__renderHelpers.dayHeadHTML(day,api.state.plan.days.length-1,ctx.__renderHelpers.dayModel(day,api.state.plan.days.length-1));
+  const header=html.split('</figure>')[0];
+  assert(header.includes('ring-sleep'));
+  assert(!/ring-move|ring-rec|ring-rest-break/.test(header));
+  assert(header.includes('departs'));
+  assert(!html.includes('data-testid="day-pace-link"'));
+  return header;
+ }
+ // Final audit: sleep duration appears once outside the accessible SVG label.
+ const flyHeader=assertFlyHome(lastDay);
+ assert(flyHeader.includes('Short night · Rest on your flight'));
+ assert.equal((flyHeader.replace(/<svg[\s\S]*?<\/svg>/g,'').match(/5h55/g)||[]).length,1);
+ const savedItems=lastDay.items;
+ lastDay.items=[{kind:'travel',title:'Uber Reserve to HNL',time:'4:55 AM'}];
+ ctx.DayBuilder.resetSession();
+ // Preceding sleep ends 30 minutes before the 4:55 AM airport ride.
+ assert(assertFlyHome(lastDay).includes('Short night · Rest on your flight'));
+ lastDay.items=savedItems;
+
  assert.equal(api.state.plan.id,'oahu-demo-2026-11');
  ctx.DayBuilder.resetSession();
  const defaultRoot=node('default-regression');
@@ -95,7 +137,23 @@ function smoke(label){
  const flight=departure.find(i=>i.flight);
  assert.equal(renderContext.titleFor(flight.sourceId||flight.id,'2026-11-29',flight),'Flight (add your time)');
  defaultBuilder.selectDay('2026-11-29',false);
- assert(node('default-regression .db-content').innerHTML.includes('Flight (add your time)'));
+ // Final audit: the Return column supplies direction; sample time is explicit.
+ const flightMarkup=node('default-regression .db-content').innerHTML;
+ assert(flightMarkup.includes('Sample · ~10:00 AM'));
+ assert(flightMarkup.includes('aria-label="Sample · departs ~10:00 AM"'));
+ assert(flightMarkup.includes('db-flight-card'));
+ assert.equal((node('default-regression .db-content').innerHTML.match(/data-testid="edit-flight"/g)||[]).length,1);
+ // Final audit: real renderer preserves number/time and accessible direction for
+ // provided flights; the scheduler/export label remains fully explanatory.
+ const compactPlan=JSON.parse(JSON.stringify(api.state.plan));
+ const compactRoot=node('compact-flight-regression');
+ const compactBuilder=ctx.DayBuilder.mount(compactRoot,{plan:compactPlan,
+   flightAnswers:{...api.state.answers,flightsStep:true,arrivalFlight:'HA 11',arrivalTime:'17:30',returnTime:'20:00'}});
+ compactBuilder.selectDay('2026-11-25',false);
+ const compactMarkup=node('compact-flight-regression .db-content').innerHTML;
+ assert(compactMarkup.includes('>HA 11 · 5:30 PM</strong>'));
+ assert(compactMarkup.includes('aria-label="HA 11 · lands 5:30 PM"'));
+ defaultBuilder=ctx.DayBuilder.mount(defaultRoot,{...ctx.__renderHelpers.builderContext(),plan:api.state.plan});
  defaultBuilder.selectDay('2026-11-26',false);
  const priorEdits=api.state.edits;
  api.state.edits={items:{'2026-11-26-0':{note:'Calendar note'}},removed:['2026-11-26-2']};
@@ -154,6 +212,38 @@ function smoke(label){
  assert(Object.values(JSON.parse(memory.get('gonow.prep.v1'))).some(r=>r.seen),'adoption marks prep seen');
  console.log('PASS shared copy opens list builder with banner and remains shared after Trip prep Continue');
  api.state.answers.who=travelerBeforeSwap;
+ // Item F: exercise protected reset through the real event handler, plus compact custom-item sharing.
+ const resetRoot=node('reset-simplify');
+ const resetDate='2026-11-26',suggested=ctx.DayBuilder.buildSuggested(resetDate);
+ const protectedItem={id:'own-booked',title:'My booking',preferred:1380,duration:30,custom:true,booked:true,locked:true,manualTime:true,place:'Beach'};
+ const ownFlexible={...protectedItem,id:'own-flexible',title:'My walk',preferred:1320,locked:false,booked:false};
+ const userLock={...suggested.items.find(i=>i.id==='photos'),locked:true,userLocked:true,preferred:1050,duration:40};
+ memory.set('gonow:daybuilder:'+api.state.plan.id,JSON.stringify({days:{[resetDate]:{...suggested,items:[ownFlexible,protectedItem,userLock],unscheduled:[]}}}));
+ const resetBuilder=ctx.DayBuilder.mount(resetRoot,{plan:api.state.plan});
+ resetBuilder.selectDay(resetDate,false);
+ const resetContent=()=>node('reset-simplify .db-content').innerHTML;
+ assert(resetContent().includes('data-testid="day-reset"')&&resetContent().includes('data-testid="day-add-own"'));
+ assert(!/data-testid="(?:day-add|db-reset|db-tray-toggle|db-booking-toggle|db-booking-form)"|id="db-chest"|Anchor it/.test(resetContent()));
+ // Item F: removal goes to Needs a time; visible and accessible labels must agree.
+ assert(resetContent().includes('aria-label="Remove from day My walk"'));
+ assert(resetContent().includes('<span>Remove from day</span>'));
+ assert(!/To ideas|Move to ideas|Activity ideas/.test(resetContent()));
+ assert(!resetContent().split('data-db-id="own-flexible"')[1].split('data-testid="db-pair"')[0].includes('db-locked-tag'),'unbooked custom item has no static Locked tag');
+ const sharedOwn=ctx.DayBuilder.importDays(resetBuilder.exportState()).days[resetDate].items;
+ assert.strictEqual(sharedOwn.find(i=>i.id==='own-flexible').booked,false,'sharing preserves unbooked choice');
+ assert.strictEqual(sharedOwn.find(i=>i.id==='own-booked').booked,true,'sharing preserves booked choice');
+ function resetAction(name){const button={dataset:{dbAction:name},closest:()=>null};resetRoot.click({target:{closest:s=>s==='[data-db-action]'?button:null},stopPropagation(){}});}
+ resetAction('reset');assert(resetContent().includes('Reset this day? Locked and booked items stay.'));
+ assert(resetBuilder.getDay().items.some(i=>i.id==='own-flexible'),'opening confirmation leaves the day alone');
+ resetAction('reset-cancel');assert(resetBuilder.getDay().items.some(i=>i.id==='own-flexible'));
+ resetAction('reset');resetAction('reset-confirm');
+ const resetItems=resetBuilder.getDay().items;
+ assert(!resetItems.some(i=>i.id==='own-flexible'));
+ assert(resetItems.some(i=>i.id==='own-booked'&&i.preferred===1380&&i.locked));
+ assert(resetItems.some(i=>i.id==='photos'&&i.preferred===1050&&i.duration===40&&i.userLocked));
+ assert.equal(resetItems.filter(i=>i.id==='photos').length,1,'protected suggestion is not duplicated');
+ assert(suggested.items.every(i=>resetItems.some(r=>r.id===i.id)),'missing suggestions restored');
+ console.log('PASS direct day actions, reset confirmation/cancel/protected items, unbooked tag and sharing');
  // Drive the actual delegated transfer controls, including an untimed move.
  const transferRoot=node('transfer-regression');
  memory.delete('gonow:daybuilder:oahu-demo-2026-11');
@@ -172,6 +262,26 @@ function smoke(label){
   form.elements={date:{value:date},start:{value:start},end:{value:''}};
   form.onsubmit({target:form,preventDefault(){}});
  }
+ // Booking actions remain usable even though the lock indicator is static.
+ const bookingHTML=node('transfer-regression .db-content').innerHTML.split('data-db-id="lamer"')[1].split('data-testid="db-pair"')[0];
+ assert(bookingHTML.includes('data-testid="db-more"'));
+ assert(bookingHTML.includes('data-db-action="move-day"'));
+ assert(bookingHTML.includes('data-db-action="edit-time"'));
+ const indicator=bookingHTML.match(/<span[^>]*data-testid="db-lock"[^>]*>/)[0];
+ assert(!/aria-pressed|data-db-action|tabindex|role=/.test(indicator));
+ action('lamer','day','move-day');
+ let reservationUnlock=latestDialog('unlock-confirm');
+ assert(reservationUnlock,'booking move still asks for confirmation');
+ reservationUnlock.querySelector('[data-testid=unlock-decline]').onclick();
+ assert(transfer.getDay().items.find(i=>i.id==='lamer').locked,'declining retains reservation lock');
+ const unlockCount=()=>[...nodes.values()].filter(n=>n.dataset.testid==='unlock-confirm').length,beforeUnlocks=unlockCount();
+ node('transfer-regression [data-testid=activity-time-form]').elements={start:{disabled:false,focus(){}}};
+ action('lamer','day','edit-time');
+ assert.equal(unlockCount(),beforeUnlocks,'time edits on bookings open directly, no unlock step');
+ assert(transfer.getDay().items.find(i=>i.id==='lamer').locked,'a booking keeps its lock while its time is edited');
+ assert(node('transfer-regression .db-content').innerHTML.includes('data-testid="activity-time-form"'));
+ assert(!/<fieldset disabled/.test(node('transfer-regression .db-content').innerHTML),'the time fields are editable');
+ console.log('PASS booking menu, static lock indicator, move decline and direct time edit on bookings');
  action(moving.id,'day','move-day');
  const unlock=latestDialog('unlock-confirm');
  if(unlock)unlock.querySelector('[data-testid=unlock-accept]').onclick();
@@ -254,10 +364,11 @@ function smoke(label){
  for(const date of ['2026-11-26','2026-11-27']){
   exportBuilder.selectDay(date,false);
   const html=node('export-plan .db-content').innerHTML;
-  const buttons=html.match(/<button[^>]*data-testid="db-lock"[^>]*aria-pressed="true"[^>]*>[\s\S]*?<\/button>/g)||[];
+  // Confirmed bookings use static tags instead of dead unlock toggles.
+  const buttons=html.match(/<span[^>]*data-testid="db-locked-tag"[^>]*>[\s\S]*?<\/span>/g)||[];
   assert(buttons.length>0);
-  for(const button of buttons){assert.equal((button.match(/<svg/g)||[]).length,1);assert(button.includes('<small>Locked</small></button>'));}
-  assert(!html.includes('class="db-lock"'),'toggle is the only booking lock indicator');
+  for(const button of buttons){assert.equal((button.match(/<svg/g)||[]).length,1);assert(button.includes('<small>Locked</small></span>'));}
+  assert(!html.includes('class="db-lock"'),'static tag is the only booking lock indicator');
  }
  api.state.edits={items:{'pick-checkin':{note:'Shared café note, bring water; enjoy 🌺'}},removed:['udon']};
  const fullICS=api.buildICS();const unfolded=fullICS.replace(/\r\n /g,'');

@@ -39,7 +39,7 @@ const ctx = {
 ctx.window=ctx;ctx.scrollTo=()=>{};ctx.addEventListener=()=>{};ctx.history={state:null,pushState(s){this.state=s},replaceState(s){this.state=s}};
 vm.createContext(ctx);
 const jsRoot = fs.existsSync(`${__dirname}/../site/js/app.js`) ? `${__dirname}/../site/js/` : `${__dirname}/../js/`;
-for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','local','checkin','jetlag','dashboard','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8').replace('state:state, go:go,','libraryEntries:libraryEntries, state:state, go:go,'),ctx);
+for (const f of ['styles','catalog','oahu','engine','ai','credits','localinfo','affiliates','rings','diet','local','checkin','jetlag','dashboard','pickscheduler','app']) vm.runInContext(fs.readFileSync(`${jsRoot}${f}.js`,'utf8').replace('state:state, go:go,','libraryEntries:libraryEntries, state:state, go:go,'),ctx);
 const api=ctx.__gonow;
 const click=id=>node(`[data-testid="${id}"]`).click();
 (async()=>{
@@ -78,9 +78,10 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert.ok(ctx.PHOTO_CREDITS.some(c => c.source === 'Wikimedia Commons' && c.photoUrl.includes('commons.wikimedia.org')));
   assert(node('view').innerHTML.includes('Pexels License'));
   const normalize=text=>text.replace(/<[^>]*>/g,' ').replace(/&amp;/g,'&').replace(/\s+/g,' ').trim().toLowerCase();
+  // Include the optional flights question in the existing copy audit.
   for(const mode of ['trip','local']){
     api.state.answers.mode=mode;
-    for(const step of (mode==='trip'?['dates','budget','who','ages','style','food','pace','musts']:['style','food','pace'])){
+    for(const step of (mode==='trip'?['dates','flights','budget','who','ages','style','food','pace','musts']:['style','food','pace'])){
       node('view .question').innerHTML='';
       api.go(step);
       const html=node('view').innerHTML;
@@ -119,17 +120,19 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert.equal(api.state.screen,'prep');
   assert.equal((node('view').innerHTML.match(/data-testid="prep-section"/g)||[]).length,3);
   assert(!node('toast').innerHTML.includes('Your plan is ready.'));
-  assert(node('view').innerHTML.includes('Before you go · 7 to do'));
-  assert.equal(JSON.parse(memory.get('gonow:trips')).find(t=>t.id===api.state.tripId).prepLeft,7);
+  // Item H derives the count from all actionable booking needs.
+  const prepCount=(node('view').innerHTML.match(/data-prep-id="(?!pack-)/g)||[]).length;
+  assert(node('view').innerHTML.includes('Before you go · '+prepCount+' to do'));
+  assert.equal(JSON.parse(memory.get('gonow:trips')).find(t=>t.id===api.state.tripId).prepLeft,prepCount);
   api.go('home');
   assert(node('view').innerHTML.includes('data-testid="card-trip-prep"'));
-  assert(node('view').innerHTML.includes('Trip prep · 7 left'));
+  assert(node('view').innerHTML.includes('Trip prep · '+prepCount+' left'));
   api.go('prep');
   assert(!node('view').innerHTML.includes('data-testid="trip-prep-button"'));
   assert(node('view').innerHTML.includes('Book 4 Uber Reserve rides'));
   const assertPacking = n => {
     const html=node('view').innerHTML;
-    assert(html.includes('Packed '+n+' of 50'));
+    assert(html.includes('Packed '+n+' of 49'));
     assert.equal((html.match(/id="packing-status"/g)||[]).length,1);
     assert(!/prep-packing-count|Packing \d+\/\d+/.test(html));
   };
@@ -140,8 +143,8 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   node('view').querySelectorAll=selector=>selector==='[data-prep-id]'?[packCheckbox]:[];
   api.go('prep');
   packCheckbox.onchange();
-  assert.equal(node('packing-status').textContent,'Packed 1 of 50');
-  assert.equal(node('[data-testid="trip-prep-button"]').textContent,'Trip prep · 7 left');
+  assert.equal(node('packing-status').textContent,'Packed 1 of 49');
+  assert.equal(node('[data-testid="trip-prep-button"]').textContent,'Trip prep · '+prepCount+' left');
   api.go('prep');assertPacking(1);
   click('reset-packing');
   node('sheet [data-testid="modal-0"]').click();

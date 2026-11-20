@@ -1,3 +1,4 @@
+from pathlib import Path
 """Wellness home and persistence regressions; run in a Chromium-capable environment."""
 from test_full import open_home_flow
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
@@ -91,7 +92,7 @@ async def checks(browser):
             await ctx.close()
 
 async def serve_checks(port, checks_fn):
-    server = subprocess.Popen([sys.executable, '-m', 'http.server', str(port), '--bind', '127.0.0.1'], cwd=SITE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    server = subprocess.Popen([sys.executable, str(Path(__file__).parent / 'serve_site.py'), str(port), '127.0.0.1'], cwd=SITE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(50):
             try:

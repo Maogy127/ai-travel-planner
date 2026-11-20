@@ -1,3 +1,4 @@
+# Ring trim replaces duplicate recovery prose with a working rest action.
 """Supervisor-run optional check-in regressions, desktop/mobile, port 8836."""
 from test_full import reopen_dashboard
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
@@ -74,12 +75,13 @@ async def checks(browser):
             assert await suggestions.count() > 0
             apply=pg.get_by_test_id('checkin-apply').first
             item_id=await apply.get_attribute('data-id')
-            before_other=await rings.nth(1).inner_text()
+            # Compare content rather than rendered line breaks after the check-in update.
+            before_other=''.join((await rings.nth(1).text_content()).split())
             before_person=await rings.nth(0).locator('svg').get_attribute('aria-label')
             await apply.click()
             await expect(pg.get_by_test_id('traveler-alternative').first).to_be_visible()
             assert await pg.evaluate('DayBuilder.schedule().days[3].items') == shared
-            assert await rings.nth(1).inner_text() == before_other
+            assert ''.join((await rings.nth(1).text_content()).split()) == before_other
             assert await rings.nth(0).locator('svg').get_attribute('aria-label') != before_person
             c=await record(pg,'gonow.checkin.v1',date)
             assert item_id in c['alternatives']
@@ -114,7 +116,7 @@ async def checks(browser):
             assert (await record(pg,'gonow.checkin.v1',next_date))['skipped']
             assert not await pg.get_by_test_id('morning-checkin').count()
             await pg.locator('.day-head > .wellness-rings [data-testid=ring-breakdown-toggle]').click()
-            await expect(pg.locator('.ring-encouragement').first).to_have_text('No recovery block today. Rest is part of the plan — add a pool or stretch break?')
+            await expect(pg.locator('.ring-encouragement').first).to_have_text('No rest today · Add a pool break?')
             text=await pg.locator('.day-head').inner_text()
             assert not re.search(r'\b(missed|failed|behind|fell short|only|not enough)\b',text,re.I)
             # Check all currently visible new controls, then the expanded optional fields.

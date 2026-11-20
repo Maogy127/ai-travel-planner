@@ -1,7 +1,7 @@
 """Transport icons and complete flight-time picker values; Chromium port 8850."""
 import asyncio
 from playwright.async_api import expect
-from test_full import new, continue_prep, reopen_dashboard
+from test_full import new, continue_prep, reopen_dashboard, choose_flight_time
 from test_wellness_home import serve_checks
 
 BASE='http://127.0.0.1:8850/index.html'
@@ -32,29 +32,27 @@ async def checks(browser):
             saved={}
             for date in ('2026-11-25','2026-11-29'):
                 await pg.get_by_test_id('db-day-'+date).click()
+                # One Edit flight action now opens the shared two-row sheet.
                 button=pg.get_by_test_id('add-flight-time')
-                await expect(button).to_have_text('Add flight time')
-                await button.click()
-                dialog=pg.get_by_role('dialog')
-                await expect(dialog).to_be_visible()
-                if date.endswith('25'):
-                    await dialog.locator('[data-time]').first.click()
-                else:
-                    await dialog.get_by_role('button',name='Other time',exact=True).click()
-                    await dialog.get_by_role('button',name='Increase hour',exact=True).click()
-                    await dialog.get_by_role('button',name='Set time',exact=True).click()
-                await expect(dialog).to_have_count(0)
-                await expect(button).to_contain_text('Edit')
-                saved[date]=await button.inner_text()
-                assert '--' not in saved[date] and ':' in saved[date]
-                assert await pg.get_by_test_id('db-flight-time').input_value()
+                await expect(button).to_have_text('Edit flight')
+                value='18:00' if date.endswith('25') else '09:00'
+                await choose_flight_time(pg,value)
+                await expect(pg.get_by_test_id('edit-flight')).to_have_count(1)
+                saved[date]=await pg.get_by_test_id('db-flight-time').input_value()
+                assert saved[date]==value
+                # Final audit: Arrival/Return supplies direction; title keeps the complete time.
+                await expect(day).to_contain_text('6:00 PM' if date.endswith('25') else '9:00 AM')
                 await no_placeholders(pg)
             await pg.reload()
             await reopen_dashboard(pg)
             await continue_prep(pg)
             for date,label in saved.items():
                 await pg.get_by_test_id('db-day-'+date).click()
-                await expect(pg.get_by_test_id('add-flight-time')).to_have_text(label)
+                await expect(pg.get_by_test_id('add-flight-time')).to_have_text('Edit flight')
+                await expect(pg.get_by_test_id('db-flight-time')).to_have_value(label)
+                direction='arrival' if date.endswith('25') else 'return'
+                assert await pg.evaluate('(key)=>__gonow.state.answers[key]',direction+'Time')==label
+                await expect(pg.get_by_test_id('db-day-list')).to_contain_text('6:00 PM' if direction=='arrival' else '9:00 AM')
                 await no_placeholders(pg)
             print('PASS transport cards',width)
         finally:

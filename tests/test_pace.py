@@ -64,7 +64,8 @@ async def checks(browser):
             label = await rings.locator('svg').get_attribute('aria-label')
             assert 'goal 7 h 30 m' in label and 'goal 30 min' in label and 'goal 20 min' in label
             details = rings.get_by_test_id('ring-breakdown-toggle')
-            await expect(details).to_have_text('Details')
+            # Item E renames the ring disclosure while preserving its behavior.
+            await expect(details).to_have_text('How we count')
             await expect(rings.get_by_test_id('ring-breakdown')).to_be_hidden()
             await details.focus()
             await pg.keyboard.press('Enter')

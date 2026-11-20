@@ -1,3 +1,4 @@
+# Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 """Draft coverage for the unmocked GitHub Pages site.
 
 Run python3 tests/verify_live.py for existing and draft live checks together.
@@ -29,13 +30,6 @@ async def verify_draft(browser, url, ok):
         async def select(date):
             await pg.get_by_test_id('db-day-' + date).click()
 
-        async def chest_open():
-            chest = pg.get_by_test_id('db-tray')
-            if not await chest.is_visible():
-                await open_add_menu(pg)
-                await pg.get_by_test_id('db-tray-toggle').click()
-            return chest
-
         async def ids():
             return await pg.evaluate('DayBuilder.draftItems().map(i=>i.id)')
 
@@ -63,51 +57,32 @@ async def verify_draft(browser, url, ok):
         target = pillbox.get_by_test_id('activity-day')
         ok('draft visible tray day follows selected day', await target.is_visible() and await target.input_value() == '2026-11-25')
         await select('2026-11-26')
-        chest = await chest_open()
-        for chest_id in ('chest-1', 'chest-0'):
-            card = chest.locator('[data-db-id="' + chest_id + '"]')
-            ok('draft legacy cross-day guard ' + chest_id,
-               await card.get_by_test_id('db-add').is_disabled()
-               and await card.get_by_test_id('db-handle').is_disabled()
-               and await card.get_by_test_id('db-handle').get_attribute('aria-disabled') == 'true'
-               and 'Already in your plan' in await card.inner_text()
-               and await card.get_by_test_id('db-add-again').is_enabled())
-            before = await ids()
-            # Exercise native disabled click and the pointer path without bypassing the guard.
-            await card.get_by_test_id('db-add').evaluate('e=>e.click()')
-            handle = (await card_action(pg, card, 'db-handle'))
-            await handle.dispatch_event('pointerdown', {'button': 0, 'pointerId': 1, 'clientX': 400, 'clientY': 400})
-            await pg.mouse.move(600, 300, steps=8)
-            await pg.mouse.up()
-            ok('draft guarded ordinary add and drag do nothing ' + chest_id,
-               await ids() == before and await pg.locator('.db-ghost').count() == 0)
+        # Item F: the day chest is gone. Exercise the same source/instance lifecycle in Activities.
+        if await pg.get_by_test_id('tray-toggle').get_attribute('aria-expanded') != 'true':
+            await pg.get_by_test_id('tray-toggle').click()
+        for chest_id, query in (('chest-1', 'parasail'), ('chest-0', 'dive')):
             source = await pg.evaluate('(id)=>DayBuilder.trayItems().find(i=>i.id===id).sourceId', chest_id)
-            if chest_id == 'chest-1':
-                ok('draft parasail real source is 2026-11-28-7', source == '2026-11-28-7')
+            await tray.get_by_test_id('activity-search').fill(query)
+            card = cards.filter(has=pg.locator('[data-testid=activity-add-again]')).first
             originals = await pg.evaluate('(s)=>DayBuilder.draftItems().filter(i=>(i.sourceId||i.id)===s)', source)
-            ok('draft chest has original scheduled copy ' + chest_id, len(originals) == 1)
-            await (await card_action(pg, card, 'db-add-again')).click()
+            ok('draft library has original scheduled copy ' + chest_id, len(originals) == 1)
+            ok('draft library explicit repeat available ' + chest_id, await card.get_by_test_id('activity-add-again').is_enabled())
+            before = await ids()
+            await card.get_by_test_id('activity-add-time').fill('15:00')
+            await card.get_by_test_id('activity-add-again').click()
             copies = await pg.evaluate('(ids)=>DayBuilder.draftItems().filter(i=>!ids.includes(i.id))', before)
             valid = len(copies) == 1 and copies[0]['id'].startswith('instance-') and copies[0]['sourceId'] == source
             ok('draft Add again unique id and real source ' + chest_id, valid, str(copies))
-            if not valid:
-                raise AssertionError('Cannot continue instance lifecycle without one valid copy')
+            assert valid
             instance = copies[0]['id']
             await roundtrip(instance, source, True)
+            await pg.get_by_test_id('tray-close').click()
             await (await card_action(pg, day.locator('[data-db-id="' + instance + '"]'), 'db-remove')).click()
             await roundtrip(instance, source, False)
-            ok('draft original still guards chest after instance removal ' + chest_id, await card.get_by_test_id('db-add').is_disabled())
-            for original in originals:
-                original_day = await pg.evaluate("""(id) => DayBuilder.schedule().days
-                    .find(day => day.items.some(item => item.id === id))?.date""", original['id'])
-                if original_day is None:
-                    raise AssertionError('Cannot find scheduled day for original ' + original['id'])
-                await select(original_day)
-                await (await card_action(pg, day.locator('[data-db-id="' + original['id'] + '"]'), 'db-remove')).click()
-            await select('2026-11-26')
-            chest = await chest_open()
-            ok('draft last copy removal reenables chest ' + chest_id,
-               await card.get_by_test_id('db-add').is_enabled() and await card.get_by_test_id('db-handle').is_enabled())
+            ok('draft original retained after instance removal ' + chest_id,
+               set(i['id'] for i in originals).issubset(set(await ids())))
+            await pg.get_by_test_id('tray-toggle').click()
+        await pg.get_by_test_id('tray-close').click()
 
         photos = day.locator('[data-db-id=photos]')
         await photos.get_by_test_id('db-expand').click()
@@ -120,7 +95,7 @@ async def verify_draft(browser, url, ok):
         ok('draft palms manual end range', await photos.get_by_test_id('db-time').text_content() == '4:00 PM–5:30 PM')
         # Reset restores the original 60-minute default before exercising that duration.
         await open_add_menu(pg)
-        await pg.get_by_test_id('db-reset').click()
+        await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
         if not await form.is_visible():
             await photos.get_by_test_id('db-expand').click()
         await form.locator('[name=start]').fill('20:00')
@@ -151,7 +126,7 @@ async def verify_draft(browser, url, ok):
         ok('draft Senia remains 6:00 PM–8:00 PM locked', await locked('senia', '6:00 PM–8:00 PM'))
         await select('2026-11-26')
         await open_add_menu(pg)
-        await pg.get_by_test_id('db-reset').click()
+        await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
         ok('draft reset restores default La Mer time and lock', await locked('lamer', '7:30 PM–9:30 PM'))
         await pg.get_by_test_id('generate-plan').click()
         await pg.get_by_test_id('finished-banner').wait_for()

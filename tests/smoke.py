@@ -56,11 +56,12 @@ async def main():
   await reopen_dashboard(page)
   await wait_plan(page)
   assert await page.get_by_text('Your note: Testing saved note').count()==1
-  await page.get_by_test_id('start-over').click()
+  await page.get_by_test_id('nav-toggle').click(); await page.get_by_test_id('nav-home').click()  # ☰ → Home returns to the start
   await page.get_by_test_id('home-unsure').click()
   await page.get_by_test_id('start-from').fill('Seattle')
   await page.get_by_test_id('start-next').click()
-  for step in range(5): await page.get_by_test_id('q-skip').click()
+  # Six core steps now include the optional flights question.
+  for step in range(6): await page.get_by_test_id('q-skip').click()
   print('Recommendations:',await page.get_by_test_id('rec-card').count())
   await page.get_by_test_id('rec-more').click()
   await page.get_by_test_id('rec-choose').first.click()

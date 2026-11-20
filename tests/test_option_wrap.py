@@ -61,7 +61,8 @@ async def checks(browser):
                 await screen(pg, 'local plan ' + city, width)
                 await pg.get_by_test_id('local-change').click()
             await pg.locator('[data-testid=mode-option][data-value=trip]').click()
-            for step in ('dates', 'budget', 'who', 'ages', 'style', 'musts', 'food', 'pace'):
+            # Include the optional flights question in the wrapping audit.
+            for step in ('dates', 'flights', 'budget', 'who', 'ages', 'style', 'musts', 'food', 'pace'):
                 await pg.evaluate('(step)=>window.__gonow.go(step)', step)
                 if step == 'style':
                     assert await pg.locator('.option strong').count() == 6

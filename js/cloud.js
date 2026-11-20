@@ -1,0 +1,77 @@
+(function(root){
+'use strict';
+const SDK_BASE='https://www.gstatic.com/firebasejs/10.12.2/';
+const stamp=v=>v&&typeof v.toMillis==='function'?v.toMillis():v&&typeof v.seconds==='number'?v.seconds*1000+(v.nanoseconds||0)/1e6:typeof v==='number'?v:Date.parse(v)||0;
+function merge(local,remote){const rows=new Map(local.map(t=>[t.id,t]));remote.forEach(t=>{if(!rows.has(t.id)||stamp(t.updatedAt)>stamp(rows.get(t.id).updatedAt))rows.set(t.id,t);});return [...rows.values()];}
+function create(options={}){
+ const DAY=86400000;let sdk,auth,db,pending,user=null,group=null,stopTrips,stopGroup,timer,baseline=new Map(),disposed=false,saved=false;
+ const storage=options.storage||root.localStorage,emit=options.emit||(()=>{}),local=options.local||(()=>[]);
+ const remember=(k,v)=>{try{storage.setItem(k,v);}catch(e){}},read=k=>{try{return storage.getItem(k);}catch(e){return null;}};
+ async function load(){if(sdk)return sdk;if(pending)return pending;pending=(async()=>{let timeout;try{const importer=options.importer||(url=>import(url));const base=root.GONOW_FIREBASE_SDK_BASE||SDK_BASE;const modules=await Promise.race([options.sdk?Promise.resolve([options.sdk]):Promise.all(['app','auth','firestore'].map(n=>importer(base+'firebase-'+n+'.js'))),new Promise((_,reject)=>{timeout=setTimeout(()=>reject(Error('timeout')),options.timeout||8000);})]);sdk=Object.assign({},...modules);const app=sdk.initializeApp(root.GONOW_FIREBASE_CONFIG);auth=sdk.getAuth(app);db=sdk.getFirestore(app);sdk.onAuthStateChanged(auth,changed);return sdk;}catch(e){sdk=null;emit('unavailable');return null;}finally{clearTimeout(timeout);if(!sdk)pending=null;}})();return pending;}
+ async function changed(next){if(disposed)return;user=next;saved=false;group=null;if(stopTrips)stopTrips();if(stopGroup)stopGroup();baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));remember('gonow:account-session',user?'yes':'');emit('auth',user);if(!user)return;restoreProfile();
+ const key='gonow:sync:'+user.uid;if(!['yes','no'].includes(read(key))&&local().length)emit('sync');
+ const savedGroup=read('gonow:group:'+user.uid);if(savedGroup)watch(savedGroup);
+ stopTrips=sdk.onSnapshot(sdk.collection(db,'users',user.uid,'trips'),snap=>emit('trips',merge(local(),snap.docs.map(d=>Object.assign({},d.data(),{id:d.id})))),()=>{});
+ }
+ async function sync(yes){if(!user)return;saved=false;emit('saving');remember('gonow:sync:'+user.uid,yes?'yes':'no');if(yes)await Promise.all(local().map(upload));baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));saved=!!yes;emit('synced');}
+ function clean(trip){return JSON.parse(JSON.stringify(trip,(k,v)=>k==='group'?undefined:v));}
+ async function upload(trip){if(!user||!sdk)return;await sdk.setDoc(sdk.doc(db,'users',user.uid,'trips',trip.id),Object.assign({},clean(trip),{updatedAt:sdk.serverTimestamp()}));}
+ function write(trips){clearTimeout(timer);saved=false;emit('saving');if(!user)return;const uid=user.uid;if(read('gonow:sync:'+uid)!=='yes'&&!(group&&owner()))return;timer=setTimeout(async()=>{try{if(!user||user.uid!==uid)return;if(read('gonow:sync:'+uid)==='yes'){const changed=trips.filter(t=>baseline.get(t.id)!==JSON.stringify(t));const removed=[...baseline.keys()].filter(id=>!trips.some(t=>t.id===id));await Promise.all(changed.map(upload));await Promise.all(removed.map(id=>sdk.deleteDoc(sdk.doc(db,'users',user.uid,'trips',id))));baseline=new Map(trips.map(t=>[t.id,JSON.stringify(t)]));saved=true;emit('saved');}await pushGroup(trips);}catch(e){emit('sync-failed');}},350);}
+ // The owner's device is the source of truth for the shared plan, whether or not account sync is on.
+ async function pushGroup(trips){if(!(group&&owner()))return;const trip=trips.find(t=>t.id===group.trip.id);if(!trip)return;const next=clean(trip);if(JSON.stringify(next)===JSON.stringify(group.trip))return;const before=Object.values(group.trip.builder?.days||{}).flatMap(d=>d.items||[]);const after=Object.values(next.builder?.days||{}).flatMap(d=>d.items||[]);const added=after.find(i=>!before.some(b=>b.id===i.id));const data={trip:next};if(added)data.lastChange={by:user.uid,text:(user.displayName||'Traveler')+' added '+added.title,at:Date.now()};group=Object.assign({},group,{trip:next});await patch(data);}
+ async function google(){if(await load())return sdk.signInWithPopup(auth,new sdk.GoogleAuthProvider());}
+ async function email(address){if(!await load())return false;await sdk.sendSignInLinkToEmail(auth,address,{url:root.location.href,handleCodeInApp:true});remember('gonow:email',address);return true;}
+ async function completeEmail(address){if(!await load()||!sdk.isSignInWithEmailLink(auth,root.location.href))return false;address=address||read('gonow:email');if(!address){emit('email-needed');return false;}await sdk.signInWithEmailLink(auth,address,root.location.href);return true;}
+ async function anonymous(name){if(!await load())throw Error('unavailable');const result=await sdk.signInAnonymously(auth);await sdk.updateProfile(result.user,{displayName:name});user=result.user;emit('auth',user);return user;}
+ function owner(){return !!(group&&user&&group.ownerId===user.uid);}
+ function watch(id){remember('gonow:group:'+user.uid,id);if(stopGroup)stopGroup();stopGroup=sdk.onSnapshot(sdk.doc(db,'trips',id),snap=>{if(!snap.exists()){if(group&&group.id===id){group=null;emit('ended');}return;}const previous=group;group=Object.assign({},snap.data(),{id});emit('group',group);if(previous&&group.lastChange?.text&&group.lastChange.by!==user.uid&&JSON.stringify(previous.lastChange)!==JSON.stringify(group.lastChange))emit('notice',group.lastChange.text);},()=>{});}
+ const INVITE_DAYS=30,link=id=>root.location.origin+root.location.pathname+'#join='+id;
+ function newInviteId(){const bytes=new Uint8Array(18);root.crypto.getRandomValues(bytes);return Array.from(bytes,b=>b.toString(16).padStart(2,'0')).join('');}
+ async function invite(trip){if(!user)return null;const key='gonow:invite:'+user.uid+':'+trip.id,saved=read(key);
+  if(saved){const association=JSON.parse(saved);if(group?.id!==association.id)watch(association.id);
+   // Expired links are rotated in place: members stay, the old link stops working.
+   if(group&&group.id===association.id&&owner()&&Number(group.inviteExpiresAt)&&group.inviteExpiresAt<Date.now()){const inviteId=newInviteId(),old=group.inviteId;await sdk.setDoc(sdk.doc(db,'invites',inviteId),{tripId:group.id,ownerId:user.uid});await sdk.updateDoc(sdk.doc(db,'trips',group.id),{inviteId,inviteExpiresAt:Date.now()+INVITE_DAYS*DAY});if(old)await sdk.deleteDoc(sdk.doc(db,'invites',old)).catch(()=>{});remember(key,JSON.stringify({id:group.id,inviteId}));return link(inviteId);}
+   return link(association.inviteId);}
+  if(group&&group.trip.id===trip.id)return link(group.inviteId);
+  const inviteId=newInviteId();const id='group-'+inviteId;const name=String(user.displayName||'Traveler').slice(0,40);const locks={};[...Object.values(trip.builder?.days||{}),...(trip.plan?.days||[])].forEach(d=>(d.items||[]).forEach(i=>{if(i.locked||i.booked||i.fixedBooking)locks[i.id]=true;}));const data={ownerId:user.uid,ownerName:name,members:{[user.uid]:{name,joinedAt:Date.now()}},memberIds:[user.uid],inviteId,inviteExpiresAt:Date.now()+INVITE_DAYS*DAY,trip:clean(trip),votes:{},locks,suggestions:{},createdAt:sdk.serverTimestamp()};await sdk.setDoc(sdk.doc(db,'trips',id),data);await sdk.setDoc(sdk.doc(db,'invites',inviteId),{tripId:id,ownerId:user.uid});remember(key,JSON.stringify({id,inviteId}));watch(id);return link(inviteId);}
+ // Owner only: deletes the invite and the shared copy. Members lose access; local trips are untouched.
+ async function stopSharing(tripId){if(!user||!sdk)return false;const key='gonow:invite:'+user.uid+':'+tripId,saved=read(key);let association=null;try{association=JSON.parse(saved);}catch(e){}if(!association&&group&&owner()&&group.trip.id===tripId)association={id:group.id,inviteId:group.inviteId};if(!association)return false;if(group&&group.id===association.id&&!owner())return false;try{storage.removeItem(key);}catch(e){}if(read('gonow:group:'+user.uid)===association.id)try{storage.removeItem('gonow:group:'+user.uid);}catch(e){}if(group&&group.id===association.id){if(stopGroup)stopGroup();stopGroup=null;group=null;}await sdk.deleteDoc(sdk.doc(db,'invites',association.inviteId)).catch(()=>{});await sdk.deleteDoc(sdk.doc(db,'trips',association.id));return true;}
+ // Returns 'joined', 'already' (owner or returning member), or 'missing' (revoked/unknown link).
+ async function join(inviteId){if(!user)return false;const invite=await sdk.getDoc(sdk.doc(db,'invites',inviteId));if(!invite.exists())return 'missing';const id=invite.data().tripId;let already=false;try{const trip=await sdk.getDoc(sdk.doc(db,'trips',id));if(!trip.exists())return 'missing';already=(trip.data().memberIds||[]).includes(user.uid);}catch(e){/* Not a member yet: the rules hide the trip until the join write. */}
+  if(!already)await sdk.updateDoc(sdk.doc(db,'trips',id),{['members.'+user.uid]:{name:String(user.displayName||'Traveler').slice(0,40),joinedAt:Date.now()},memberIds:sdk.arrayUnion(user.uid),joinInvite:inviteId});watch(id);return already?'already':'joined';}
+ async function patch(data){if(!group)return;await sdk.updateDoc(sdk.doc(db,'trips',group.id),data);}
+ async function vote(id){if(!group||!user||!SAFE.test(String(id)))return;const old=group.votes[id]||[];await patch({lastChange:{by:user.uid,itemId:id},['votes.'+id]:old.includes(user.uid)?sdk.arrayRemove(user.uid):sdk.arrayUnion(user.uid)});}
+ function sort(picks){return picks.map((p,i)=>({p,i})).sort((a,b)=>(group?.votes[b.p.id||b.p]?.length||0)-(group?.votes[a.p.id||a.p]?.length||0)||a.i-b.i).map(x=>x.p);}
+ async function change(itemId,change){if(!group)return false;if(!owner()&&group.locks[itemId]){await patch({lastChange:{by:user.uid,itemId:user.uid+'_'+itemId},['suggestions.'+user.uid+'_'+itemId]:{by:user.uid,name:String(user.displayName||'Traveler').slice(0,40),itemId,change}});emit('notice','Sent to '+group.ownerName+' for OK');return true;}await patch({lastChange:{by:user.uid,itemId},['planContent.'+itemId]:change});return false;}
+ const SAFE=/^[A-Za-z0-9_-]{1,120}$/;
+ async function approve(id,yes){if(!owner())return;const s=group.suggestions?.[id];if(!s)return;
+  // A malformed or oddly keyed suggestion can only be dismissed; FieldPath avoids dotted-path parsing.
+  if(!SAFE.test(id)){if(sdk.FieldPath)await sdk.updateDoc(sdk.doc(db,'trips',group.id),new sdk.FieldPath('suggestions',id),sdk.deleteField());return;}
+  const valid=yes&&s.change&&typeof s.change==='object'&&SAFE.test(String(s.itemId||''));const data={['suggestions.'+id]:sdk.deleteField()};if(valid)data['planContent.'+s.itemId]=s.change;await patch(data);if(valid)emit('apply',s);}
+ // Community: public posts (anyone reads), owner-only writes and deletes, create-only reports. See firestore.rules.
+ async function communityList(){if(!await load())return null;const snap=await sdk.getDocs(sdk.query(sdk.collection(db,'community'),sdk.orderBy('createdAt','desc'),sdk.limit(30)));return snap.docs.map(d=>Object.assign({},d.data(),{id:d.id}));}
+ async function communityShare(post){if(!user||!sdk)throw Error('signin');const {id,...data}=post;if(!SAFE.test(String(id)))throw Error('id');await sdk.setDoc(sdk.doc(db,'community',id),Object.assign(data,{ownerId:user.uid,ownerName:String(data.ownerName||'Traveler').slice(0,40),createdAt:sdk.serverTimestamp()}));return id;}
+ async function communityRemove(id){if(!user||!sdk)throw Error('signin');await sdk.deleteDoc(sdk.doc(db,'community',id));}
+ // Shared per-city place-ID lists (Google ToS: only place IDs are kept long-term; details are fetched fresh).
+ const CITY=/^[a-z0-9-]{1,80}$/,PLACE_ID=/^[\w-]{10,300}$/,CATS=['sights','restaurants','cafes','outdoors'];
+ // Shared per-city place-ID lists (Google ToS: IDs only). Stored as "category:placeId" strings, append-only, max 32.
+ const PLACE_CAP=32,ENTRY=/^(sights|restaurants|cafes|outdoors):([\w-]{10,300})$/;
+ const entries=ids=>(Array.isArray(ids)?ids:[]).map(x=>typeof x==='string'&&ENTRY.exec(x)).filter(Boolean).map(m=>({id:m[2],cat:m[1]}));
+ async function placeIds(slug){if(!sdk||!CITY.test(String(slug)))return null;const snap=await sdk.getDoc(sdk.doc(db,'placeLists',slug));if(!snap.exists())return null;const seen=new Set();return entries(snap.data().ids).filter(x=>!seen.has(x.id)&&seen.add(x.id));}
+ // Signed-in (non-guest) accounts only. Appends new IDs after the existing ones (never drops any); skips when full or
+ // nothing is new. A lost race or a rules denial is ignored: the shared list is only a speed-up.
+ async function savePlaceIds(slug,city,ids){try{if(!user||user.isAnonymous||!sdk||!CITY.test(String(slug)))return false;
+  const fresh=(ids||[]).filter(x=>x&&PLACE_ID.test(x.id)&&CATS.includes(x.cat)).map(x=>x.cat+':'+x.id);
+  const ref=sdk.doc(db,'placeLists',slug),snap=await sdk.getDoc(ref),old=snap.exists()&&Array.isArray(snap.data().ids)?snap.data().ids.filter(x=>typeof x==='string'):null;
+  const have=new Set((old||[]).map(x=>x.split(':')[1]));const add=[];fresh.forEach(x=>{const id=x.split(':')[1];if(!have.has(id)){have.add(id);add.push(x);}});
+  const next=(old||[]).concat(add).slice(0,PLACE_CAP);
+  if(old?next.length<=old.length:next.length<8)return false;
+  await sdk.setDoc(ref,{city:old?snap.data().city:String(city||slug).slice(0,80),ids:next,by:user.uid,updatedAt:sdk.serverTimestamp()});return true;}catch(e){return false;}}
+ async function report(targetId,reason){if(!user||!sdk)throw Error('signin');await sdk.addDoc(sdk.collection(db,'reports'),{targetId:String(targetId).slice(0,200),reason,by:user.uid,at:sdk.serverTimestamp()});return true;}
+ async function saveProfile(p){if(!user||!sdk)throw Error('signin');if(p.displayName){await sdk.updateProfile(user,{displayName:p.displayName});emit('auth',user);}if(p.homeCity!==undefined)await sdk.setDoc(sdk.doc(db,'users',user.uid,'profile','main'),{homeCity:String(p.homeCity).slice(0,60),updatedAt:sdk.serverTimestamp()});}
+ async function restoreProfile(){try{if(read('gonow:home-city'))return;const snap=await sdk.getDoc(sdk.doc(db,'users',user.uid,'profile','main'));const city=snap.exists()&&snap.data().homeCity;if(city)remember('gonow:home-city',String(city).slice(0,60));}catch(e){}}
+ function storageSummary(home=false){return user&&read('gonow:sync:'+user.uid)==='yes'?(saved?'Saved to your account':'Saved on this device'):home&&!user?'Saved on this device. Sign in to sync.':'Saved on this device';}
+ return {placeIds,savePlaceIds,storageSummary,stopSharing,communityList,communityShare,communityRemove,report,saveProfile,get currentGroup(){return group;},load,google,email,completeEmail,anonymous,sync,write,upload,invite,join,vote,sort,change,approve,lock:(id,value)=>owner()?patch({['locks.'+id]:value}):Promise.resolve(),signOut:async()=>{if(sdk)await sdk.signOut(auth);},owner,get user(){return user;},get group(){return options.activeTrip&&group&&options.activeTrip()!==group.trip.id?null:group;},dispose(){disposed=true;clearTimeout(timer);if(stopTrips)stopTrips();if(stopGroup)stopGroup();}};
+}
+root.GoNowCloud={create,merge,SDK_BASE};if(typeof module!=='undefined')module.exports=root.GoNowCloud;
+})(typeof window==='undefined'?globalThis:window);

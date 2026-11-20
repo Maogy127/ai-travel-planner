@@ -1,0 +1,22 @@
+// Community and reports rules (DRAFT file firestore.community-draft.rules, not published). Emulator only (project demo-gonow-rules); never run against production.
+import {initializeTestEnvironment,assertSucceeds,assertFails} from '@firebase/rules-unit-testing';
+import {doc,setDoc,getDoc,getDocs,deleteDoc,addDoc,collection,query,orderBy,limit,serverTimestamp} from 'firebase/firestore';
+import {readFile} from 'node:fs/promises';
+import {test,after,beforeEach} from 'node:test';
+const env=await initializeTestEnvironment({projectId:'demo-gonow-rules',firestore:{rules:await readFile(new URL('../../firestore.community-draft.rules',import.meta.url),'utf8'),host:'127.0.0.1',port:8080}});
+after(()=>env.cleanup());
+const as=(uid,provider='google.com')=>env.authenticatedContext(uid,{firebase:{sign_in_provider:provider}}).firestore();
+const anon=()=>env.unauthenticatedContext().firestore();
+const trip=(uid,extra={})=>({kind:'trip',ownerId:uid,ownerName:'Sam',title:'5 days in Oahu',line:'Beaches',destination:'Oahu',photo:'images/oahu.jpg',days:[{theme:'Arrive',stops:['Beach']}],trip:{destination:'Oahu',nights:5,answers:{destination:'Oahu'},plan:{id:'p',days:[]},builder:null},createdAt:serverTimestamp(),...extra});
+const checkin=(uid,extra={})=>({kind:'checkin',ownerId:uid,ownerName:'Sam',title:'Leonard’s',line:'Malasadas',destination:'Honolulu',photo:'',place:'Leonard’s',note:'Malasadas',createdAt:serverTimestamp(),...extra});
+beforeEach(async()=>{await env.clearFirestore();await env.withSecurityRulesDisabled(async ctx=>{await setDoc(doc(ctx.firestore(),'community/t_alex_trip1'),{...trip('alex'),createdAt:Date.now()});});});
+test('C1 anyone (signed out) can read and list public posts',async()=>{await assertSucceeds(getDoc(doc(anon(),'community/t_alex_trip1')));await assertSucceeds(getDocs(query(collection(anon(),'community'),orderBy('createdAt','desc'),limit(30))));});
+test('C2 owner can share a trip and a check-in',async()=>{await assertSucceeds(setDoc(doc(as('sam'),'community/t_sam_trip1'),trip('sam')));await assertSucceeds(setDoc(doc(as('sam'),'community/c_sam_abc'),checkin('sam')));});
+test('C3 cannot post as someone else or under their id',async()=>{await assertFails(setDoc(doc(as('sam'),'community/t_sam_x'),trip('alex')));await assertFails(setDoc(doc(as('sam'),'community/t_alex_x'),trip('sam')));});
+test('C4 signed-out and anonymous users cannot post',async()=>{await assertFails(setDoc(doc(anon(),'community/t_sam_x'),trip('sam')));await assertFails(setDoc(doc(as('sam','anonymous'),'community/t_sam_x'),trip('sam')));});
+test('C5 size caps and field whitelist',async()=>{const db=as('sam');await assertFails(setDoc(doc(db,'community/t_sam_a'),trip('sam',{title:'x'.repeat(81)})));await assertFails(setDoc(doc(db,'community/c_sam_a'),checkin('sam',{note:'x'.repeat(141)})));await assertFails(setDoc(doc(db,'community/t_sam_b'),trip('sam',{extra:1})));await assertFails(setDoc(doc(db,'community/t_sam_c'),trip('sam',{days:Array(22).fill({theme:'d'})})));await assertFails(setDoc(doc(db,'community/t_sam_d'),trip('sam',{photo:'javascript:alert(1)'})));await assertFails(setDoc(doc(db,'community/t_sam_f'),trip('sam',{photo:'https://tracker.example/p.gif'})));await assertFails(setDoc(doc(db,'community/t_sam_e'),trip('sam',{createdAt:12345})));});
+test('C6 only the owner can update or delete',async()=>{await assertFails(deleteDoc(doc(as('sam'),'community/t_alex_trip1')));await assertFails(setDoc(doc(as('sam'),'community/t_alex_trip1'),trip('sam')));await assertSucceeds(deleteDoc(doc(as('alex'),'community/t_alex_trip1')));});
+test('R1 reports are create-only and unreadable',async()=>{const db=as('sam');await assertSucceeds(addDoc(collection(db,'reports'),{targetId:'t_alex_trip1',reason:'spam',by:'sam',at:serverTimestamp()}));await assertFails(getDocs(collection(db,'reports')));await assertFails(addDoc(collection(db,'reports'),{targetId:'t',reason:'other',by:'sam',at:serverTimestamp()}));await assertFails(addDoc(collection(db,'reports'),{targetId:'t',reason:'spam',by:'alex',at:serverTimestamp()}));await assertFails(addDoc(collection(anon(),'reports'),{targetId:'t',reason:'spam',by:'x',at:serverTimestamp()}));});
+test('P1 profile doc: owner only',async()=>{await assertSucceeds(setDoc(doc(as('sam'),'users/sam/profile/main'),{homeCity:'New York'}));await assertFails(getDoc(doc(as('alex'),'users/sam/profile/main')));});
+// L1 place-ID list rules now live in live.rules.test.mjs (same placeLists block in both files).
+

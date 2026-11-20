@@ -1,3 +1,4 @@
+from pathlib import Path
 """SpeechRecognition mock regressions at desktop/mobile; own port 8822."""
 import asyncio
 import subprocess
@@ -96,7 +97,7 @@ async def checks(browser):
 
 
 async def main():
-    server = subprocess.Popen([sys.executable, '-m', 'http.server', '8822', '--bind', '127.0.0.1'], cwd=SITE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    server = subprocess.Popen([sys.executable, str(Path(__file__).parent / 'serve_site.py'), '8822'], cwd=SITE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         for _ in range(50):
             try:

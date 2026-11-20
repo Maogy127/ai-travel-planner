@@ -1,9 +1,10 @@
+# Item F: port old Add/booking/reset flows to direct actions and the custom-item sheet.
 import base64
 import asyncio, sys, subprocess, time, json, re
 from pathlib import Path
 from datetime import date, timedelta
 from urllib.parse import urlparse, parse_qs, unquote
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, expect
 ROOT=Path(__file__).resolve().parent.parent
 SITE=ROOT/'site' if (ROOT/'site'/'index.html').exists() else ROOT
 (ROOT/'screenshots').mkdir(exist_ok=True)
@@ -20,6 +21,11 @@ async def through_picks(pg, picks=()):
   await pg.locator('[data-testid=pick-activities]:visible, [data-testid=pick-food]:visible, [data-testid=confirm-plan]:visible, [data-testid=db-root]:visible, [data-testid=trip-prep]:visible, [data-testid=treasure-map]:visible, [data-testid=plan-day]:visible').first.wait_for(timeout=45000)
   for screen in ('pick-activities', 'pick-food'):
     if await pg.get_by_test_id(screen).count():
+      # Non-curated destinations now load places; offline suites use the legacy fallback.
+      await pg.locator('[data-testid=pick-next]:visible, [data-testid=place-failure]:visible').first.wait_for(timeout=45000)
+      if await pg.get_by_test_id('place-failure').is_visible():
+        await pg.get_by_test_id('pick-fallback').click()
+        return
       for pick in picks:
         toggle=pg.locator(f'[data-pick-toggle="{pick}"]')
         if await toggle.count() and await toggle.get_attribute('aria-pressed')!='true':
@@ -40,6 +46,11 @@ async def wait_plan(pg):
   await through_picks(pg)
   await pg.locator('[data-testid=trip-prep]:visible, [data-testid=db-root]:visible, [data-testid=plan-day]:visible, [data-testid=treasure-map]:visible').first.wait_for(timeout=45000)
   await continue_prep(pg)
+async def open_share_menu(pg):
+  # Item G: exports now live in the header Share menu, opened before each action.
+  toggle = pg.get_by_test_id('share-menu-toggle')
+  if await toggle.get_attribute('aria-expanded') != 'true': await toggle.click()
+
 async def open_guidance(pg):
   await pg.locator('.pace-control').evaluate_all('items=>items.forEach(e=>e.open=true)')
 
@@ -54,9 +65,8 @@ async def open_day_pace(pg):
   link=pg.get_by_test_id('day-pace-link').first
   if await link.get_attribute('aria-expanded')!='true': await link.click()
 async def open_add_menu(pg):
-  panel=pg.locator('.day-add-panel').first
-  if await panel.count() and not await panel.evaluate('e=>e.open'):
-    await panel.locator('summary').click()
+  # Item F: actions are directly available, with no Add disclosure.
+  await pg.get_by_test_id('day-add-own').wait_for()
 async def open_group(pg):
   if await pg.get_by_test_id('track-toggle').get_attribute('aria-pressed')!='true': await pg.get_by_test_id('track-toggle').click()
   button=pg.get_by_test_id('group-toggle').first
@@ -125,14 +135,23 @@ async def local_api_fixture(ctx):
   # Every context uses these deterministic fixtures; never contact the live APIs.
   for host in ('api.open-meteo.com','archive-api.open-meteo.com','api.frankfurter.dev'):
     await ctx.route('https://'+host+'/**',mock_local_api)
-async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False):
+def is_place_url(url):
+  host = urlparse(str(url)).hostname or ''
+  return host in ('places.googleapis.com', 'nominatim.openstreetmap.org', 'overpass-api.de', 'overpass.kumi.systems', 'upload.wikimedia.org') or any(host == domain or host.endswith('.' + domain) for domain in ('wikipedia.org', 'wikidata.org'))
+
+async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False, nudge=False):
   ctx=await b.new_context(viewport={'width':w,'height':h}, reduced_motion=reduced_motion, has_touch=has_touch, is_mobile=has_touch and w<=600)
+  # The once-per-session guest sign-in nudge is covered by test_shell_nav (nudge=True); other suites start past it.
+  if not nudge: await ctx.add_init_script("try{sessionStorage.setItem('gonow:signin-nudge','1')}catch(e){}")
   await ctx.route("https://tile.openstreetmap.org/**", lambda route: route.fulfill(content_type="image/png", body=base64.b64decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGN4eXvnfwAIqwN9YzQAMgAAAABJRU5ErkJggg==")))
+  # Offline by default; fixture suites override these with later page routes.
+  await ctx.route(is_place_url, lambda route: route.abort())
   await local_api_fixture(ctx)
   pg=await ctx.new_page()
   pg.on('pageerror', lambda e: errors.append(f'{base[:5]} pageerror {e}'))
-  pg.on('console', lambda m: errors.append(f'{base[:5]} console {m.text}') if m.type=='error' else None)
-  pg.on('requestfailed', lambda r: errors.append(f'{base[:5]} requestfailed {r.url} {r.failure}'))
+  # Expected place-host aborts exercise fallback; keep other console/request errors fatal.
+  pg.on('console', lambda m: errors.append(f'{base[:5]} console {m.text}') if m.type=='error' and not is_place_url(m.location.get('url', '')) else None)
+  pg.on('requestfailed', lambda r: errors.append(f'{base[:5]} requestfailed {r.url} {r.failure}') if not is_place_url(r.url) else None)
   # Fulfill external fonts locally so offline verification has no network dependency.
   await pg.route('https://fonts.googleapis.com/**', lambda route: route.fulfill(status=200, content_type='text/css', body=''))
   await pg.goto(base+'?fast=1'); return ctx, pg
@@ -155,22 +174,43 @@ async def dashboard_action(pg, action):
   await card.get_by_test_id(action).click()
 
 async def choose_flight_time(pg, value):
-  current = await pg.get_by_test_id('db-flight-time').input_value() or '12:00'
-  current_hour, current_minute = map(int, current.split(':'))
-  await pg.get_by_test_id('add-flight-time').click()
-  dialog = pg.get_by_role('dialog')
-  await dialog.get_by_role('button', name='Other time', exact=True).click()
-  hour, minute = map(int, value.split(':'))
-  for _ in range((hour-current_hour)%24):
-    await dialog.get_by_role('button', name='Increase hour', exact=True).click()
-  for _ in range(((minute-current_minute)%60)//15):
-    await dialog.get_by_role('button', name='Increase minute', exact=True).click()
-  await dialog.get_by_role('button', name='Set time', exact=True).click()
+  # Flight edits now share a two-row sheet; preserve clock-picker coverage.
+  direction = await pg.evaluate("DayBuilder.selectedDate()===__gonow.state.plan.days[0].date?'arrival':'return'")
+  await pg.get_by_test_id('edit-flight').first.click()
+  sheet=pg.locator('dialog.flight-sheet')
+  field=sheet.get_by_test_id(direction+'-time')
+  current=await field.input_value() or '12:00'
+  current_hour,current_minute=map(int,current.split(':'))
+  await field.locator('..').get_by_role('button').click()
+  dialog=pg.locator('dialog.time-picker')
+  await dialog.get_by_role('button',name='Other time',exact=True).click()
+  hour,minute=map(int,value.split(':'))
+  # Step the total clock difference: minute wrap also advances the hour.
+  delta=(hour*60+minute-current_hour*60-current_minute)%1440
+  for _ in range(delta//60):
+    await dialog.get_by_role('button',name='Increase hour',exact=True).click()
+  for _ in range((delta%60)//15):
+    await dialog.get_by_role('button',name='Increase minute',exact=True).click()
+  await dialog.get_by_role('button',name='Set time',exact=True).click()
+  await expect(field).to_have_value(value)
+  await sheet.get_by_role('button',name='Save flights',exact=True).click()
+  await expect(sheet).to_have_count(0)
+  await expect(pg.get_by_test_id('db-flight-time')).to_have_count(1)
+  await expect(pg.get_by_test_id('db-flight-time')).to_have_value(value)
+  assert await pg.evaluate('(key)=>__gonow.state.answers[key]', direction+'Time') == value
 
 
 async def reopen(pg):
   # A reload lands on the dashboard when trips exist.
   await reopen_dashboard(pg)
+async def start_over(pg):
+  # In-page "Start over" exists only mid-flow (with a confirm); elsewhere ☰ → Home returns to the start.
+  so=pg.get_by_test_id('start-over')
+  if await so.count() and await so.is_visible():
+    await so.click(); await pg.get_by_test_id('start-over-yes').click()
+  else:
+    await pg.get_by_test_id('nav-toggle').click(); await pg.get_by_test_id('nav-home').click()
+  await pg.wait_for_timeout(200)
 async def open_form(pg):
   if await pg.get_by_test_id('start-from').count()==0:
     # Direct legacy route preserves destination validation fixtures. Home is covered by test_question_flow.
@@ -184,16 +224,18 @@ async def answer(pg, dest, unsure=False, ages=('18','19'), who='couple', styles=
   await pg.get_by_test_id('date-start').fill(start); await pg.get_by_test_id('date-end').fill(end)
   hint=await pg.get_by_test_id('guide').inner_text()
   await pg.get_by_test_id('q-continue').click()
-  ok('step progress + contextual guide', await pg.get_by_role('progressbar').get_attribute('aria-label')=='Step 2 of 8' and hint!=await pg.get_by_test_id('guide').inner_text())
+  # Flights are optional; preserve the budget checks after skipping the new step.
+  await pg.get_by_test_id('q-skip').click()
+  ok('step progress + contextual guide', await pg.get_by_role('progressbar').get_attribute('aria-label')=='Step 3 of 9' and hint!=await pg.get_by_test_id('guide').inner_text())
   ok('completed date retained without duplicate summary', await pg.evaluate("window.__gonow.state.answers.completed.includes('dates')") and await pg.get_by_test_id('pinned-answers').count()==0)
   ok('all five budget covers default checked', all([await pg.get_by_test_id('cover-'+k).is_checked() for k in ('flights','hotel','food','activities','transport')]))
   await pg.get_by_test_id('cover-flights').uncheck(); await pg.get_by_test_id('cover-food').uncheck()
   ok('single flights control stays synced', await pg.get_by_test_id('include-flights').count()==0 and await pg.evaluate('window.__gonow.state.answers.includeFlights') is False)
-  ok('progress maximum', await pg.get_by_role('progressbar').get_attribute('aria-valuemax')=='8')
+  ok('progress maximum', await pg.get_by_role('progressbar').get_attribute('aria-valuemax')=='9')
   ok('budget covers stored', await pg.evaluate("JSON.stringify(window.__gonow.state.answers.covers)")== '["hotel","activities","transport"]')
   await pg.get_by_test_id('opt-5000+').click(); await question_review_checks(pg)
   ok('selected option stamped', 'stamped' in (await pg.get_by_test_id('opt-5000+').get_attribute('class'))); await pg.get_by_test_id('q-continue').click()
-  ok('progress advances', await pg.get_by_role('progressbar').get_attribute('aria-valuenow')=='3')
+  ok('progress advances', await pg.get_by_role('progressbar').get_attribute('aria-valuenow')=='4')
   await pg.get_by_test_id('opt-'+who).click(); await pg.get_by_test_id('q-continue').click()
   for i,a in enumerate(ages): await pg.get_by_test_id(f'age-{i}').fill(a)
   await pg.get_by_test_id('q-continue').click()
@@ -211,15 +253,17 @@ async def extra(b, base, label):
   import re as _re
   css=(SITE/'css/styles.css').read_text()
   ok(f'{label} no invalid "x: :y" / "button: hover" selectors', not _re.search(r'^[a-z]+: :?[a-z]+\{', css, _re.M) and 'button:disabled{' in css and 'dialog::backdrop{' in css)
-  # place validation
+  # Two-letter custom places are valid; only junk gets the concise error.
   await open_form(pg)
-  await pg.get_by_test_id('start-to').fill('zz'); await pg.get_by_test_id('start-next').click()
-  ok(f'{label} place validation message', "couldn’t find that place" in await pg.locator('main').text_content())
+  await pg.get_by_test_id('start-to').fill('1'); await pg.get_by_test_id('start-next').click()
+  ok(f'{label} place validation message', "Enter a city or airport code." in await pg.locator('main').text_content())
   await pg.get_by_test_id('start-to').fill('Oahu'); await pg.get_by_test_id('start-from').fill('Los Angeles'); await pg.get_by_test_id('start-next').click()
   # skip dates -> flexible month (not January hard-coded)
   await pg.get_by_test_id('q-skip').click()
   m=await pg.evaluate('window.__gonow.state.answers.month'); exp=await pg.evaluate('new Date(Date.now()+75*864e5).getMonth()+1')
   ok(f'{label} skip dates sets month ~75 days out', m==exp, f'{m} vs {exp}')
+  # Skip the optional flights question before checking budget validation.
+  await pg.get_by_test_id('q-skip').click()
   # disabled continue style
   cont=pg.get_by_test_id('q-continue')
   if await cont.is_disabled():
@@ -315,7 +359,7 @@ async def motion_checks(b,base,label):
   ok(f'{label} reduced flip disabled', await pg.locator('.question').evaluate("e=>getComputedStyle(e).animationName")=='none')
   ok(f'{label} reduced motion class', await pg.locator('html').evaluate("e=>e.classList.contains('reduce-motion')"))
   ok(f'{label} fonts', 'Fraunces Variable' in await pg.locator('h1').evaluate('e=>getComputedStyle(e).fontFamily') and 'Inter Variable' in await pg.locator('body').evaluate('e=>getComputedStyle(e).fontFamily'))
-  await pg.get_by_test_id('start-over').click(); await pg.get_by_test_id('demo-oahu').click(); await continue_prep(pg)
+  await start_over(pg); await pg.get_by_test_id('demo-oahu').click(); await continue_prep(pg)
   ok(f'{label} reduced plan flow and tile animation disabled', await pg.locator('.db-daycard').first.evaluate('e=>getComputedStyle(e).animationName')=='none')
   await ctx.close()
 async def run(base, label, shots):
@@ -420,6 +464,7 @@ async def run(base, label, shots):
     await open_form(pg)
     await pg.get_by_test_id('start-from').fill('Seattle'); await pg.get_by_test_id('start-unsure').click(); await pg.get_by_test_id('start-next').click()
     await pg.get_by_test_id('date-start').fill('2027-02-10'); await pg.get_by_test_id('date-end').fill('2027-02-16'); await pg.get_by_test_id('q-continue').click()
+    await pg.get_by_test_id('q-skip').click()  # Optional flights before budget.
     await pg.get_by_test_id('opt-3000').click(); await pg.get_by_test_id('q-continue').click()
     await pg.get_by_test_id('opt-family').click()
     if shots:
@@ -461,6 +506,8 @@ async def batch_a_checks(b,base,label):
   await pg.get_by_test_id('fork-no').click()
   await through_picks(pg, OAHU_EXPORT_PICKS)
   await continue_prep(pg)
+  # Item G: open the header menu to retain the screen/print action visibility check.
+  await open_share_menu(pg)
   ok(f'{label} print button and screen stamp hidden', await pg.get_by_test_id('print-plan').is_visible() and not await pg.get_by_test_id('stamped-footer').is_visible())
   await pg.emulate_media(media='print')
   ok(f'{label} print chrome hidden', not await pg.locator('.topbar').is_visible() and not await pg.get_by_test_id('print-plan').is_visible() and not await pg.get_by_test_id('trip-prep-button').is_visible())
@@ -502,17 +549,20 @@ async def batch_a_checks(b,base,label):
   ok(f'{label} ICS timezone and researched events', 'TZID=Pacific/Honolulu' in ics and 'BEGIN:VTIMEZONE' in ics and 'Diamond Head' in unfolded and 'Kualoa' in unfolded)
   ok(f'{label} ICS respects note and removed stop', 'Shared café note\\, bring water\\; enjoy 🌺' in unfolded and ('SUMMARY:'+removed.replace(',', '\\,').replace(';','\\;')+'\r\n') not in unfolded)
   if label=='http':
+    await open_share_menu(pg)
     async with pg.expect_download() as pending: await pg.get_by_test_id('download-ics').click()
     download=await pending.value
     ok(f'{label} ICS download filename and content', download.suggested_filename=='gonow-oahu-2026-11-25.ics' and Path(await download.path()).read_bytes().startswith(b'BEGIN:VCALENDAR\r\n'))
   else:
+    await open_share_menu(pg)
     await pg.get_by_test_id('download-ics').click()
+  await open_share_menu(pg)
   await pg.get_by_test_id('share-link').click(); url=await pg.get_by_test_id('share-url').input_value()
   ok(f'{label} share URL compact and excludes packing', len(url)<4000 and '#trip=j.' in url)
   await pg.get_by_test_id('modal-0').click()
   await pg.reload(); await reopen(pg); await continue_prep(pg)
   ok(f'{label} progress badge absent after reload', await pg.get_by_test_id('rank-badge').count()==0)
-  await pg.get_by_test_id('start-over').click()
+  await start_over(pg)
   ok(f'{label} progress badge absent after Start over', await pg.get_by_test_id('rank-badge').count()==0)
   await ctx.close()
   # Fresh recipient: no saved trip should be written before adoption.
@@ -544,19 +594,19 @@ async def affiliate_checks(b,base,label):
     await open_trip_prep(pg)
     tile=pg.get_by_test_id('book-links')
     ok(f'{label} {destination} booking searches outside prep',await tile.count()==0)
-    await continue_prep(pg)
-    await pg.get_by_test_id('booking-searches').locator('summary').click()
-    note=pg.get_by_test_id('affiliate-disclosure')
-    ok(f'{label} {destination} disclosure visible',await note.is_visible() and "GoNow doesn't earn from these yet" in await note.inner_text())
+    # Good to know (and its fee disclosure) is gone from prep; affiliates are disabled.
+    ok(f'{label} {destination} no Good to know or disclosure',await pg.get_by_test_id('good-to-know').count()==0 and await pg.get_by_test_id('affiliate-disclosure').count()==0)
     domains={'booking':'www.booking.com','expedia':'www.expedia.com','skyscanner':'www.skyscanner.com','getyourguide':'www.getyourguide.com','viator':'www.viator.com'}
+    await continue_prep(pg)
     links=await pg.locator('a[data-partner]').evaluate_all("els=>els.map(e=>({key:e.dataset.partner,href:e.href,rel:e.rel,target:e.target,text:e.textContent}))")
-    ok(f'{label} {destination} all five partners',set(x['key'] for x in links)==set(domains))
+    ok(f'{label} {destination} distributed partner links',bool(links) and set(x['key'] for x in links).issubset(domains))
     for link in links:
       url=urlparse(link['href']);query=parse_qs(url.query)
       # Flight routes use known IATA codes; unknown routes use the homepage.
       dest_ok=(destination.lower() in unquote(link['href']).lower()) if link['key']!='skyscanner' else (('/LAX/HNL/' in url.path) if destination=='Oahu' else url.path=='/')
-      ok(f"{label} {destination} {link['key']} safe search",link['href'].startswith('https://'+domains[link['key']]+'/') and dest_ok and not any(k in query for k in ('aid','partner_id','pid','mcid')) and {'sponsored','noopener','noreferrer'}.issubset(link['rel'].split()) and link['target']=='_blank' and link['text'].startswith('Search on '))
-    ok(f'{label} {destination} activity searches',await pg.get_by_test_id('book-this').count()>0)
+      ok(f"{label} {destination} {link['key']} safe search",link['href'].startswith('https://'+domains[link['key']]+'/') and dest_ok and not any(k in query for k in ('aid','partner_id','pid','mcid')) and {'sponsored','noopener'}.issubset(link['rel'].split()) and link['target']=='_blank' and link['text'] in ('Book','Reserve','Book flights','Find a hotel'))
+    # DayBuilder mounts one day at a time; arrival day need not contain attractions.
+    ok(f'{label} {destination} activity searches',await plan_count(pg, '[data-testid=item-book]')>0)
     if destination=='Oahu':
       await continue_prep(pg)
       await show_day(pg,1)
@@ -567,68 +617,26 @@ async def affiliate_checks(b,base,label):
     await ctx.close()
 
 async def local_info_checks(b,base,label):
+  # Good to know is removed: no weather/FX calls; a one-line time difference sits at the top of the plan.
   ctx,pg=await new(b,base)
   calls=[];pg.on('request',lambda r: calls.append(r.url))
-  await pg.get_by_test_id('demo-oahu').click();await continue_prep(pg)
-  tile=pg.get_by_test_id('local-info')
-  ok(f'{label} local info outside prep',await tile.count()==1)
-  await open_trip_prep(pg)
+  await pg.get_by_test_id('demo-oahu').click()
+  ok(f'{label} draft time difference',await pg.get_by_test_id('time-diff').inner_text()=='Honolulu is 2 hrs behind LA')
   await continue_prep(pg)
-  await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true')
-  await tile.get_by_test_id('info-asof').first.wait_for()
-  body=await tile.inner_text()
-  ok(f'{label} local static guidance',all(t in body for t in ('Pacific/Honolulu','Types A/B','120 V','USD','Local time now','2026-11','General guidance — check official sources')))
-  ok(f'{label} local source and asof',await tile.get_by_test_id('info-source').count()==1 and 'Data date:' in body and 'As of' in body)
-  forecast=date(2026,11,25)>=date.today() and date(2026,11,29)<=date.today()+timedelta(days=15)
-  ok(f'{label} Oahu weather path',('Weather forecast' if forecast else 'Last year on these dates (not a forecast)') in body)
-  ok(f'{label} Oahu no FX request','Uses US dollars (USD)' in body and not any('frankfurter.dev' in u for u in calls))
-  weather_calls=[u for u in calls if 'open-meteo.com/v1/' in u]
-  query=parse_qs(urlparse(weather_calls[0]).query)
-  ok(f'{label} weather request dates',query['start_date']==['2026-11-25' if forecast else '2025-11-25'] and ('archive-api.' in weather_calls[0])!=forecast)
-  count=len(weather_calls)
-  await continue_prep(pg);await open_trip_prep(pg)
-  await pg.reload(); await reopen(pg); await continue_prep(pg)
-  await continue_prep(pg);await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info');await tile.get_by_test_id('info-asof').first.wait_for()
-  ok(f'{label} weather session cache',len([u for u in calls if 'open-meteo.com/v1/' in u])==count)
+  ok(f'{label} confirmed time difference',await pg.get_by_test_id('time-diff').inner_text()=='Honolulu is 2 hrs behind LA')
+  await open_trip_prep(pg)
+  body=await pg.locator('main').inner_text()
+  ok(f'{label} no Good to know in prep',await pg.get_by_test_id('good-to-know').count()==0 and await pg.get_by_test_id('local-info').count()==0 and 'Good to know' not in body)
+  ok(f'{label} Oahu has no plug adapter','adapter' not in body.lower())
+  ok(f'{label} no weather or FX requests',not any('open-meteo.com' in u or 'frankfurter.dev' in u for u in calls))
   await ctx.close()
   ctx,pg=await new(b,base)
-  calls=[];pg.on('request',lambda r:calls.append(r.url))
-  # Use browser-local dates, matching the forecast window in the application.
-  dates=await pg.evaluate("[3,6].map(n=>{let d=new Date();d.setDate(d.getDate()+n);return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')})")
-  await answer(pg,'Lisbon',start=dates[0],end=dates[1])
+  await answer(pg,'Lisbon')
   await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await continue_prep(pg);await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
-  await tile.get_by_test_id('fx-amount').wait_for();await tile.get_by_text('Weather forecast',exact=True).wait_for()
-  await tile.get_by_test_id('fx-amount').fill('100')
-  ok(f'{label} Lisbon FX converter',await tile.get_by_test_id('fx-result').inner_text()=='100 USD ≈ 90 EUR')
-  ok(f'{label} Lisbon daily forecast','high 80 °F / low 65 °F' in await tile.inner_text() and 'Rain chance 20%' in await tile.inner_text() and any('api.open-meteo.com/v1/forecast' in u for u in calls))
-  ok(f'{label} both live sources dated',await tile.get_by_test_id('info-source').count()==2 and await tile.get_by_test_id('info-asof').count()==2)
+  ok(f'{label} Lisbon time difference',await pg.get_by_test_id('time-diff').inner_text()=='Lisbon is 8 hrs ahead of LA',await pg.get_by_test_id('time-diff').inner_text())
+  await open_trip_prep(pg)
+  ok(f'{label} Lisbon plug adapter in What to bring',await pg.get_by_text('Plug adapter (Type C/F)',exact=True).count()==1)
   ok(f'{label} local info narrow layout',not await overflow(pg))
-  await ctx.close()
-  ctx,pg=await new(b,base)
-  # Invalid JSON with 200 avoids browser-generated resource-load console errors.
-  async def invalid(route): await route.fulfill(status=200,content_type='application/json',body='invalid JSON')
-  await pg.route('https://archive-api.open-meteo.com/**',invalid)
-  await pg.route('https://api.open-meteo.com/**',invalid)
-  await pg.route('https://api.frankfurter.dev/**',invalid)
-  await answer(pg,'Lisbon',start=dates[0],end=dates[1])
-  await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await continue_prep(pg);await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
-  await tile.get_by_test_id('info-retry').wait_for();await tile.get_by_text('Live rate unavailable',exact=True).wait_for()
-  ok(f'{label} friendly live failure',"Couldn't load live weather — check open-meteo.com" in await tile.inner_text() and 'Europe/Lisbon' in await tile.inner_text())
-  await pg.unroute('https://api.open-meteo.com/**',invalid)
-  await tile.get_by_test_id('info-retry').click();await tile.get_by_text('Weather forecast',exact=True).wait_for()
-  ok(f'{label} weather retry recovers',await tile.get_by_test_id('info-retry').count()==0)
-  await ctx.close()
-  # CRC is outside the ECB currency list: no Frankfurter request at all.
-  ctx,pg=await new(b,base)
-  calls=[];pg.on('request',lambda r:calls.append(r.url))
-  await answer(pg,'Costa Rica',start=dates[0],end=dates[1])
-  await pg.get_by_test_id('fork-no').click();await wait_plan(pg)
-  await continue_prep(pg);await pg.get_by_test_id('travel-info').evaluate('e=>e.open=true');tile=pg.get_by_test_id('local-info')
-  await tile.get_by_text('Live rate unavailable',exact=False).wait_for()
-  await tile.get_by_test_id('info-asof').first.wait_for()
-  ok(f'{label} Costa Rica CRC skips Frankfurter',not any('api.frankfurter.dev' in u for u in calls) and 'CRC' in await tile.inner_text() and await tile.get_by_text('Live rate unavailable',exact=False).is_visible())
   await ctx.close()
 async def db_open(b,base,w=1280,reduced_motion='no-preference'):
   ctx,pg=await new(b,base,w,844,reduced_motion,has_touch=True)
@@ -697,7 +705,9 @@ async def daybuilder_checks(b,base,label,shots):
   for date in ['2026-11-25','2026-11-26','2026-11-27','2026-11-28','2026-11-29']:
     await pg.get_by_test_id('db-day-'+date).click()
     ok(label+' db clear '+date,await day.locator('.db-conflict').count()==0)
-  ok(label+' db flight anchor','Flight (add your time)' in await day.inner_text() and await day.locator('.db-locked').count()==1)
+  # The default departure keeps its sample anchor and now offers the shared editor.
+  # Final audit: Return supplies direction; show the sample time in the short title.
+  ok(label+' db flight anchor','Sample · ~10:00 AM' in await day.inner_text() and await day.locator('.db-locked').count()==1)
   await pg.get_by_test_id('db-day-2026-11-26').click()
   async def ids():
     return await day.locator('[data-db-id]:not(.db-prep)').evaluate_all('es=>es.map(e=>e.dataset.dbId)')
@@ -709,15 +719,9 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db locked stays anchored',(await timeline())[-1]==list(expected[-1]) and 'Locked booking' in await pg.get_by_test_id('db-live').inner_text())
   if await locked.get_by_test_id('db-expand').get_attribute('aria-expanded')=='true': await locked.get_by_test_id('db-expand').click()
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
-  ok(label+' db tray expanded',await pg.get_by_test_id('db-tray-toggle').get_attribute('aria-expanded')=='true')
-  await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
-  ok(label+' db tray collapsed',await pg.get_by_test_id('db-tray-toggle').get_attribute('aria-expanded')=='false')
-  await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
-  tray=pg.get_by_test_id('db-tray')
-  ok(label+' db initial tray empty',await tray.locator('[data-db-id]').count()==0)
+  assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
+  # Item F: replace chest disclosure assertions with its removal; reflow fixtures below remain.
+  ok(label+' old day tray absent',await pg.get_by_test_id('db-tray').count()==0)
   await pg.evaluate("""() => {
     window.dbSawShake = false;
     window.dbShakeObserver = new MutationObserver(records => {
@@ -763,7 +767,7 @@ async def daybuilder_checks(b,base,label,shots):
   await pg.keyboard.press('Escape');await pg.mouse.up()
   ok(label+' db pointer cancel',await raw_ids()==before and await pg.locator('.db-ghost,.db-drop-indicator').count()==0)
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   await add_reflow_fixture(pg, 'chest-0')
   notes=await day.get_by_test_id('db-note').all_text_contents()
   visible_notes=await day.locator('[data-testid=db-note]:visible').all_text_contents()
@@ -775,45 +779,47 @@ async def daybuilder_checks(b,base,label,shots):
   ok(label+' db late connector',await day.locator('.db-travel-late').inner_text()=='Uber ~20 min · leave by 6:55 PM')
   # Start from suggested order so photos is directly before the locked dinner.
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   await (await card_action(pg, day.locator('[data-db-id=photos]'), 'db-down')).click()
   ok(label+' db move past locked',(await raw_ids()).index('photos')>(await raw_ids()).index('lamer') and await day.locator('[data-db-id=photos]').get_by_test_id('db-time').text_content()=='10:00 PM–11:00 PM' and await locked.get_by_test_id('db-time').text_content()=='7:30 PM–9:30 PM')
   ok(label+' db afterdark button','After dark — sunset ~5:48 PM' in await day.locator('[data-db-id=photos]').inner_text())
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   handle=(await card_action(pg, day.locator('[data-db-id=photos]'), 'db-handle'))
   await handle.focus();await pg.keyboard.press('Space');await pg.keyboard.press('ArrowDown');await pg.keyboard.press('Space')
   ok(label+' db afterdark keyboard','After dark — sunset ~5:48 PM' in await day.locator('[data-db-id=photos]').inner_text())
   edited=await timeline();await pg.reload(); await reopen(pg); await pg.get_by_test_id('db-root').wait_for()
   ok(label+' db persistence',await timeline()==edited)
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-booking-toggle').click()
-  await pg.get_by_test_id('db-booking-name').fill('Harbor reservation')
-  await pg.get_by_test_id('db-booking-start').fill('22:00');await pg.get_by_test_id('db-booking-end').fill('23:00')
-  await pg.get_by_test_id('db-booking-end').fill('21:00')
-  await pg.get_by_test_id('db-booking-add').click()
-  ok(label+' db invalid booking','after start' in await pg.get_by_test_id('db-form-note').inner_text())
-  await pg.get_by_test_id('db-booking-end').fill('23:00')
-  await pg.get_by_test_id('db-booking-add').click()
+  await pg.get_by_test_id('day-add-own').click();await pg.get_by_test_id('add-own-booked').check()
+  await pg.get_by_test_id('add-own-name').fill('Harbor reservation')
+  await pg.get_by_test_id('add-own-start').fill('22:00');await pg.get_by_test_id('add-own-end').fill('23:00')
+  await pg.get_by_test_id('add-own-end').fill('21:00')
+  await pg.get_by_test_id('add-own-submit').click()
+  ok(label+' db invalid booking','after start' in await pg.get_by_test_id('add-own-note').inner_text())
+  await pg.get_by_test_id('add-own-end').fill('23:00')
+  await pg.get_by_test_id('add-own-submit').click()
   booking=day.locator('.db-locked[data-db-id^=custom-]').filter(has_text='Harbor reservation')
   ok(label+' db custom booking','10:00 PM–11:00 PM' in await booking.text_content() and 'Locked' in await booking.inner_text())
   ok(label+' db booking focus',await booking.evaluate('e=>e.contains(document.activeElement)'))
   await (await card_action(pg, booking, 'db-delete')).click()
-  ok(label+' db delete focus',await pg.evaluate("document.activeElement.matches('[data-testid=db-booking-toggle], [data-db-id], [data-db-id] button')"))
+  ok(label+' db delete focus',await pg.evaluate("document.activeElement.matches('[data-testid=day-add-own], [data-db-id], [data-db-id] button')"))
   ok(label+' db delete booking',await booking.count()==0)
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
-  ok(label+' db reset focus',await pg.get_by_test_id('db-reset').evaluate('e=>e===document.activeElement'))
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
+  ok(label+' db reset focus',await pg.get_by_test_id('day-reset').evaluate('e=>e===document.activeElement'))
   ok(label+' db reset',await timeline()==[list(x) for x in expected])
   await pg.set_viewport_size({'width':390,'height':844})
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
+  assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
   await add_reflow_fixture(pg, 'chest-1')
   await (await card_action(pg, day.locator('[data-db-id^=instance-]').last, 'db-up')).tap()
   await open_add_menu(pg)
-  if not await pg.get_by_test_id('db-booking-form').is_visible(): await pg.get_by_test_id('db-booking-toggle').click()
-  ok(label+' db mobile booking button',await pg.get_by_test_id('db-booking-add').evaluate('e=>{const r=e.getBoundingClientRect();return r.height>=40&&r.height<=48&&Math.abs(r.width-e.parentElement.clientWidth)<2}'))
+  if not await pg.get_by_test_id('add-own-sheet').is_visible(): await pg.get_by_test_id('day-add-own').click();await pg.get_by_test_id('add-own-booked').check()
+  # Item F: sheet actions share a row; verify a usable target within the viewport.
+  ok(label+' db mobile booking button',await pg.get_by_test_id('add-own-submit').evaluate('e=>{const r=e.getBoundingClientRect();return r.height>=44&&r.width>=44&&r.right<=innerWidth}'))
   ok(label+' db mobile usable',not await overflow(pg))
+  await pg.keyboard.press('Escape')  # Item F: dismiss the modal before switching days.
   ok(label+' db mobile tap targets',await day.locator('.db-controls button').evaluate_all('es=>es.every(e=>e.getBoundingClientRect().width>=40&&e.getBoundingClientRect().height>=40)'))
   await pg.get_by_test_id('db-day-2026-11-28').click()
   await add_reflow_fixture(pg, 'chest-0')
@@ -824,7 +830,7 @@ async def daybuilder_checks(b,base,label,shots):
   await ctx.close()
   ctx,pg=await db_open(b,base,reduced_motion='reduce')
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
+  assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
   await add_reflow_fixture(pg, 'chest-1')
   conflict=pg.locator('.db-conflict').first
   ok(label+' db reduced motion',await conflict.count()>0 and await conflict.evaluate("e=>getComputedStyle(e).animationName==='none'&&!e.classList.contains('db-shake')"))
@@ -854,7 +860,13 @@ async def merged_checks(b,base,label,shots):
   await ex.click()
   ok(label+' click expands',await ex.get_attribute('aria-expanded')=='true' and await panel.is_visible() and await row.evaluate("e=>e.classList.contains('is-open')"))
   ok(label+' expanded pops',await panel.evaluate("e=>e.classList.contains('db-pop')&&getComputedStyle(e).animationName==='tile-pop'"))
-  ok(label+' expanded checklist photo book tip',await panel.get_by_test_id('bring-item').count()==0 and await panel.locator('.db-photo img').count()==1 and await panel.locator('a',has_text=re.compile('Book|Search on')).count()>0 and await panel.get_by_test_id('travel-chip').count()==1)
+  # Diamond Head is time-locked; booking actions are checked on the unlocked ticketed tour below.
+  ok(label+' locked entry has no booking action',await panel.locator('[data-testid=item-book], [data-testid=item-reserve]').count()==0)
+  tour=day.locator('[data-db-id="2026-11-26-5"]')
+  await tour.get_by_test_id('db-expand').click()
+  ok(label+' ticketed expanded detail booking',await tour.get_by_test_id('db-detail').get_by_test_id('item-book').is_visible())
+  await tour.get_by_test_id('db-expand').click()
+  ok(label+' expanded checklist photo tip',await panel.get_by_test_id('bring-item').count()==0 and await panel.locator('.db-photo img').count()==1  and await panel.get_by_test_id('travel-chip').count()==1)
   ok(label+' prep moved out of activity box',await panel.get_by_test_id('bring-item').count()==0)
   await ex.click()
   ok(label+' second click collapses',await ex.get_attribute('aria-expanded')=='false' and not await panel.is_visible())
@@ -876,7 +888,7 @@ async def merged_checks(b,base,label,shots):
   await (await card_action(pg, photos, 'db-up')).click(); await (await card_action(pg, photos, 'db-down')).click()
   ok(label+' up/down do not toggle',await photos.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false')
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   await photos.get_by_test_id('db-expand').click()
   ok(label+' open before drag',await photos.get_by_test_id('db-expand').get_attribute('aria-expanded')=='true')
   await db_pointer(pg,(await card_action(pg, photos, 'db-handle')),day.locator('[data-db-id=return-hotel]'))
@@ -884,16 +896,16 @@ async def merged_checks(b,base,label,shots):
   moved=day.locator('[data-db-id=photos]')
   ok(label+' drag does not leave box expanded',order.index('photos')<order.index('return-hotel') and await moved.get_by_test_id('db-expand').get_attribute('aria-expanded')=='false' and not await moved.get_by_test_id('db-detail').is_visible(),str(order))
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
-  # Lock toggle on every box
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
+  # Confirmed bookings use static tags to avoid dead unlock toggles.
   rows=day.locator('[data-testid=db-pair]:not(.db-prep)')
-  n=await rows.count(); locks=day.get_by_test_id('db-lock')
-  ok(label+' lock toggle on every box',n>5 and await locks.count()==n,f'{n} rows {await locks.count()} locks')
+  n=await rows.count(); locks=day.locator('button[data-testid=db-lock]')  # Static indicators are not 44px toggle targets.
+  ok(label+' lock toggle on every box',n>5 and await locks.count()+await day.get_by_test_id('db-locked-tag').count()==n,f'{n} rows {await locks.count()} locks')
   ok(label+' lock toggle 44px padlock',await locks.evaluate_all("es=>es.every(e=>{const r=e.getBoundingClientRect();return r.width>=44&&r.height>=44&&e.querySelector('svg')&&['true','false'].includes(e.getAttribute('aria-pressed'))})"))
   ok(label+' lock and move menu share card',await day.locator('[data-db-id=free]').evaluate("e=>!!e.querySelector('.db-controls [data-db-action=lock]')&&!!e.querySelector('.db-controls [data-testid=db-more]')&&['handle','up','down','remove'].every(a=>e.querySelector('[data-testid=db-more-menu] [data-db-action='+a+']'))"))
-  lamer=day.locator('[data-db-id=lamer]').get_by_test_id('db-lock')
-  ok(label+' booking starts locked',await lamer.get_attribute('aria-pressed')=='true' and await lamer.get_attribute('aria-label')=='Unlock time')
-  ok(label+' open box starts unlocked',await free.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await free.get_by_test_id('db-lock').get_attribute('aria-label')=='Lock time')
+  lamer=day.locator('[data-db-id=lamer]').get_by_test_id('db-locked-tag')
+  ok(label+' booking starts locked',await lamer.count()==1 and await lamer.evaluate("e=>e.tagName==='SPAN'&&!e.hasAttribute('role')&&!e.hasAttribute('tabindex')"))
+  ok(label+' open box starts unlocked',await free.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and (await free.get_by_test_id('db-lock').get_attribute('aria-label')).startswith('Lock '))
   # 11/27: lock the dive at 8:00, then push lunch into it.
   await pg.get_by_test_id('db-day-2026-11-27').click()
   dive=day.locator('[data-db-id=dive-1127]')
@@ -923,6 +935,7 @@ async def merged_checks(b,base,label,shots):
   saved=await pg.evaluate("JSON.parse(localStorage.getItem('gonow:daybuilder:oahu-demo-2026-11')).days['2026-11-27'].items.find(i=>i.id==='dive-1127')")
   ok(label+' lock stored in localStorage',saved.get('locked') and saved.get('userLocked'))
   # Share round-trip
+  await open_share_menu(pg)
   await pg.get_by_test_id('share-link').click(); url=await pg.get_by_test_id('share-url').input_value(); await pg.get_by_test_id('modal-0').click()
   ok(label+' share link carries builder',len(url)<4000 and '#trip=j.' in url)
   c2,p2=await new(b,base,1280,844)
@@ -938,16 +951,12 @@ async def merged_checks(b,base,label,shots):
   await dive.get_by_test_id('db-lock').click()
   await pg.get_by_test_id('unlock-accept').click()
   ok(label+' unlock restores reflow',await dive.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await dive.get_by_test_id('db-handle').count()==1 and not any('dive' in n.lower() for n in await day.get_by_test_id('db-note').all_text_contents()) and await dive.get_by_test_id('db-note').count()==0 and await t('dive-1127')!=before and 'Unlocked' in await pg.get_by_test_id('db-live').inner_text())
-  # Unlock a booking
+  # Confirmed bookings stay fixed; the old unlock control was a dead toggle.
   senia=day.locator('[data-db-id=senia]')
-  await senia.get_by_test_id('db-lock').click()
-  await pg.get_by_test_id('unlock-accept').click()
-  ok(label+' booking can be unlocked',await senia.get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await senia.get_by_test_id('db-up').count()==1 and not await senia.evaluate("e=>e.classList.contains('db-locked')"))
-  o0=await order27(); s0=await t('senia'); await (await card_action(pg, senia, 'db-up')).click()
-  o=await order27(); ok(label+' unlocked booking moves',o.index('senia')==o0.index('senia')-1,f'{o0} -> {o}')
+  ok(label+' booking stays locked',await senia.locator('button[data-testid=db-lock]').count()==0 and await senia.get_by_test_id('db-locked-tag').count()==1 and await senia.get_by_test_id('db-up').count()==0)
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
-  ok(label+' reset restores default locks',await day.locator('[data-db-id=senia]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='true' and await day.locator('[data-db-id=dive-1127]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await t('senia')=='6:00 PM–8:00 PM' and await t('dive-1127')==before)
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
+  ok(label+' reset restores default locks',await day.locator('[data-db-id=senia]').get_by_test_id('db-locked-tag').count()==1 and await day.locator('[data-db-id=dive-1127]').get_by_test_id('db-lock').get_attribute('aria-pressed')=='false' and await t('senia')=='6:00 PM–8:00 PM' and await t('dive-1127')==before)
   # Print: every day, every box open, no controls
   await pg.evaluate("window.dispatchEvent(new Event('beforeprint'))"); await pg.emulate_media(media='print')
   pa=root.locator('.db-print-all')
@@ -978,16 +987,22 @@ async def daybuilder_round5_checks(b,base,label):
     contrast=await readable(pg,selector)
     ok(label+' db contrast '+selector,contrast['ratio']>=4.5 and contrast['size']>=12,str(contrast))
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-tray-toggle').click()
+  assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-booking-toggle').click()
+  await pg.get_by_test_id('day-add-own').click();await pg.get_by_test_id('add-own-booked').check()
   ok(label+' db coarse pointer',await pg.evaluate("matchMedia('(pointer:coarse)').matches"))
   ok(label+' db all coarse targets',await root.locator('button:visible,input:visible,select:visible').evaluate_all('es=>es.every(e=>{const t=(e.type==="checkbox"&&e.closest("label"))||e,r=t.getBoundingClientRect();return r.width>=44&&r.height>=44})'))
-  await pg.get_by_test_id('db-booking-name').fill('Overlapping booking')
-  await pg.get_by_test_id('db-booking-start').fill('20:00');await pg.get_by_test_id('db-booking-end').fill('21:00')
-  await pg.get_by_test_id('db-booking-add').click()
-  ok(label+' db booking overlap','Overlaps La Mer' in await pg.get_by_test_id('db-form-note').inner_text())
+  await pg.get_by_test_id('add-own-name').fill('Overlapping booking')
+  await pg.get_by_test_id('add-own-start').fill('20:00');await pg.get_by_test_id('add-own-end').fill('21:00')
+  await pg.get_by_test_id('add-own-submit').click()
+  ok(label+' db booking overlap','Overlaps La Mer' in await pg.get_by_test_id('db-live').inner_text())  # Item F: sheet closes after adding; conflict is announced.
   ok(label+' db booking overlap announced','Overlaps' in await pg.get_by_test_id('db-live').inner_text())
+  # Item F: the sheet closes, but its single conflict line stays on the new item.
+  own=day.locator('[data-db-id]').filter(has=pg.get_by_test_id('db-activity').locator('strong').filter(has_text='Overlapping booking'))
+  await expect(own).to_have_count(1)
+  conflict=own.locator('.db-note').filter(has_text='Overlaps La Mer')
+  await expect(conflict).to_have_count(1)
+  await expect(conflict).to_be_visible()
   await pg.get_by_test_id('db-day-2026-11-28').click()
   await add_reflow_fixture(pg, 'chest-0')
   ok(label+' db flight unset blocks dive', await blocked_dive_is_unscheduled(pg))
@@ -996,7 +1011,7 @@ async def daybuilder_round5_checks(b,base,label):
   await pg.get_by_test_id('db-day-2026-11-28').click()
   # Put a dive early in the day so a late next-day flight leaves more than 24h.
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   await pg.evaluate("""() => {
     const key='gonow:daybuilder:oahu-demo-2026-11',saved=JSON.parse(localStorage.getItem(key));
     saved.days['2026-11-28'].items=[{...DayBuilder.trayItems()[0],preferred:540}];
@@ -1046,11 +1061,11 @@ async def daybuilder_senia_checks(b,base,label):
     ok(tag+' reorder lock stays',await senia_time()=='6:00 PM–8:00 PM' and await senia.get_by_test_id('db-note').count()==0)
     ok(tag+' reorder announced',"you'd miss Senia" in await pg.get_by_test_id('db-live').inner_text())
     await open_add_menu(pg)
-    await pg.get_by_test_id('db-reset').click()
+    await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
     ok(tag+' reset clear',await timeline()==[list(x) for x in SENIA_DAY] and await day.locator('.db-conflict').count()==0)
     # Add the parasail (lands after dinner, still clear), then drag it in front of the hotel Uber.
     await open_add_menu(pg)
-    await pg.get_by_test_id('db-tray-toggle').click()
+    assert await pg.get_by_test_id('db-tray-toggle').count()==0  # Item F: ideas are picked through Swap.
     await add_reflow_fixture(pg, 'chest-1')
     ok(tag+' add after dinner clear',await day.locator('.db-conflict').count()==0 and await senia_time()=='6:00 PM–8:00 PM')
     instance=await day.locator('[data-db-id^=instance-]').last.get_attribute('data-db-id')
@@ -1090,7 +1105,7 @@ async def daybuilder_senia_checks(b,base,label):
     ok(tag+' drag lock stays',await senia_time()=='6:00 PM–8:00 PM' and await senia.get_by_test_id('db-note').count()==0)
     ok(tag+' drag late connector','leave by 5:10 PM' in await day.locator('.db-travel-late').inner_text())
     await open_add_menu(pg)
-    await pg.get_by_test_id('db-reset').click()
+    await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
     await pg.get_by_test_id('db-day-2026-11-26').click()
     ok(tag+' 11/26 La Mer intact',await day.locator('[data-db-id=lamer]').get_by_test_id('db-time').text_content()=='7:30 PM–9:30 PM' and await day.locator('.db-conflict').count()==0)
     ok(tag+' no overflow',not await overflow(pg))
@@ -1116,8 +1131,10 @@ async def regression_checks(b,base,label):
   ok(label+' ICS matches reflowed times', '20261126T220000' in unfolded and '20261126T230000' in unfolded and '20261126T174000' not in unfolded and '20261126T193000' in unfolded and '20261126T213000' in unfolded)
   ok(label+' copy text matches reflowed times', '10:00 PM–11:00 PM' in text and 'Kahala Beach' in text and '5:40 PM–6:40 PM' not in text and '7:30 PM–9:30 PM' in text)
   await pg.evaluate("navigator.clipboard.writeText=t=>{window.__copied=t;return Promise.resolve()}")
+  await open_share_menu(pg)
   await pg.get_by_test_id('copy').click()
   ok(label+' copy button uses the same text', await pg.evaluate('window.__copied')==text)
+  await open_share_menu(pg)
   await pg.get_by_test_id('share-link').click(); url=await pg.get_by_test_id('share-url').input_value(); await pg.get_by_test_id('modal-0').click()
   c2,p2=await new(b,base)
   await p2.goto(url); await p2.get_by_test_id('db-root').wait_for(); await p2.get_by_test_id('db-day-2026-11-26').click()
@@ -1134,7 +1151,7 @@ async def regression_checks(b,base,label):
   ok(label+' print shows reflowed details without controls', '10:00 PM' in printed and '7:30 PM' in printed and details_ok and controls==0)
   await pg.emulate_media(media='screen'); await pg.evaluate("window.dispatchEvent(new Event('afterprint'))")
   await open_add_menu(pg)
-  await pg.get_by_test_id('db-reset').click()
+  await pg.get_by_test_id('day-reset').click();await pg.get_by_test_id('day-reset-confirm').click()
   ok(label+' reset restores 5:40 photos', await clock('photos')=='5:40 PM–6:40 PM', await clock('photos'))
   # 11/28 Relax changes the builder clock and keeps locks plus reorder.
   await pg.get_by_test_id('db-day-2026-11-28').click()
@@ -1176,7 +1193,7 @@ async def regression_checks(b,base,label):
 
 async def main():
   await run((SITE/'index.html').resolve().as_uri(), 'file', True)
-  srv=subprocess.Popen([sys.executable,'-m','http.server','8793','-d',str(SITE)],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); time.sleep(1)
+  srv=subprocess.Popen([sys.executable,str(Path(__file__).parent/'serve_site.py'),'8793'],cwd=str(SITE),stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL); time.sleep(1)
   try: await run('http://127.0.0.1:8793/index.html','http',False)
   finally: srv.terminate()
   ok('zero console errors', len(errors)==0, json.dumps(errors[:10]))

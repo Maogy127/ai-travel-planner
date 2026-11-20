@@ -24,7 +24,7 @@ assert.equal(C.suggest(items,{energy:'high',sleep:'poor'}).suggestions[0].type,'
 assert.deepEqual(C.suggest(items,{energy:'ok',soreness:'none',sleep:'ok'}).suggestions,[]);
 assert.deepEqual(C.suggest(items,{skipped:true,energy:'low'}).suggestions,[]);
 const goal=R.selectLevel('gentle','athlete');assert.equal(C.score(items,goal,[],{}, {soreness:'some'}).goals.move,54);assert.equal(C.score(items,goal,[],{},{}).goals.move,90);
-const html=R.render(C.score([],goal,[],{},{}));assert(html.includes('No recovery block today. Rest is part of the plan —'));assert(!/\b(missed|failed|behind|fell short|only|not enough)\b/i.test(html.replace(/<[^>]*>/g,'')));
+const html=R.render(C.score([],goal,[],{},{}));/* Ring trim: one rest action replaces duplicate advice. */ assert(html.includes('No rest today · Add a pool break?'));assert(!/\b(missed|failed|behind|fell short|only|not enough)\b/i.test(html.replace(/<[^>]*>/g,'')));
 const memory=new Map();global.localStorage={getItem:k=>memory.get(k),setItem:(k,v)=>memory.set(k,v)};
 C.put('gonow.checkin.v1','2026-11-26','traveler-0',{done:true,soreness:'some',dismissed:['h']});
 C.put('gonow.checkin.v1','2026-11-26','traveler-1',{skipped:true});

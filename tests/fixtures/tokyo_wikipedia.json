@@ -1,0 +1,12 @@
+{
+  "title": "Tokyo National Museum",
+  "extract": "Tokyo National Museum is a museum in Tokyo. Its collections span many periods.",
+  "thumbnail": {
+    "source": "https://upload.wikimedia.org/wikipedia/commons/fixture-museum.jpg"
+  },
+  "content_urls": {
+    "desktop": {
+      "page": "https://en.wikipedia.org/wiki/Tokyo_National_Museum"
+    }
+  }
+}

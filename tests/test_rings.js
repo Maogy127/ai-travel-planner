@@ -53,7 +53,8 @@ scheduled.forEach((items,i)=>{
  const prefs={...J.adjustment({date:sample[i].date,day:i+1,origin:'Los Angeles'}),previousItems:scheduled[i-1]||[],usualBedtime:'22:30',jetlagAdjusted:i<2,stay:'the Kahala'};
  const result=scoreDay(items,'active',null,prefs);
  assert.deepStrictEqual(Object.values(result.values),morningExpected[i]);
- if(i===1){const html=render(result);assert(html.includes('8:50 PM'));assert(html.includes('5:35 AM'));assert(html.includes('Active pace'));assert(html.includes('adjusted to local time'));}
+ // Ring trim replaces the detailed sleep/pace prose with one estimate sentence.
+ if(i===1){const html=render(result);assert(html.includes('Sleep estimate:'));assert(!html.includes('Goals come from'));}
 });
 const R=require('../js/rings');
 assert(!R.shortNight(7,8)); // exactly one hour short; above 85%
@@ -65,13 +66,15 @@ const locked=[{id:'ride',title:'Uber',start:335,end:350,duration:15},{id:'slot',
 const snapshot=JSON.stringify(locked);assert.equal(R.proposal(locked,'later'),null);assert(!B.canShiftUnlocked(locked,'slot',390));assert(!B.canShiftUnlocked(locked,'ride',365));assert.equal(JSON.stringify(locked),snapshot);
 assert.deepStrictEqual(R.proposal([{id:'walk',title:'Walk',start:600,end:630}], 'later'),{id:'walk',title:'Walk',start:630,end:660});
 assert.equal(R.freeGap([{start:600,end:630}]),630);
-const emptyHtml=render(scoreDay([],'active'));assert(emptyHtml.includes('No recovery block today. Rest is part of the plan —'));assert(!emptyHtml.includes('>Rest is part of the plan<'));assert(emptyHtml.includes('No recovery block counted today'));
+// Ring trim: one working rest action replaces duplicate recovery prose.
+const emptyHtml=render(scoreDay([],'active'));assert(emptyHtml.includes('No rest today · Add a pool break?'));assert(!emptyHtml.includes('No recovery block'));
 console.log('PASS budget-fix morning sleep table, strict nudge boundaries, locked shift guard and contextual breakdown');
 
 // budget-fix: the day has one clickable summary; details and advice stay collapsed.
 const compactDay=render(scoreDay(day,'active'),{compact:true,caption:false});
 assert.equal((compactDay.match(/data-testid="ring-breakdown-toggle"/g)||[]).length,1);
-assert(/<button[^>]*data-testid="ring-breakdown-toggle"[^>]*>[\s\S]*<svg[\s\S]*class="compact-values"[\s\S]*<\/button>/.test(compactDay));
+// Ring trim gives the disclosure its own small, explicit label.
+assert(compactDay.includes('>How we count</button>'));
 assert(compactDay.includes('aria-expanded="false"'));
 assert(/<div hidden[^>]*data-testid="ring-breakdown"/.test(compactDay));
 assert(!compactDay.includes('<figcaption>'));
@@ -81,3 +84,25 @@ console.log('PASS one compact, keyboard-accessible day ring summary with collaps
 const {summary}=require('../js/rings.js');
 assert(!summary({sleep:8,move:30,rec:0}).includes('Recover 0 min'));
 assert(summary({sleep:8,move:30,rec:15}).includes('Recover 15 min'));
+
+const flightHtml=render(scoreDay([],'active'),{compact:true,flyHome:true,flightLabel:'Flight 1:30 PM'});
+assert(!flightHtml.includes('ring-move'));assert(!flightHtml.includes('goal '));assert(flightHtml.includes('Flight 1:30 PM'));
+for(const html of [emptyHtml,compactDay,flightHtml]){
+ assert((html.match(/class="ring-encouragement"/g)||[]).length<=1);
+ for(const copy of ['From getting back','Goals come from','Not counted:','No recovery block'])assert(!html.includes(copy));
+ assert(!/<h4>[^<]+<\/h4><ul><\/ul>/.test(html));
+}
+// Ring trim: short sleep takes precedence over rest and easy-day suggestions.
+const shortResult=scoreDay([],'active');shortResult.values.sleep=5+55/60;
+const shortHtml=render(shortResult,{compact:true,flyHome:true,flightLabel:'Flight 8:00 AM'});
+// Final audit: duration belongs only to the compact summary; advice gives an action.
+assert(shortHtml.includes('Short night · Rest on your flight'));
+assert(shortHtml.includes('aria-label="Sleep 5h55 · Flight 8:00 AM"'));
+assert.equal((shortHtml.replace(/<svg[\s\S]*?<\/svg>/g,'').match(/5h55/g)||[]).length,1);
+assert(!shortHtml.includes('ring-rest-break'));
+assert.equal((shortHtml.match(/class="ring-encouragement"/g)||[]).length,1);
+const easyHtml=render(scoreDay(day,'active'));
+assert(easyHtml.includes('Easy day — a short walk is plenty.'));
+assert.equal((emptyHtml.match(/No rest today/g)||[]).length,1);
+assert.equal((emptyHtml.match(/Plan estimates, not medical advice/g)||[]).length,1);
+console.log('PASS ring trim priorities, one rest action, concise panel and flight-only sleep');

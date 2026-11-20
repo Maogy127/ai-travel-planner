@@ -110,6 +110,35 @@ function estimateTravel(a,b,mode='Uber') {
     const minutes=Math.max(walking?5:10,Math.round(roadKm/(walking?4.5:roadKm>10?35:25)*60/5)*5);
     return {roadKm,minutes,label:(walking?'Walk':mode==='Walk'?'Uber':mode)+' ~'+minutes+' min'};
 }
+// Candidates must fit the outgoing road leg as well as the activity itself.
+// Meals swap for restaurants serving that meal; activities swap for activities.
+const MEAL_WORD=/\b(breakfast|brunch|lunch|dinner|supper)\b/i;
+function mealSlot(item) {
+    const m=String(item?.title||'').match(MEAL_WORD);
+    if(m)return ({brunch:'breakfast',supper:'dinner'})[m[1].toLowerCase()]||m[1].toLowerCase();
+    return item?.kind==='meal'?'any':null;
+}
+function slotCandidates({item,previous,next,catalog,inPlan=[],date,mode='Uber'}) {
+    // An untitled meal takes its slot from the clock, so a 7 AM bakery is swapped for breakfast places only.
+    const byClock=t=>!Number.isFinite(t)?'any':t<630?'breakfast':t<900?'lunch':t>=1020?'dinner':'any';
+    let meal=mealSlot(item);if(meal==='any')meal=byClock(item.start??item.preferred);
+    const food=p=>Array.isArray(p.meals)&&p.meals.length>0;
+    return catalog.filter(p=>!inPlan.includes(p.id)&&(meal?food(p)&&(meal==='any'||p.meals.includes(meal)):!food(p))).map(p=>{
+        // A following travel row already covers the road leg, so it is not counted twice.
+        // Without coordinates on both ends, keep the plan's existing gap instead of guessing a 30-min ride.
+        const known=next&&[p.lat,p.lng,next.lat,next.lng].every(Number.isFinite);
+        const travel=next&&next.kind!=='travel'&&known?estimateTravel(p,next,mode):{minutes:next&&Number.isFinite(item.end)?Math.max(0,next.start-item.end):0,label:''};
+        const slot=(next?.start??item.end)-item.start-travel.minutes;
+        const natural=Number(p.duration)||60;
+        // A meal can be quicker than usual (min 15 min); activities keep their full time.
+        const duration=meal?Math.min(natural,slot):natural;
+        const candidate={...p,title:p.name,preferred:item.start,duration,hours:p.parsedHours||p.hours,
+            closed:[...(p.closed||[]),...(p.closedDates||[]).map(date=>({date})),...(p.closedDays?.length?[{weekdays:p.closedDays}]:[])]};
+        const distance=estimateTravel(previous||item,p);
+        return {pick:p,duration,slot,travel,candidate,distance:distance.roadKm??distance.minutes};
+    }).filter(r=>r.duration>=(meal==='breakfast'?15:meal?30:1)&&r.duration<=r.slot&&!blockedOn(r.candidate,date))
+      .sort((a,b)=>a.distance-b.distance||a.pick.name.localeCompare(b.pick.name));
+}
 function leg(from, to, mode = 'Drive') {
     const minutes = from === to ? 5 : commuteMinutes(from, to);
     const label = (from === to || minutes === 10 || isWalk(from,to) ? 'Walk' : mode) + ' ~' + Math.max(5,Math.round(minutes/5)*5) + ' min';
@@ -136,8 +165,8 @@ function duration(item) {
 }
 function convert(item = {}) {
     return {
-        flight:item.flight, airport:item.airport, inboundRide:item.inboundRide, transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
-        duration: item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: item.tags || (/intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : []),
+        fixedBooking:item.fixedBooking, flight:item.flight, flightDirection:item.flightDirection, airport:item.airport, inboundRide:item.inboundRide, transportMode:item.transportMode, locked:!!item.locked, category:item.category, area:item.area, lat:item.lat, lng:item.lng, photo:item.photo, price:item.price, costEstimate:item.costEstimate, movementMinutes:item.movementMinutes, closed:item.closed, hours:item.hours, rules:item.rules, needsTicket:item.needsTicket, booking:item.booking, tour:item.tour, bookingLabel:item.bookingLabel, bookable:item.bookable, booked:item.booked, id: item.id, sourceId: item.id, desc: item.desc, wellness: item.wellness, title: clean(item.title || 'Activity'), place: item.pick ? item.place : place(item.title || 'Activity'), preferred: parse(item.time),
+        duration: item.kind==='flight'?0:item.pick ? item.duration : duration(item), manualTime:!!item.pick, walkNext: /approx\. 5 min walk/.test(item.travelToNext || ''), kind: item.kind, tags: item.tags || (/intro dive/i.test(item.title) ? ['dive'] : /sunset/i.test(item.title) ? ['sunset'] : []),
         estimate: !/(?:About|allow about|2\.5)\s*\d*\.?\d* h\b/i.test(item.desc),
         detail: parse(item.time) === null ? item.time + ' · confirm flight time' : ''
     };
@@ -150,6 +179,7 @@ function operatingRules(item) {
 }
 function closedOn(item,date) {
     const rules=operatingRules(item);
+    if(rules.hours?.week && !rules.hours.week[new Date(date+'T12:00:00Z').getUTCDay()].length)return {weekdays:[new Date(date+'T12:00:00Z').getUTCDay()]};
     return (rules.closed||[]).find(r=>r.date===date || (r.weekdays||[]).includes(new Date(date+'T12:00:00Z').getUTCDay())) || null;
 }
 function shortDate(date) { return new Date(date+'T12:00:00Z').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric',timeZone:'UTC'}); }
@@ -157,6 +187,7 @@ function blockedOn(item,date,ctx={}) {
     if(closedOn(item,date))return 'Closed '+shortDate(date);
     const start=item.preferred ?? item.start ?? 540, end=start+(item.duration||60);
     const rules=operatingRules(item);
+    if(rules.hours?.week && !rules.hours.week[new Date(date+'T12:00:00Z').getUTCDay()].some(([a,b])=>start>=a&&end<=b))return 'Outside opening hours';
     if(rules.hours && (!rules.hours.date||rules.hours.date===date) && (start<rules.hours.open || end>rules.hours.close))return 'Outside opening hours';
     if(!['travel','flight'].includes(item.kind) && ((item.tags||[]).includes('dive') || /\b(?:dive|diving|scuba)\b/i.test(item.title||''))) {
         const departure=ctx.departureDate||sourcePlan().end||sourcePlan().days.at(-1)?.date;
@@ -200,8 +231,8 @@ function buildSuggested(date) {
         Object.assign(items[0], {place: HOTEL, to: 'Diamond Head'});
         Object.assign(items[1], {preferred: 360, duration: 90, locked: true});
         Object.assign(items[2], {place: 'Diamond Head', to: WAIKIKI});
-        Object.assign(items[3], {place: WAIKIKI, to: 'Kualoa Ranch', locked: true});
-        Object.assign(items[6], {place: 'Kualoa Ranch', to: WAIKIKI, locked: true});
+        Object.assign(items[3], {place: WAIKIKI, to: 'Kualoa Ranch', locked: true, fixedBooking: true});
+        Object.assign(items[6], {place: 'Kualoa Ranch', to: WAIKIKI, locked: true, fixedBooking: true});
         Object.assign(items[7], {id: 'return-hotel', place: WAIKIKI, to: HOTEL});
         Object.assign(items[8], {id: 'free', flex: true});
         Object.assign(items[9], {id: 'prep-dress', kind: 'prep', place: HOTEL});
@@ -235,10 +266,10 @@ function buildSuggested(date) {
         items = [ride, dive, lunch, shop, toHotel, dinner, home];
     }
 
-    if (date === '2026-11-25' && items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title))) Object.assign(items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title)), {flight:true, textTime:'Add flight time', preferred:null, detail:'Sample arrival: 5:30 PM — add your actual flight time.'});
+    if (!day.flightsEdited && date === '2026-11-25' && items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title))) Object.assign(items.find(i => /flight|(?:arriv|land).*HNL/i.test(i.title)), {flight:true, locked:true, textTime:'Add flight time', preferred:null, detail:'Sample arrival: 5:30 PM — add your actual flight time.'});
 
     // The flight remains an unknown-time anchor until the traveler supplies a time.
-    if (date === '2026-11-29') items.filter(item => /flight|HNL/i.test(item.title)).slice(-1).forEach(item => {
+    if (!day.flightsEdited && date === '2026-11-29') items.filter(item => /flight|HNL/i.test(item.title)).slice(-1).forEach(item => {
         item.locked = true;
         item.title = 'Flight (add your time)';
         item.flight = true;
@@ -248,7 +279,7 @@ function buildSuggested(date) {
     });
     return {date, items, unscheduled: clone(day.unscheduled||[])};
 }
-// Ideas no longer on a day card stay available in Activity ideas.
+// Source ideas remain available for Swap and the draft activity library.
 const chestOnly = [{id: 'magic-island', time: '5:15 PM', kind: 'sight', title: 'Magic Island sunset',
     desc: 'Ala Moana Beach Park. Be in place by about 5:30 PM; sunset about 5:48 PM.'}];
 function trayItems() {
@@ -297,10 +328,15 @@ function replanStay(items, oldStay, newStay) {
 }
 function reflow(day, ctx = {}) {
     const output = [];
+    const fa=ctx.flightAnswers, active=fa&&(fa.flightsStep||fa.arrivalTime||fa.returnTime), fw=active&&window.GoNowFlights?window.GoNowFlights.windowFor(fa):null;
+    const first=sourcePlan().days[0]?.date,last=sourcePlan().days.at(-1)?.date;
+    const boundary=fw&&(day.date===first||day.date===last);
 
     const ages = (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number);
     const rejected=[];
-    const raw = clone(day.items).filter(item=>{const reason=blockedOn(item,day.date,ctx);if(reason)rejected.push({...item,blockedReason:reason});return !reason;});
+    // A time the traveler set by hand stays put; opening hours become a heads-up instead of moving it off the day.
+    const overridden=(item,reason)=>item.hoursOk&&/opening hours/i.test(reason||'');
+    const raw = clone(day.items).filter(item=>{const reason=blockedOn(item,day.date,ctx);if(boundary&&item.locked&&/flight/i.test(reason||''))return true;if(overridden(item,reason))return true;if(reason)rejected.push({...item,blockedReason:reason});return !reason;});
     raw.forEach(item => { delete item.notes; delete item.noteSources; delete item.notePriority; delete item.noteSource; });
     if(stayOverride)raw.forEach(item=>{['place','to'].forEach(k=>{if(item[k]===HOTEL)item[k]=stayOverride;});if(item.prepBlock&&item.prepBlock.place===HOTEL)item.prepBlock.place=stayOverride;});
     let previous = null;
@@ -345,7 +381,7 @@ function reflow(day, ctx = {}) {
         if (previous?.walkNext && previous.place === item.place) travel = {minutes: 5, label: 'Walk ~5 min'};
         // A ride booked from where you already are needs no connector.
         if (item.pickup && previous && (previous.to || previous.place) === item.place) travel = {minutes: 0, label: ''};
-        const earliest = previous ? previous.end + travel.minutes + (item.walkBack ? 10 : 0) : 0;
+        const earliest = Math.max(previous ? previous.end + travel.minutes + (item.walkBack ? 10 : 0) : 0, boundary&&day.date===first&&!['flight','travel'].includes(item.kind)?fw.arrivalStart:0);
         item.start = (item.manualTime || item.locked) && item.preferred !== null ? item.preferred : Math.max(earliest, item.preferred ?? (previous ? 0 : 540));
         if (item.flex && !item.locked && !item.manualTime) {
             // Work backwards from the next anchor, reserving every intervening
@@ -365,9 +401,15 @@ function reflow(day, ctx = {}) {
             item.duration = Math.max(0, Math.min(item.duration, latest - item.start));
             if (item.duration < 15) continue;
         }
+        if(boundary&&day.date===first&&!item.locked&&!['flight','travel'].includes(item.kind))item.start=Math.max(item.start,earliest);
         item.end = item.start + item.duration;
+        if(boundary&&!['flight','travel'].includes(item.kind)){
+            const conflict=(day.date===first&&(item.start<fw.arrivalStart||item.end>1440))||(day.date===last&&(fw.departure<=480||item.end>fw.leave||/flight/i.test(blockedOn({...item,preferred:item.start},day.date,ctx)||'')));
+            if(conflict){if(item.locked)warn(item,item.title+' conflicts with your flight');else {rejected.push(item);continue;}}
+        }
         const block=blockedOn({...item,preferred:item.start},day.date,ctx);
-        if(block){rejected.push({...item,blockedReason:block});continue;}
+        if(overridden(item,block))warn(item,'May be closed at this time');
+        else if(block&&!(boundary&&item.locked&&/flight/i.test(block))){rejected.push({...item,blockedReason:block});continue;}
         if (previous) {
             const buffer = item.dressy ? 15 : 0;
             const depart = item.locked && !item.textTime ? item.start - buffer - travel.minutes : previous.end;
@@ -390,7 +432,7 @@ function reflow(day, ctx = {}) {
                 warn(item, 'Ends ' + clock(item.end) + " — you'd miss " + venue(booking), undefined, 0);
             }
             if ((!item.locked || item.custom) && item.start < booking.preferred + booking.duration && item.end > booking.preferred) {
-                warn(item, 'Overlaps ' + booking.title, undefined, 1);
+                warn(item, 'Overlaps ' + venue(booking), undefined, 1);
             }
         }
         const sunset = String(sourcePlan().weather.text || '').match(/sunset approx\. (\d{1,2}:\d{2} PM)/i);
@@ -420,7 +462,7 @@ const icons = {
     unlock: svg('<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 017.6-1.7M12 15v2"/>'),
     add: '+ Add', delete: svg('<path d="M4 6h16M9 6V3h6v3M6 6l1 15h10l1-15M10 10v7m4-7v7"/>')
 };
-const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'To ideas', add: 'Add to day', delete: 'Delete booking'};
+const labels = {handle: 'Move', up: 'Move up', down: 'Move down', remove: 'Remove from day', add: 'Add to day', delete: 'Delete booking'};
 function button(action, title, disabled = false) {
     const label = esc(labels[action] + ' ' + title);
     return `<button type="button" data-testid="db-${action}" data-db-action="${action}"${disabled ? ' disabled aria-disabled="true"' : ''} aria-label="${label}" title="${label}">${icons[action]}</button>`;
@@ -437,10 +479,12 @@ function sourceOf(item, date) {
     if (!sourceCache[date]) sourceCache[date] = new Map(buildSuggested(date).items.map(i => [i.id, i.sourceId]));
     return sourceCache[date].get(item.id) || item.id;
 }
+const fixedBooking = item => !!(item.booked || (item.custom && item.booked !== false) || item.flight || item.kind === 'flight' || item.fixedBooking);
 const lockable = item => !item.textTime && item.kind !== 'prep';
 const uidFor = (date, id) => (date + '-' + id).replace(/[^\w-]/g, '_');
 // Locking pins the shown start and end; unlocking restores the item's own preference.
 function toggleLock(item, shown) {
+    if (fixedBooking(item)) return !!item.locked;
     if (item.locked) {
         item.locked = false;
         if (item.userLocked) {
@@ -468,11 +512,13 @@ function exportDays(days, flightTime) {
         const base = buildSuggested(date).items;
         const pool = base.concat(tray);
         const items = day.items.map(item => {
-            if (item.custom) return {c: 1, cl:item.closed, hr:item.hours, tg:item.tags, ru:item.rules, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0};
+            if (item.custom) return {c: 1, b:item.booked, cl:item.closed, hr:item.hours, tg:item.tags, ru:item.rules, ot:item.originalTitle, id: item.id, t: String(item.title).slice(0, 100), p: item.preferred, d: item.duration, pl: item.place, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, ...(item.hoursOk ? {h: 1} : {})};
             const original = pool.find(candidate => candidate.id === item.id);
             if (original && !item.routeReview && !item.originalTitle && !item.manualTime && !!original.locked === !!item.locked && original.preferred === item.preferred && original.duration === item.duration) return item.id;
             const entry = {id: item.id, s: item.sourceId, m: item.manualTime, e: item.estimate, l: item.locked ? 1 : 0, p: item.preferred, d: item.duration};
             if(item.overlapNote)entry.ov=item.overlapNote;
+            // A hand-set time outside opening hours is kept (with a heads-up) after reload.
+            if(item.hoursOk)entry.h=1;
             if(item.routeReview)entry.rv=item.title;
             if(item.originalTitle){entry.ot=item.originalTitle;entry.tt=item.title;}
             if (item.checkinSwap) entry.a = item.title;
@@ -504,7 +550,7 @@ function importDays(data) {
                 const start = minutes(entry.p), length = minutes(entry.d);
                 if (typeof entry.t !== 'string' || !entry.t.trim() || (start === undefined) || !length) return null;
                 return {closed:entry.cl,hours:entry.hr,tags:entry.tg,rules:entry.ru,originalTitle:entry.ot, id: entry.id.slice(0, 40), title: entry.t.slice(0, 100), preferred: start, duration: length,
-                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false};
+                    place: typeof entry.pl === 'string' ? entry.pl.slice(0, 40) : 'Other', locked: !!entry.l, booked:entry.b, custom: true, sourceId: entry.s || entry.id, manualTime: !!entry.m, estimate: entry.e !== false, ...(entry.h ? {hoursOk: true} : {})};
             }
             const item = find(entry.id) || pool.find(i => i.sourceId === entry.s) && clone(pool.find(i => i.sourceId === entry.s));
             if (!item) return null;
@@ -512,8 +558,8 @@ function importDays(data) {
             if(entry.ov)item.overlapNote=entry.ov;
             if(entry.rv){item.title=entry.rv;item.routeReview=true;}
             if(entry.ot){item.originalTitle=entry.ot;item.title=entry.tt;}
-            item.id = entry.id; item.manualTime = !!entry.m; if (entry.e !== undefined) item.estimate = entry.e;
-            item.locked = !!entry.l;
+            item.id = entry.id; item.manualTime = !!entry.m; if (entry.e !== undefined) item.estimate = entry.e; if (entry.h) item.hoursOk = true;
+            item.locked = fixedBooking(item) || !!entry.l;
             if (minutes(entry.p) !== undefined) item.preferred = entry.p;
             if (minutes(entry.d)) item.duration = entry.d;
             if (entry.u && item.locked) Object.assign(item, {userLocked: true, basePreferred: minutes(entry.bp) ?? null, baseDuration: minutes(entry.bd) ?? item.duration});
@@ -536,6 +582,20 @@ function mount(root, ctx = {}) {
     if(KEY!==nextKey){session.date=nextPlan?.id==='oahu-demo-2026-11'?'2026-11-26':nextPlan?.days?.[0]?.date||'2026-11-26';session.open.clear();Object.keys(sourceCache).forEach(k=>delete sourceCache[k]);}
     KEY=nextKey;planSource=nextPlan;
     if(!sourcePlan().days.some(d=>d.date===session.date))session.date=sourcePlan().days[0]?.date||'2026-11-26';
+    // Reconstruct flight anchors before importing saved or shared builder IDs.
+    // In the untouched demo the existing sample cards remain unchanged.
+    const flightAnswers=ctx.flightAnswers;
+    if(window.GoNowFlights&&flightAnswers&&(flightAnswers.flightsStep||flightAnswers.arrivalTime||flightAnswers.returnTime)){
+        const w=window.GoNowFlights.windowFor(flightAnswers),ends=[sourcePlan().days[0],sourcePlan().days.at(-1)];
+        ends.forEach((d,index)=>{
+            const direction=index?'return':'arrival',at=index?w.departure:w.landing;
+            let anchor=d.items.find(i=>i.flightDirection===direction||i.kind==='flight'||(!index&&/land at|arrival flight/i.test(i.title)));
+            if(!anchor){anchor={id:direction+'-flight',prep:[],bring:[],sources:[]};d.items.push(anchor);}
+            Object.assign(anchor,{title:window.GoNowFlights.label(flightAnswers,direction),flightDirection:direction,kind:'flight',time:clock(at),duration:0,locked:true});
+            if(index)d.items.filter(i=>i.kind==='travel'&&/airport|HNL/i.test(i.title)).forEach(i=>{i.time=clock(w.leave);i.desc='About '+w.road+' min.';});
+            d.flightsEdited=true;
+        });
+    }
     let saved = {};
     if (ctx.shared) {
         const key = JSON.stringify(ctx.initial || null);
@@ -550,8 +610,19 @@ function mount(root, ctx = {}) {
         try { saved = JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) {}
     }
     const days = saved.days || {};
+    if(window.GoNowFlights&&flightAnswers&&(flightAnswers.flightsStep||flightAnswers.arrivalTime||flightAnswers.returnTime)){
+        const w=window.GoNowFlights.windowFor(flightAnswers);
+        [sourcePlan().days[0],sourcePlan().days.at(-1)].forEach((d,index)=>{
+            const stored=days[d.date];if(!stored)return;
+            if(index)stored.items.filter(i=>i.flight&&i.kind==='travel'&&/airport|HNL/i.test(i.title+' '+(d.items.find(s=>s.id===i.id)?.title||''))).forEach(i=>{
+                Object.assign(i,{flight:false,title:d.items.find(s=>s.id===i.id)?.title||'Leave for the airport',preferred:w.leave,duration:w.road,manualTime:true});delete i.textTime;delete i.detail;
+            });
+            d.items.filter(i=>i.flightDirection).forEach(i=>{if(!stored.items.some(s=>s.id===i.id))stored.items.push(convert(i));});
+        });
+    }
     if (ctx.shared) saved.days = days;
     let flightTime = saved.flightTime || sourcePlan().flightTime || '';
+    if(window.GoNowFlights&&flightAnswers&&(flightAnswers.flightsStep||flightAnswers.arrivalTime||flightAnswers.returnTime))flightTime=clock(window.GoNowFlights.windowFor(flightAnswers).departure);
     if(/^\d{1,2}:\d{2}$/.test(flightTime)){const parts=flightTime.split(':').map(Number);flightTime=clock(parts[0]*60+parts[1]);}
     if (ctx.dock) root.classList.add('db-dock');
     root.innerHTML = ctx.dock
@@ -562,10 +633,8 @@ function mount(root, ctx = {}) {
     const live = root.querySelector('[data-testid=db-live]');
     let previousConflicts = new Map();
     let addedConflicts = [];
-    let formStatus = '';
     let date = session.date;
-    let expanded = false;
-    let bookingOpen = false;
+    let resetOpen = false;
     let editingTime = null;
     let picked = null;
     let drag = null;
@@ -657,7 +726,16 @@ function mount(root, ctx = {}) {
         });
     }
     function dayResult(stored, on) {
-        const intent=adjustedItems(visibleItems(stored,on),on);
+        let intent=adjustedItems(visibleItems(stored,on),on);
+        if(ctx.flightAnswers&&(ctx.flightAnswers.flightsStep||ctx.flightAnswers.arrivalTime||ctx.flightAnswers.returnTime)&&window.GoNowFlights){
+            const a=ctx.flightAnswers,w=window.GoNowFlights.windowFor(a),first=sourcePlan().days[0].date,last=sourcePlan().days.at(-1).date;
+            if(on===first||on===last)intent=intent.map(i=>{
+                const direction=i.flightDirection||((i.flight||i.kind==='flight')?(on===first?'arrival':'return'):null);
+                if(direction){const copy={...i,title:window.GoNowFlights.label(a,direction),flight:false,flightDirection:direction,kind:'flight',duration:0,preferred:direction==='arrival'?w.landing:w.departure,locked:true};delete copy.textTime;delete copy.detail;return copy;}
+                if(on===last&&i.kind==='travel'&&/airport|HNL/i.test(i.title))return {...i,preferred:w.leave,duration:w.road,manualTime:true};
+                return i;
+            });
+        }
         const result=reflow({...stored,items:stored.chronological?intent.map(i=>({...i,manualTime:true})):intent}, {...ctx,flightTime});
         if(stored.chronological)result.items.sort((a,b)=>(a.start ?? Infinity)-(b.start ?? Infinity));
         return result;
@@ -674,13 +752,46 @@ function mount(root, ctx = {}) {
     function listFor(zone) {
         return zone === 'tray' ? current().unscheduled : current().items;
     }
+    function openSwap(id) {
+        const on=date, shown=dayResult(current(),on).items, index=shown.findIndex(i=>i.id===id), item=shown[index];
+        const suggesting=!!(item?.locked&&window.goNowAccount?.group&&!window.goNowAccount.owner());
+        if(!item||((item.locked||item.booked)&&!suggesting))return;
+        const catalog=ctx.swapCatalog();
+        if(catalog===null){
+            // Places for this city are still loading (new session or device): wait briefly, then open.
+            const wait=document.createElement('dialog');wait.setAttribute('data-testid','swap-sheet');wait.className='swap-sheet';wait.innerHTML='<button type="button" data-close aria-label="Close">×</button><h2>Swap</h2><p role="status" data-testid="swap-loading">Loading places…</p>';
+            root.appendChild(wait);wait.showModal();let tries=0;const close=()=>{clearInterval(timer);wait.close();wait.remove();};wait.querySelector('[data-close]').onclick=close;
+            const timer=setInterval(()=>{const next=ctx.swapCatalog();if(next!==null||++tries>40){close();if(next&&next.length)openSwap(id);else announce('Couldn’t load places. Try again.');}},500);
+            return;
+        }
+        const identify=i=>catalog.find(p=>p.id===i.sourceId||p.id===i.id||String(i.title||'').toLowerCase().includes(p.name.toLowerCase()));
+        const used=schedule().days.flatMap(d=>d.items.map(i=>identify(i)?.id||i.sourceId||i.id));
+        const origin=identify(shown[index-1]||{})||identify(item)||item;
+        const candidates=slotCandidates({item,previous:origin,next:shown[index+1],catalog,inPlan:used,date:on,mode:roadMode(item,{date:on},ctx)});
+        const sheet=document.createElement('dialog');sheet.setAttribute('data-testid','swap-sheet');sheet.className='swap-sheet';
+        sheet.innerHTML='<button type="button" data-close aria-label="Close">×</button><h2>Swap</h2><input type="search" aria-label="Search places" placeholder="Search places"><div data-results></div><button type="button" data-testid="swap-free">Remove, keep time free</button>';
+        const finish=choice=>{
+            if(suggesting){const p=choice?.pick;window.goNowAccount.change(id,p?{action:'swap',title:item.title,alternative:{title:p.name,sourceId:p.id,place:p.area||p.name,duration:choice.duration}}:{action:'remove',title:item.title});sheet.close();sheet.remove();return;}
+            const before=clone(days), restorePicks=ctx.swapPicks?.(identify(item),choice?.pick);
+            days[on]={...current(),chronological:true,items:shown.filter(i=>i.id!==id).map(i=>({...i,preferred:i.start,manualTime:true}))};
+            if(choice){const p=choice.pick;days[on].items.push({id:p.id,sourceId:p.id,custom:true,title:p.name,place:p.area||p.name,lat:p.lat,lng:p.lng,kind:p.meals?.length?'meal':'activity',preferred:item.start,duration:Math.min(choice.duration,choice.slot),manualTime:true,hours:p.hours,closed:choice.candidate.closed});}
+            days[on].items.sort((a,b)=>a.preferred-b.preferred);
+            sheet.close();sheet.remove();save();render();
+            ctx.undo?.('Swapped ·',()=>{Object.keys(days).forEach(k=>delete days[k]);Object.assign(days,before);restorePicks?.();save();render();});
+        };
+        const results=sheet.querySelector('[data-results]');
+        function filter(){const q=sheet.querySelector('input').value.toLowerCase();const rows=candidates.filter(r=>(r.pick.name+' '+r.pick.category).toLowerCase().includes(q)).slice(0,5);results.innerHTML=rows.map((r,n)=>'<button type="button" data-testid="swap-option" data-choice="'+n+'">'+esc(r.pick.name)+' · '+r.duration+' min'+(r.travel.label?' · '+esc(r.travel.label):'')+'</button>').join('')||'<p>'+(q?'No matches':'Nothing else fits this time')+'</p>';results.querySelectorAll('button').forEach(b=>b.onclick=()=>finish(rows[+b.dataset.choice]));}
+        sheet.querySelector('input').oninput=filter;sheet.querySelector('[data-close]').onclick=()=>{sheet.close();sheet.remove();};sheet.querySelector('[data-testid=swap-free]').onclick=()=>finish(null);
+        root.appendChild(sheet);filter();sheet.showModal();
+    }
     function positionMessage(id, zone) {
         const list = zone === 'tray' ? current().unscheduled : visibleItems(current(), date);
         const index = list.findIndex(i => i.id === id);
         return `${list[index].title}, position ${index + 1} of ${list.length}.`;
     }
     function lockButton(i, title, uid) {
-        const label = i.locked ? 'Unlock time' : 'Lock time';
+        if (fixedBooking(i)) return `<span class="db-lock-toggle db-fixed-lock" data-testid="db-lock"><span data-testid="db-locked-tag">${icons.lock}<small>Locked</small></span></span>`;
+        const label = i.locked ? 'Unlock time' : 'Lock ' + title;
         return `<button type="button" class="db-lock-toggle" data-testid="db-lock" data-db-action="lock" aria-pressed="${!!i.locked}" aria-label="${esc(label)}" aria-describedby="db-title-${uid}" title="${esc(label + ' — ' + title)}">${icons[i.locked ? 'lock' : 'unlock']}${i.locked ? '<small>Locked</small>' : ''}</button>`;
     }
     function pair(i, tray, options = {}) {
@@ -689,33 +800,41 @@ function mount(root, ctx = {}) {
         const uid = uidFor(on, i.id);
         const src = sourceOf(i, on);
         const transport = ['travel','flight'].includes(i.kind) || i.flight;
+        const flightDirection=i.flightDirection||(i.flight?(on===sourcePlan().days[0].date?'arrival':'return'):null);
+        const flightEdit= !tray&&!print&&(flightDirection||(i.id==='pick-airport'&&!sourcePlan().days.find(d=>d.date===on)?.items.some(i=>i.kind==='flight')));
         const cardFlightTime = on === '2026-11-25' ? (i.manualTime && i.preferred != null ? clock(i.preferred) : '') : flightTime;
         const transportType = i.flight || /flight|land at|airport/i.test(i.title) ? 'plane' : /shuttle/i.test(i.title) ? 'shuttle' : /bus/i.test(i.title) ? 'bus' : 'car';
         const paths = {plane:'M2 13l8-3V3l2-1 2 1v7l8 3v2l-8-1v5l3 2v1l-5-1-5 1v-1l3-2v-5l-8 1Z',car:'M4 10l2-6h12l2 6M3 10h18v9H3ZM6 19v3m12-3v3M6 14h2m8 0h2',bus:'M5 3h14v16H5ZM5 11h14M8 19v3m8-3v3M8 15h1m6 0h1',shuttle:'M3 6h14l4 6v7H3ZM3 12h18M7 6v6m6-6v6M6 19v3m12-3v3'};
         const transportIcon = `<svg class="transport-icon" data-transport-icon="${transportType}" aria-hidden="true" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="${paths[transportType]}"/></svg>`;
         const hhmm = n => String(Math.floor(n / 60)).padStart(2,'0') + ':' + String(n % 60).padStart(2,'0');
-        const canEditTime = !ctx.shared && !tray && !print && !i.textTime && !i.flight && i.kind !== 'prep';
+        const canEditTime = !ctx.shared && !tray && !print && !flightEdit && !i.textTime && i.kind !== 'prep';
         const travelTime = i.kind === 'travel';
         // Reuse persisted manualTime/estimate and duration; explicit arrival is start + duration.
         const arrivalEstimate = travelTime && (!i.manualTime || i.estimate);
         const showArrivalEstimate = travelTime && i.manualTime && i.estimate;
-        const editor = canEditTime && editingTime === on + '|' + i.id ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><p>${i.locked ? 'Unlock first to edit this activity’s time.' : travelTime ? 'Edit departure time' : 'Edit scheduled time'}</p><fieldset ${i.locked ? 'disabled' : ''}><legend>${travelTime ? 'Travel time' : 'Activity time'}</legend><label>${travelTime ? 'Departure' : 'Start'}<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>${travelTime ? 'Arrival' : 'End'} <span data-time-estimate>${travelTime ? (arrivalEstimate ? '(est. from travel duration)' : '') : i.estimate ? '(estimate from default duration)' : ''}</span><input name="end" type="time" ${travelTime && !arrivalEstimate ? 'data-manual="true"' : ''} value="${hhmm(i.end)}"></label><label ${travelTime ? 'hidden' : ''}>Duration (minutes)<input name="duration" type="number" min="1" placeholder="${i.duration}"></label><button>${travelTime ? 'Save departure time' : 'Save activity time'}</button></fieldset><p role="alert" data-testid="activity-time-error"></p><button type="button" data-db-action="close-time">Close time editor</button></form>` : '';
+        const editor = canEditTime && editingTime === on + '|' + i.id ? `<form class="db-time-editor" data-testid="activity-time-form" novalidate><p>${travelTime ? 'Edit departure time' : 'Edit scheduled time'}${i.locked || i.booked ? ' · stays locked' : ''}</p><fieldset><legend>${travelTime ? 'Travel time' : 'Activity time'}</legend><label>${travelTime ? 'Departure' : 'Start'}<input name="start" type="time" value="${hhmm(i.start)}" required></label><label>${travelTime ? 'Arrival' : 'End'} <span data-time-estimate>${travelTime ? (arrivalEstimate ? '(est. from travel duration)' : '') : i.estimate ? '(estimate from default duration)' : ''}</span><input name="end" type="time" ${travelTime && !arrivalEstimate ? 'data-manual="true"' : ''} value="${hhmm(i.end)}"></label><label ${travelTime ? 'hidden' : ''}>Duration (minutes)<input name="duration" type="number" min="1" value="${Math.max(1, (i.end ?? 0) - (i.start ?? 0)) || i.duration}"></label><button>${travelTime ? 'Save departure time' : 'Save activity time'}</button></fieldset><p role="alert" data-testid="activity-time-error"></p><button type="button" data-db-action="close-time">Close time editor</button></form>` : '';
         const blocker = tray ? (i.rules || []).find(r => !r.optional && !r.unconfirmed && r.minAge && (Array.isArray(ctx.ages)?ctx.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number).some(age => age < r.minAge)) : null;
         const detail = (ctx.detail ? ctx.detail(src, on, i) : '') + (tray ? (i.rules || []).map(r => `<p>${esc(r.text || r)}</p>`).join('') : '');
         const open = !!detail && (print || session.open.has(on + '|' + i.id));
-        const title = (!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
+        const title = i.flight&&!ctx.flightAnswers?.flightsStep?(flightDirection==='arrival'?'Sample · lands ~5:30 PM':'Sample · departs ~10:00 AM'):(!tray && ctx.titleFor && ctx.titleFor(src, on, i)) || i.title;
+        // Arrival/Return supplies direction; retain full wording for assistive technology.
+        const cardTitle = flightDirection ? title.replace(/\b(?:lands|departs)\s*/i, '') : title;
         const movable = !i.locked && i.kind !== 'prep' && !print;
-        const canLock = !tray && !print && lockable(i);
-        const classes = ['db-pair', transport && 'db-transport', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
+        const canLock = !tray && !print && (lockable(i) || fixedBooking(i));
+        const classes = ['db-pair', transport && 'db-transport', flightDirection && 'db-flight-card', i.notes && 'db-conflict', i.locked && 'db-locked', i.userLocked && 'db-user-locked',
             i.kind === 'prep' && 'db-prep', i.flex && 'db-free', detail && 'db-expandable', open && 'is-open',
             picked?.id === i.id && picked.zone === (tray ? 'tray' : 'day') && 'db-picked'].filter(Boolean).join(' ');
         const moves = tray ? button('handle', title) + `<button type="button" data-testid="schedule-item" data-db-action="schedule">${i.needsTime ? 'Pick a time' : 'Schedule'}</button>${i.needsTime ? '<small>Needs a time</small>' : ''}` : (movable ? button('handle', title) + button('up', title) + button('down', title) + button('remove', title) : '');
         const actions = !tray && !print && i.kind !== 'prep' ? '<div class="db-item-actions"><button type="button" data-db-action="again">Add it again</button><button type="button" data-db-action="move-day">Move to another day</button></div>' : '';
         const lockChip = i.locked ? '<span class="db-lock"><svg width="12" height="14" viewBox="0 0 14 16" aria-hidden="true"><path d="M3 7V4a4 4 0 018 0v3M1 7h12v8H1Z" fill="none" stroke="currentColor"/></svg> Locked</span>' : '';
-        const menuLabels = {handle: 'Drag to reorder', up: 'Move up', down: 'Move down', remove: 'Move to ideas', delete: 'Delete booking'};
+        const menuLabels = {handle: 'Drag to reorder', up: 'Move up', down: 'Move down', remove: 'Remove from day', delete: 'Delete booking'};
         const menuMoves = (moves + (i.custom && !print ? button('delete', title) : '')).replace(/(<button[^>]*data-db-action="([^"]+)"[^>]*>)([\s\S]*?)(<\/button>)/g,
             (_, start, action, icon, end) => start + icon + '<span>' + menuLabels[action] + '</span>' + end);
-        const menuItems = (menuMoves + actions.replace('>Add it again', '><span aria-hidden="true">＋</span> Add it again').replace('>Move to another day', '><span aria-hidden="true">↗</span> Move to another day')).replace(/<button /g, '<button role="menuitem" ');
+        const groupMember=!!(window.goNowAccount?.group&&!window.goNowAccount.owner());
+        const swapAction = !tray && !print && ((!i.locked&&!i.booked)||groupMember) && !['prep','flight','travel','hotel'].includes(i.kind) && !/^check[ -]?(in|out)\b/i.test(i.title||'') && ctx.swapCatalog ? '<button data-testid="db-swap" data-db-action="swap">Swap</button>' : '';
+        const availableActions = actions;
+        const memberRemove=i.locked&&groupMember?button('remove',title).replace('</button>','<span>Remove from day</span></button>'):'';
+        const menuItems = (swapAction + menuMoves + memberRemove + availableActions.replace('>Add it again', '><span aria-hidden="true">＋</span> Add it again').replace('>Move to another day', '><span aria-hidden="true">↗</span> Move to another day')).replace(/<button /g, '<button role="menuitem" ');
         const hasMenu = !tray && !print && (i.custom || i.kind !== 'prep');
         const menuButton = hasMenu ? `<button type="button" data-testid="db-more" data-db-action="more" aria-haspopup="menu" aria-expanded="false" aria-controls="db-more-${uid}" aria-label="More actions for ${esc(title)}">⋯</button>` : '';
         const menu = hasMenu ? `<div hidden id="db-more-${uid}" data-testid="db-more-menu" role="menu">${menuItems}</div>` : '';
@@ -725,21 +844,24 @@ function mount(root, ctx = {}) {
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
         const placeText = tray ? '' : `${esc(i.place)}${i.estimate ? ' · ' + durationText : ''}`;
         const heading = detail
-            ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"><strong>${esc(title)}</strong><small>${placeText}</small><span class="db-expand-mark" aria-hidden="true">＋</span></button>`
-            : `<strong id="db-title-${uid}">${esc(title)}</strong><small>${placeText}</small>`;
-        const lockedLabel = i.userLocked ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
+            ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}><strong title="${esc(title)}">${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}</button>`
+            : `<strong id="db-title-${uid}" title="${esc(title)}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}>${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}`;
+        const compact=(a,b)=>{const [x,xm]=clock(a).split(' '),[y,ym]=clock(b).split(' ');return `<span>${x}<span class="${xm===ym?'db-mer-dup':''}"> ${xm}</span></span><span>–${y} ${ym}</span>`;};
+        const timeEl = tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight||i.flightDirection ? (flightDirection==='arrival'?'Arrival':'Return') : i.textTime ? esc(i.textTime) : compact(i.start,i.end)+(showArrivalEstimate ? '<span> est.</span>' : '')}</${canEditTime ? 'button' : 'div'}>`;
+        const plus = detail && !tray && !print ? `<button type="button" class="db-plus" data-db-action="expand" aria-expanded="${open}" aria-controls="db-detail-${uid}" aria-label="Details for ${esc(title)}">＋</button>` : '';
+        const lockedLabel = !fixedBooking(i) ? 'Locked time — unlock to move' : 'Locked booking — times are fixed';
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
-            ${tray ? '' : `<${canEditTime ? 'button type="button" data-db-action="edit-time"' : 'div'} class="db-time" data-testid="db-time" aria-label="${canEditTime ? 'Edit time: ' : ''}${esc(i.flight ? cardFlightTime || i.textTime : i.textTime || clock(i.start) + ' to ' + clock(i.end) + (showArrivalEstimate ? ' estimated arrival' : ''))}">${i.flight ? esc(cardFlightTime || i.textTime) : i.textTime ? esc(i.textTime) : `<span>${clock(i.start)}</span><span>–${clock(i.end)}${showArrivalEstimate ? ' est.' : ''}</span>`}</${canEditTime ? 'button' : 'div'}>`}
-            ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt="">` : ''}
+            ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt=""${ctx.photoCredit && ctx.photoCredit(src) ? ` title="${esc(ctx.photoCredit(src))}"` : ''}>` : ''}
             <div class="db-activity" data-testid="db-activity">
-                ${heading}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
-                ${i.flight && !print ? `<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${cardFlightTime ? String(Math.floor(parse(cardFlightTime) / 60)).padStart(2, '0') + ':' + String(parse(cardFlightTime) % 60).padStart(2, '0') : ''}"><button type="button" data-testid="add-flight-time" aria-haspopup="dialog" ${ctx.shared ? 'disabled' : ''}>${cardFlightTime ? esc(cardFlightTime)+' · Edit' : 'Add flight time'}</button>` : ''}
+                ${heading}${tray ? '' : `<div class="db-meta">${timeEl}${canLock ? (i.locked ? `<span class="db-mini-lock" aria-hidden="true">${icons.lock}</span>` : '') : lockChip}${placeText && !transport ? `<small class="db-place">${placeText}</small>` : ''}</div>`}${flightEdit?`<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${Number.isFinite(i.preferred)?String(Math.floor(i.preferred/60)).padStart(2,'0')+':'+String(i.preferred%60).padStart(2,'0'):''}"><span data-testid="add-flight-time"><button type="button" data-testid="edit-flight" aria-haspopup="dialog" ${ctx.shared?'disabled':''}>Edit flight</button></span>`:''}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
+
                 ${!tray && i.detail ? `<small>${esc(i.detail)}</small>` : ''}
-                ${canLock ? '' : lockChip}
+                ${tray && !canLock ? lockChip : ''}
                 ${i.kind === 'prep' ? '<span class="db-tag">auto</span>' : ''}
-                ${controls}
-                ${i.overlapNote ? `<p class="db-note">${esc(i.overlapNote)}</p>` : ''}${(i.notes || []).map((note, index) => `<p class="db-note" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>Heads-up: ${esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
+                ${tray ? controls : ''}
+                ${i.overlapNote && !(i.notes || []).includes(i.overlapNote) ? `<p class="db-note">${esc(i.overlapNote)}</p>` : ''}${(i.notes || []).map((note, index) => `<p class="db-note ${/conflicts with your flight/.test(note)?'flight-conflict-notice':''}" id="${esc(noteId + '-' + index)}" data-testid="db-note"><svg aria-hidden="true" width="14" height="14" viewBox="0 0 16 16"><path d="M8 1L15 14H1Z" fill="none" stroke="currentColor"/><path d="M8 5v4m0 2v1" stroke="currentColor"/></svg>${/conflicts with your flight/.test(note)?'<span class="flight-conflict-text" title="'+esc(note)+'">'+esc(note)+'</span> · <button data-flight-conflict-edit>Edit</button>':'Heads-up: '+esc(note)}${note.includes('diving') ? ` <a href="${esc(window.OAHU_SOURCES.dan)}" target="_blank" rel="noopener">DAN guidance</a>` : ''}</p>`).join('')}
             </div>
+            ${tray ? '' : (controls || plus ? `<div class="db-side">${controls}${plus}</div>` : '')}
             ${menu}
             ${editor}
             ${detail ? `<div class="db-detail" id="db-detail-${uid}" data-testid="db-detail" role="region" aria-labelledby="db-title-${uid}"${open ? '' : ' hidden'}>${detail}</div>` : ''}</div>`;
@@ -747,7 +869,7 @@ function mount(root, ctx = {}) {
     function openTime(on, id) {
         if (ctx.shared) return;
         const item = (days[on] || buildSuggested(on)).items.find(i => i.id === id);
-        if (item?.locked) { confirmUnlock(item, () => openTime(on, id)); return; }
+        if (item?.locked && window.goNowAccount?.group && !window.goNowAccount.owner()) { suggestLocked(item, 'time'); return; }
         editingTime = on + '|' + id;
         selectDay(on, false);
         root.querySelector('.db-dock-tray')?.classList.remove('is-open');
@@ -759,14 +881,29 @@ function mount(root, ctx = {}) {
         }
     }
     const toTime = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(value) ? Number(value.slice(0,2))*60 + Number(value.slice(3)) : null;
+    function suggestLocked(item, action, extra={}) {
+        const cloud=window.goNowAccount;if(!cloud?.group||cloud.owner())return false;
+        if(action==='time'){
+            const dialog=document.createElement('dialog');dialog.dataset.testid='group-time-suggestion';
+            dialog.innerHTML='<form><label>Time<input type="time" required name="time"></label><button>Send suggestion</button><button type="button" data-close>Cancel</button></form>';
+            document.body.append(dialog);dialog.showModal();dialog.oncancel=()=>dialog.remove();dialog.querySelector('[data-close]').onclick=()=>dialog.remove();
+            dialog.querySelector('form').onsubmit=e=>{e.preventDefault();cloud.change(item.id,{time:clock(toTime(dialog.querySelector('input').value)),title:item.title});dialog.remove();};
+        }else cloud.change(item.id,{action,title:item.title,...extra});
+        return true;
+    }
     function confirmUnlock(item, apply) {
+        if(suggestLocked(item,'time'))return;
         const dialog = document.createElement('dialog');
         dialog.dataset.testid = 'unlock-confirm';
         dialog.addEventListener('cancel', () => dialog.remove());
         dialog.innerHTML = '<p>Unlock this item’s reserved time before changing it?</p><button data-testid="unlock-accept">Unlock this item</button><button data-testid="unlock-decline">Keep reserved time</button>';
         root.append(dialog); dialog.showModal();
         dialog.querySelector('[data-testid=unlock-decline]').onclick = () => dialog.remove();
-        dialog.querySelector('[data-testid=unlock-accept]').onclick = () => { toggleLock(item, lastResult.items.find(i => i.id === item.id)); save(); dialog.remove(); apply(); };
+        dialog.querySelector('[data-testid=unlock-accept]').onclick = () => { // Explicit move/time confirmation can release a reservation; the static tag cannot.
+            if (fixedBooking(item)) item.locked = false;
+            else toggleLock(item, lastResult.items.find(i => i.id === item.id));
+            window.goNowAccount?.lock(item.id,false);
+            save(); dialog.remove(); apply(); };
     }
     function reviewTransfers(day,item) {
         if(item.kind==='travel')return;
@@ -776,14 +913,64 @@ function mount(root, ctx = {}) {
             }
         });
     }
+    // Reorder rules: order wins. After a move, add or remove, the day's unlocked items
+    // run back to back in the new order (previous end + travel), starting from the
+    // day's first unlocked start time. Hand-set times on unlocked items are released
+    // (lock an item to keep its time). Locked and booked items never move. If an
+    // item cannot fit before a locked one, it goes right after it; if it cannot fit
+    // the day at all, it goes to Needs a time. Only then is a conflict shown.
+    const movable = i => i && !i.locked && !i.booked && !i.textTime && i.kind !== 'flight' && i.kind !== 'prep' && !fixedBooking(i);
+    function releaseDay(on, movedId, before) {
+        const d = days[on]; if (!d) return;
+        const prior = dayResult(before || d, on).items;
+        const lead = prior.find(i => movable(i) && i.start != null);
+        d.chronological = false;
+        d.items.forEach(i => {
+            if (!movable(i)) return;
+            i.preferred = null; delete i.manualTime; delete i.hoursOk; delete i.overlapNote; delete i.shifted;
+        });
+        const first = d.items.find(movable);
+        if (first && lead) first.preferred = lead.start;
+        // A reorder never silently drops a stop: if the new order runs it past opening hours,
+        // it stays with a "May be closed" heads-up.
+        keepOpen(on); settleDay(on); keepOpen(on); return overflowDay(on);
+    }
+    function keepOpen(on) { const d = days[on]; for (let n = 0; n < 8; n++) { const h = dayResult(d, on).unscheduled.find(i => /opening hours/i.test(i.blockedReason || '') && d.items.some(x => x.id === i.id)); if (!h) return; d.items.find(x => x.id === h.id).hoursOk = true; } }
+    function settleDay(on) {
+        const d = days[on]; if (!d) return;
+        const misses = r => r.items.filter(i => !i.locked && (i.notes || []).some(t => /you'd miss/.test(t))).length;
+        for (let n = 0; n < 8; n++) {
+            const r = dayResult(d, on), count = misses(r);
+            if (!count) return;
+            const late = r.items.find(i => !i.locked && (i.notes || []).some(t => /you'd miss/.test(t)));
+            const anchor = r.items.slice(r.items.indexOf(late) + 1).find(i => i.locked && !i.textTime);
+            const at = anchor ? d.items.findIndex(i => i.id === anchor.id) : -1;
+            if (at < 0) return;
+            const victimAt = d.items.slice(0, at).map((i, k) => [i, k]).filter(([i]) => movable(i) && i.kind !== 'travel').map(([, k]) => k).pop();
+            if (victimAt === undefined) return;
+            const saved = clone(d.items);
+            const [victim] = d.items.splice(victimAt, 1);
+            d.items.splice(d.items.findIndex(i => i.id === anchor.id) + 1, 0, victim);
+            const next = dayResult(d, on);
+            if (misses(next) >= count || next.unscheduled.filter(i => !/opening hours/i.test(i.blockedReason || '')).length > r.unscheduled.filter(i => !/opening hours/i.test(i.blockedReason || '')).length) { d.items = saved; return; }
+            keepOpen(on);
+        }
+    }
+    // Anything that now runs past midnight goes to Needs a time instead of a fake late slot.
+    function overflowDay(on) {
+        const d = days[on]; if (!d) return [];
+        const late = dayResult(d, on).items.filter(i => movable(i) && i.kind !== 'travel' && i.end != null && i.end > 1440).map(i => i.id);
+        late.forEach(id => { const at = d.items.findIndex(i => i.id === id); if (at < 0) return; const [item] = d.items.splice(at, 1); Object.assign(item, {needsTime: true, preferred: null}); (d.unscheduled ||= []).push(item); });
+        return late;
+    }
     function sortDay(on) {
         const d=days[on];
         d.chronological=true;
         d.items.sort((a,b)=>(a.preferred ?? Infinity)-(b.preferred ?? Infinity));
     }
-    function resolveTime(on, item, start, duration, apply) {
+    function resolveTime(on, item, start, duration, apply, options={}) {
         const proposed={...item,start,preferred:start,duration};
-        if(block(proposed,on,target=>{ // A suggested move leaves the original untouched until accepted.
+        if(!(options.explicit&&/opening hours/i.test(blockedOn(proposed,on,ruleContext())||''))&&block(proposed,on,target=>{ // A suggested move leaves the original untouched until accepted.
             Object.values(days).forEach(d=>{d.items=d.items.filter(i=>i.id!==item.id);d.unscheduled=(d.unscheduled||[]).filter(i=>i.id!==item.id);});
             days[target] ||= buildSuggested(target);days[target].items.push({...item,preferred:start,manualTime:true,duration});
             root.querySelector('dialog[open]')?.remove();save();selectDay(target,false);
@@ -836,7 +1023,8 @@ function mount(root, ctx = {}) {
         let item = list.find(i => i.id === id);
         if(!item && zone==='tray'){item=lastResult.unscheduled.find(i=>i.id===id);if(item){current().items=current().items.filter(i=>i.id!==id);list.push(item);}}
         if (!item) return;
-        if (item.locked && mode !== 'again') { confirmUnlock(item, () => openTransfer(id, zone, mode)); return; }
+        const suggesting=!!(item.locked&&mode!=='again'&&window.goNowAccount?.group&&!window.goNowAccount.owner());
+        if (item.locked && mode !== 'again' && !suggesting) { confirmUnlock(item, () => openTransfer(id, zone, mode)); return; }
         const dialog = document.createElement('dialog');
         dialog.addEventListener('cancel', () => dialog.remove());
         dialog.dataset.testid = mode === 'again' ? 'add-again-dialog' : mode === 'move-day' ? 'move-day-dialog' : 'schedule-dialog';
@@ -848,6 +1036,7 @@ function mount(root, ctx = {}) {
         dialog.querySelector('[data-cancel]').onclick = () => dialog.remove();
         dialog.querySelector('form').onsubmit = e => {
             e.preventDefault(); const form = e.target, target = form.elements.date.value, start = toTime(form.elements.start.value);
+            if(suggesting){const change={action:'move-day',date:target,title:item.title};if(start!==null)change.time=clock(start);window.goNowAccount.change(id,change);dialog.remove();return;}
             if(mode === 'schedule' && start === null){form.querySelector('[role=alert]').textContent='Pick a start time.';return;}
             const end = form.elements.end?.value ? toTime(form.elements.end.value) : null;
             if (end !== null && (start === null || end <= start)) { form.querySelector('[role=alert]').textContent = 'End must be after start'; return; }
@@ -858,11 +1047,12 @@ function mount(root, ctx = {}) {
             copy.originalTitle ||= copy.title;
             copy.title = cleanTimeTitle(copy.title, item.preferred);
             copy.preferred = start; delete copy.manualTime;
-            const apply = () => {
+            const apply = () => { const before=clone(days[date]||current());
             if(mode !== 'again') list.splice(list.findIndex(i => i.id === id), 1);
             if(mode === 'move-day') {
                 const old=days[date];
                 reviewTransfers(old,item);
+                if(target!==date)releaseDay(date,null,before);
             }
             days[target] ||= buildSuggested(target); days[target].unscheduled ||= [];
             if (start === null) {copy.needsTime=true; days[target].unscheduled.push(copy);}
@@ -875,6 +1065,32 @@ function mount(root, ctx = {}) {
             else resolveTime(target, copy, start, end === null ? copy.duration : end-start, apply);
         };
     }
+    function openOwn(name = '', focusStart = false) {
+        if(root.querySelector('[data-testid=add-own-sheet]'))return;
+        const dialog=document.createElement('dialog');dialog.className='add-own-sheet';dialog.dataset.testid='add-own-sheet';
+        dialog.setAttribute('aria-labelledby','add-own-title');
+        dialog.innerHTML=`<h2 id="add-own-title">Add my own</h2><form novalidate><label>Name<input name="name" data-testid="add-own-name" required maxlength="100"></label><label>Start<input name="start" data-testid="add-own-start" type="time" required></label><label>End <small>(optional)</small><input name="end" data-testid="add-own-end" type="time"></label><label>Place <small>(optional)</small><input name="place" data-testid="add-own-place" maxlength="100"></label><label class="row"><input name="booked" type="checkbox" data-testid="add-own-booked">Booked</label><p role="alert" data-testid="add-own-note"></p><div class="row"><button data-testid="add-own-submit">Add</button><button type="button" data-own-cancel>Cancel</button></div></form>`;
+        root.append(dialog);
+        const close=()=>{dialog.close();dialog.remove();root.querySelector('[data-testid=day-add-own]')?.focus();};
+        dialog.oncancel=e=>{e.preventDefault();close();};dialog.querySelector('[data-own-cancel]').onclick=close;
+        const form=dialog.querySelector('form');form.elements.name.value=name;
+        form.onsubmit=e=>{
+            e.preventDefault();const title=form.elements.name.value.trim(),start=toTime(form.elements.start.value),end=form.elements.end.value?toTime(form.elements.end.value):null;
+            const note=dialog.querySelector('[role=alert]');
+            if(!title || start===null){note.textContent='Add a name and start time';return;}
+            if(end!==null && end<=start){note.textContent='End must be after start';return;}
+            const item={id:'custom-'+Date.now(),title,preferred:start,duration:end===null?60:end-start,estimate:end===null,place:form.elements.place.value.trim()||'Other',locked:form.elements.booked.checked,booked:form.elements.booked.checked,custom:true,manualTime:true};
+            if(block(item,date,on=>addToDay(on,{...item,time:clock(start)}),dialog))return;
+            const d=current(),at=d.items.findIndex(i=>(i.preferred ?? 1440)>start);
+            d.items.splice(at<0?d.items.length:at,0,item);
+            // Use displayed intervals, including bookings with derived times.
+            const overlap=overlaps(lastResult.items,start,item.duration,item.id).find(i=>i.locked);
+            if(overlap)item.overlapNote='Overlaps '+venue(overlap);
+            close();save();render({id:item.id,zone:'day'});announce('Item added.'+(overlap?' Overlaps '+venue(overlap):''));
+        };
+        dialog.showModal();form.elements[focusStart?'start':'name'].focus();
+    }
+    root.addEventListener('add-own',e=>openOwn(e.detail?.name || '',!!e.detail?.focusStart));
     function closeTime() {
         const id = editingTime?.slice(editingTime.indexOf('|') + 1);
         editingTime = null;
@@ -907,7 +1123,6 @@ function mount(root, ctx = {}) {
         lastResult = result;
         addedConflicts = result.conflicts.filter(c => !previousConflicts.has(c.id + '|' + c.note)).map(c => result.items.find(i => i.id === c.id).title + ' — ' + c.note);
         previousConflicts = new Map(result.conflicts.map(c => [c.id + '|' + c.note, true]));
-        const availableTray = ctx.shared ? [] : [...d.unscheduled,...result.unscheduled];
         const summary = result.conflicts.length ? `${result.conflicts.length} heads-up` : 'All clear';
         const chips = sourcePlan().days.map((day, index) => {
             const weekday = new Date(day.date + 'T12:00:00Z').toLocaleDateString('en-US', {weekday: 'short', timeZone: 'UTC'});
@@ -920,21 +1135,12 @@ function mount(root, ctx = {}) {
             : inner;
         content.innerHTML = `<div class="db-heading"><h2>${ctx.dayHead ? 'Your days' : 'Build your day'}</h2><span class="db-summary" data-testid="db-summary">${summary}</span></div>
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
-            ${card(`<div class="db-day" data-testid="db-day-list">${timelineHTML(result)}</div>
+            ${card(`<div class="day-primary-actions"><button type="button" data-testid="day-reset" data-db-action="reset">Reset to suggested</button><button type="button" data-testid="day-add-own" data-db-action="add-own">+ Add my own</button></div>
+            ${resetOpen ? '<div class="day-reset-prompt"><span>Reset this day? Locked and booked items stay.</span><div><button type="button" data-db-action="reset-confirm" data-testid="day-reset-confirm">Reset</button><button type="button" data-db-action="reset-cancel" data-testid="day-reset-cancel">Cancel</button></div></div>' : ''}
+            <div class="db-day" data-testid="db-day-list">${timelineHTML(result)}</div>
             ${ctx.dayExtras ? ctx.dayExtras(date) : ''}
             ${ctx.shared && d.unscheduled.length ? `<section data-testid="unscheduled-section"><h3>Unscheduled</h3><ul>${d.unscheduled.map(i => `<li>${esc(i.title)}</li>`).join('')}</ul></section>` : ''}
-            <details class="day-add-panel" ${expanded || bookingOpen ? 'open' : ''}><summary data-testid="day-add">+ Add</summary><button type="button" data-testid="db-reset" data-db-action="reset">Reset to suggested</button><div class="db-tools">
-            <button type="button" class="db-chest-toggle" data-testid="db-tray-toggle" data-db-action="toggle" aria-expanded="${expanded}" aria-controls="db-chest">Activity ideas <span class="db-count">${availableTray.length}</span></button>
-            <button type="button" data-testid="db-booking-toggle" data-db-action="booking" aria-expanded="${bookingOpen}" aria-controls="db-booking">+ Add booking</button>
-            </div>
-            <div id="db-chest" class="db-tray" data-testid="db-tray" ${expanded ? '' : 'hidden'}>${availableTray.map(i => pair(i, true)).join('')}</div>
-            <form id="db-booking" class="db-form" data-testid="db-booking-form" ${bookingOpen ? '' : 'hidden'}>
-                <label>Name<input name="name" data-testid="db-booking-name" required maxlength="100"></label>
-                <label>Start<input name="start" data-testid="db-booking-start" type="time" required></label>
-                <label>End<input name="end" data-testid="db-booking-end" type="time" required></label>
-                <label>Place<select name="place" data-testid="db-booking-place">${[HOTEL, WAIKIKI, 'Kewalo Basin', 'Kualoa Ranch', 'Diamond Head', 'Ala Moana', 'Kailua', 'Makapuu', 'HNL', 'Other'].map(p => `<option>${p}</option>`).join('')}</select></label>
-                <button data-testid="db-booking-add">Anchor it</button><p data-testid="db-form-note" role="status">${esc(formStatus)}</p>
-            </form></details>`)}`;
+`)}`;
         if (!reducedMotion()) {
             root.querySelectorAll('.db-conflict').forEach(element => {
                 element.classList.add('db-shake');
@@ -942,26 +1148,12 @@ function mount(root, ctx = {}) {
             });
         }
         root.querySelectorAll('[aria-describedby]').forEach(row => row.matches('[data-db-id]') && row.querySelector('[data-db-action=handle]')?.setAttribute('aria-describedby', row.getAttribute('aria-describedby')));
-        if (ctx.dock) {
-            const aside = root.querySelector('.db-dock-tray');
-            if (aside) {
-                aside.querySelectorAll('.db-tray,.db-tools,.db-form').forEach(node => node.remove());
-                const tools = content.querySelector('.db-tools');
-                const tray = content.querySelector('.db-tray');
-                const form = content.querySelector('.db-form');
-                if (tools) aside.append(tools);
-                if (tray) { tray.hidden = false; aside.append(tray); }
-                if (tools) tools.hidden = true;
-                if (form) aside.append(form);
-            }
-        }
         if (ctx.afterRender) ctx.afterRender(content, date);
-        const pending=d.unscheduled.filter(i=>i.needsTime);
-        if(pending.length && !ctx.shared) {
+        const pending=d.unscheduled;
+        if(pending.length && !ctx.shared && typeof content.querySelector === 'function') {
             content.querySelector('[data-testid=db-day-list]').insertAdjacentHTML('afterend','<section data-testid="needs-time"><h3>Needs a time</h3></section>');
-            // Relocate the real tray, preserving unique IDs, controls and drag/drop.
-            const tray=root.querySelector('[data-testid=db-tray]');
-            tray.hidden=false;
+            // Only untimed items get scheduling controls; the day has no ideas chest.
+            const tray=document.createElement('div');tray.className='db-tray';tray.dataset.testid='db-tray';tray.innerHTML=pending.map(i=>pair(i,true)).join('');
             content.querySelector('[data-testid=needs-time]').append(tray);
         }
         if (focus) {
@@ -997,10 +1189,11 @@ function mount(root, ctx = {}) {
     function setExpanded(row, force) {
         const toggle = row?.querySelector('[data-db-action=expand]');
         if (!toggle) return false;
+        const toggles = row.querySelectorAll(':scope [data-db-action=expand]');
         const panel = row.querySelector('.db-detail');
         const on = force ?? toggle.getAttribute('aria-expanded') !== 'true';
         const key = date + '|' + row.dataset.dbId;
-        toggle.setAttribute('aria-expanded', String(on));
+        toggles.forEach(t => t.setAttribute('aria-expanded', String(on)));
         panel.hidden = !on;
         row.classList.toggle('is-open', on);
         if (on) session.open.add(key); else session.open.delete(key);
@@ -1015,7 +1208,7 @@ function mount(root, ctx = {}) {
         if (!sourcePlan().days.some(day => day.date === next)) return;
         date = next;
         session.date = next;
-        formStatus = '';
+        resetOpen = false;
         picked = null;
         render();
         if (focusChip) root.querySelector(`[data-testid="db-day-${date}"]`).focus({preventScroll: true});
@@ -1027,6 +1220,7 @@ function mount(root, ctx = {}) {
         const list = listFor(zone);
         const index = list.findIndex(i => i.id === id);
         const item = list[index];
+        if(item?.locked&&suggestLocked(item,action,{target}))return;
         if (!item || item.locked || item.kind === 'prep') return;
         if (zone === 'tray' && action === 'add') { openTransfer(id, zone, 'schedule'); return; }
         let destination = list;
@@ -1050,7 +1244,10 @@ function mount(root, ctx = {}) {
         list.splice(index, 1);
         if (zone === 'tray') { item.preferred = null; delete item.manualTime; delete item.start; delete item.end; }
         if (zone !== 'tray' || !destination.some(existing => existing.id === item.id)) destination.splice(at, 0, item);
-        const unsafe=dayResult(current(),date).unscheduled.find(i=>!dayResult(snapshot,date).unscheduled.some(old=>old.id===i.id));
+        // Reordering inside Needs a time leaves the day's clock alone.
+        const overflowed = zone === 'tray' && destination === list ? [] : releaseDay(date, zone === 'day' ? id : null, snapshot) || [];
+        // Items the reflow moved to Needs a time are expected, not a reason to undo the move.
+        const unsafe=dayResult(current(),date).unscheduled.find(i=>!overflowed.includes(i.id)&&!dayResult(snapshot,date).unscheduled.some(old=>old.id===i.id));
         if(unsafe){days[date]=snapshot;block({...unsafe,preferred:unsafe.start??unsafe.preferred},date,target=>{days[date].items=days[date].items.filter(i=>i.id!==unsafe.id);addToDay(target,{...unsafe,time:clock(unsafe.start??unsafe.preferred??540)});});return;}
         session.open.delete(date + '|' + id);
         save();
@@ -1058,11 +1255,13 @@ function mount(root, ctx = {}) {
         announce(positionMessage(id, zone));
     }
     function lock(id) {
+        if(window.goNowAccount?.group&&!window.goNowAccount.owner())return;
         const item = current().items.find(i => i.id === id);
-        if (!item || !lockable(item)) return;
+        if (!item || !lockable(item) || fixedBooking(item)) return;
         const shown = lastResult.items.find(i => i.id === id);
-        if (item.locked) { confirmUnlock(item, () => { save(); render({id, zone:'day', action:'lock'}); announce('Unlocked ' + item.title + ' — it moves with the day again.'); }); return; }
+        if (item.locked && item.userLocked) { confirmUnlock(item, () => { save(); render({id, zone:'day', action:'lock'}); announce('Unlocked ' + item.title + ' — it moves with the day again.'); }); return; }
         const locked = toggleLock(item, shown);
+        window.goNowAccount?.lock(id,locked);
         save();
         const result = render({id, zone: 'day', action: 'lock'});
         const now = result.items.find(i => i.id === id);
@@ -1105,6 +1304,8 @@ function mount(root, ctx = {}) {
         if(['ArrowUp','ArrowDown'].includes(e.key)&&!picked){e.preventDefault();e.stopImmediatePropagation();const items=[...menu.querySelectorAll('button:not(:disabled)')];const n=items.indexOf(document.activeElement);items[(n+(e.key==='ArrowDown'?1:-1)+items.length)%items.length]?.focus();}
     });
     root.addEventListener('click', e => {
+        const flightEditButton=e.target.closest('[data-testid=edit-flight],[data-flight-conflict-edit]');
+        if(flightEditButton&&(flightEditButton.dataset.testid==='edit-flight'||flightEditButton.dataset.flightConflictEdit!==undefined)){editFlights();return;}
         const flightButton=e.target.closest('[data-testid=add-flight-time]');
         if(flightButton){flightButton.previousElementSibling.dataset.flightDirection=date==='2026-11-25'?'arrival':'departure';window.GoNowTimepicker.open(flightButton.previousElementSibling,flightButton);return;}
         if (suppressClick) { suppressClick = false; if (e.target.closest('[data-db-id]')) return; }
@@ -1131,7 +1332,8 @@ function mount(root, ctx = {}) {
         const row = b.closest('[data-db-id]');
         if(action==='more'){ e.stopPropagation();const panel=b.closest('[data-db-id]').querySelector('[data-testid=db-more-menu]');const open=b.getAttribute('aria-expanded')!=='true';closeMenus();panel.hidden=!open;b.setAttribute('aria-expanded',String(open));if(open){positionMenu(b,panel);panel.querySelector('button')?.focus({preventScroll:true});}return;}
         if(action!=='handle')closeMenus();
-        if (['again','move-day','schedule'].includes(action)) { openTransfer(row.dataset.dbId, row.dataset.dbZone, action);
+        if(action==='swap'){openSwap(row.dataset.dbId);
+        } else if (['again','move-day','schedule'].includes(action)) { openTransfer(row.dataset.dbId, row.dataset.dbZone, action);
         } else if (action === 'edit-time') {
             openTime(date, row.dataset.dbId);
         } else if (action === 'close-time') {
@@ -1142,62 +1344,89 @@ function mount(root, ctx = {}) {
             setExpanded(row);
         } else if (action === 'lock') {
             lock(row.dataset.dbId);
-        } else if (action === 'toggle') {
-            expanded = !expanded;
-            render();
-            root.querySelector('[data-testid="db-tray-toggle"]').focus();
-        } else if (action === 'booking') {
-            bookingOpen = !bookingOpen;
-            render();
-            root.querySelector('[data-testid="db-booking-toggle"]').focus();
-        } else if (action === 'reset') {
-            picked = null;
-            formStatus = '';
-            days[date] = buildSuggested(date);
-            save();
-            render();
-            root.querySelector('[data-testid=db-reset]').focus();
-            announce('Reset to suggested. Fair winds!');
+        } else if (action === 'add-own') {
+            openOwn();
+        } else if (action === 'reset' || action === 'reset-cancel') {
+            resetOpen = action === 'reset'; render();
+            root.querySelector('[data-testid='+(resetOpen ? 'day-reset-confirm' : 'day-reset')+']').focus();
+        } else if (action === 'reset-confirm') {
+            const kept=current().items.filter(i=>i.locked || i.booked || i.fixedBooking);
+            const suggested=buildSuggested(date);
+            const ids=new Set(kept.map(i=>i.id));
+            suggested.items=suggested.items.filter(i=>!ids.has(i.id));
+            kept.forEach(i=>{const at=suggested.items.findIndex(v=>(v.preferred ?? 1440)>(i.preferred ?? 1440));suggested.items.splice(at<0?suggested.items.length:at,0,i);});
+            days[date]=suggested; picked=null; resetOpen=false; save(); render();
+            root.querySelector('[data-testid=day-reset]').focus(); announce('Reset to suggested.');
         } else if (action === 'delete') {
             let nextRow = row.nextElementSibling;
             while (nextRow && !nextRow.dataset.dbId) nextRow = nextRow.nextElementSibling;
             const next = nextRow?.dataset.dbId;
-            formStatus = '';
             current().items = current().items.filter(i => i.id !== row.dataset.dbId);
             save();
             render();
-            (root.querySelector(`[data-db-id="${next}"] button`) || root.querySelector(`[data-db-id="${next}"][tabindex]`) || root.querySelector('[data-testid=db-booking-toggle]')).focus();
+            (root.querySelector(`[data-db-id="${next}"] button`) || root.querySelector(`[data-db-id="${next}"][tabindex]`) || root.querySelector('[data-testid=day-add-own]')).focus();
             announce('Booking deleted');
         } else if (action !== 'handle') {
             change(row.dataset.dbId, row.dataset.dbZone, action);
         }
     });
-    root.addEventListener('input', e => {
-        if (e.target.closest('.db-time-editor') && ['end','duration'].includes(e.target.name)) {
-            e.target.form.dataset.lastManual = e.target.name;
-            if (e.target.name === 'end') e.target.dataset.manual = 'true';
-            e.target.form.querySelector('[data-time-estimate]').textContent = '';
-            if (e.target.name === 'duration' && Number(e.target.value) > 0) {
-                const form = e.target.form, parts = form.elements.start.value.split(':').map(Number);
-                const end = parts[0] * 60 + parts[1] + Number(e.target.value);
-                form.elements.end.value = end < 1440 ? String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0') : '';
-            }
-        }
-        if (e.target.closest('.db-time-editor') && e.target.name === 'start') {
-            const form = e.target.form, item = current().items.find(i => i.id === form.closest('[data-db-id]').dataset.dbId);
-            if (!form.elements.end.dataset.manual && !form.elements.duration.value && e.target.value) {
-                const [h,m] = e.target.value.split(':').map(Number), end = h*60+m+item.duration;
-                form.querySelector('[data-time-estimate]').textContent = item.kind === 'travel' ? '(est. from travel duration)' : '(estimate from default duration)';
-                form.elements.end.value = end < 1440 ? String(Math.floor(end/60)).padStart(2,'0')+':'+String(end%60).padStart(2,'0') : '';
-            }
-        }
-    });
+    // Start, End and Duration stay in sync: Start keeps the duration, End sets the duration, Duration sets the end.
+    // Listen to change too: some mobile time pickers only fire change.
+    const hm = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? Number(v.slice(0,2))*60 + Number(v.slice(3)) : null;
+    const fmt = m => m >= 0 && m < 1440 ? String(Math.floor(m/60)).padStart(2,'0')+':'+String(m%60).padStart(2,'0') : '';
+    function syncTime(e) {
+        const form = e.target.closest('.db-time-editor');
+        if (!form || !['start','end','duration'].includes(e.target.name)) return;
+        const {start, end, duration} = form.elements, s = hm(start.value), en = hm(end.value), d = Number(duration.value);
+        if (e.target.name !== 'start') { form.dataset.touched = 'true'; form.dataset.lastManual = e.target.name; if (e.target.name === 'end') end.dataset.manual = 'true'; form.querySelector('[data-time-estimate]').textContent = ''; }
+        if (e.target.name === 'start' && s !== null && d > 0) end.value = fmt(s + d);
+        if (e.target.name === 'end' && s !== null && en !== null && en > s) duration.value = String(en - s);
+        if (e.target.name === 'duration' && s !== null && d > 0) end.value = fmt(s + d);
+    }
+    root.addEventListener('input', syncTime);
+    root.addEventListener('change', syncTime);
+    function editFlights(){
+        if(ctx.shared||!window.GoNowFlights)return;
+        const a={...(ctx.flightAnswers||{})};window.GoNowFlights.migrate(a);
+        // Keep the curated sample's times until the traveler edits them.
+        if(!a.flightsStep&&sourcePlan().id==='oahu-demo-2026-11'){a.arrivalTime ||= '17:30';a.returnTime ||= flightTime||'';}
+        const sheet=document.createElement('dialog');sheet.className='flight-sheet';sheet.innerHTML='<h2>Edit flights</h2>'+window.GoNowFlights.fields(a,esc)+'<button data-save-flights>Save flights</button><button data-close-flights>Cancel</button>';document.body.append(sheet);
+        const close=()=>{sheet.close();sheet.remove();root.querySelector('[data-testid=edit-flight]')?.focus();};
+        sheet.querySelector('[data-close-flights]').onclick=close;sheet.oncancel=e=>{e.preventDefault();close();};
+        sheet.querySelector('[data-save-flights]').onclick=()=>{
+            sheet.querySelectorAll('[data-flight-field]').forEach(el=>a[el.dataset.flightField]=el.value);a.flightsStep=true;
+            ctx.flightAnswers=a;ctx.saveFlights?.(a);const fw=window.GoNowFlights.windowFor(a);flightTime=clock(fw.departure);
+            const endpoints=[sourcePlan().days[0],sourcePlan().days.at(-1)];
+            endpoints.forEach((d,index)=>{
+                const stored=days[d.date]||buildSuggested(d.date);days[d.date]=stored;
+                const direction=index?'return':'arrival',at=index?fw.departure:fw.landing;
+                let anchor=stored.items.find(i=>i.flight||i.kind==='flight');
+                // The demo's departure used one airport card for both ride and flight.
+                // Keep that card as the ride, and give the flight its own anchor.
+                if(index&&anchor?.kind==='travel'){
+                    const source=d.items.find(i=>i.id===anchor.id);
+                    Object.assign(anchor,{flight:false,title:source?.title||'Leave for the airport',preferred:fw.leave,duration:fw.road,manualTime:true});
+                    delete anchor.textTime;delete anchor.detail;anchor=null;
+                }
+                if(!anchor){anchor=convert({id:direction+'-flight',title:'Flight',kind:'flight',time:clock(at),duration:0});stored.items.push(anchor);}
+                Object.assign(anchor,{title:window.GoNowFlights.label(a,direction),flightDirection:direction,flight:false,kind:'flight',preferred:at,duration:0,locked:true,manualTime:true});delete anchor.textTime;delete anchor.detail;
+                if(index)stored.items.filter(i=>i.kind==='travel'&&/airport|HNL/i.test(i.title)).forEach(i=>{Object.assign(i,{preferred:fw.leave,duration:fw.road,manualTime:true});});
+                stored.chronological=false;stored.items.sort((x,y)=>(x.preferred??0)-(y.preferred??0));
+                d.flightsEdited=true;
+                let source=d.items.find(i=>i.id===anchor.id);
+                if(!source){source={id:anchor.id,prep:[],bring:[],sources:[]};d.items.push(source);}
+                Object.assign(source,{title:anchor.title,flightDirection:direction,kind:'flight',time:clock(at),duration:0,locked:true});
+            });
+            save();close();render();announce('Flights updated');
+        };sheet.showModal();sheet.querySelector('input').focus();
+    }
     root.addEventListener('change', e => {
         if (e.target.matches('[data-testid=db-flight-time]')) {
             const [h, m] = e.target.value.split(':').map(Number);
             if(!Number.isFinite(h)||!Number.isFinite(m))return;
             if(date==='2026-11-25'){const item=current().items.find(i=>i.flight);Object.assign(item,{preferred:h*60+m,manualTime:true});}
             else flightTime = clock(h * 60 + m);
+            if(ctx.flightAnswers){const a=ctx.flightAnswers;window.GoNowFlights?.migrate(a);a[date===sourcePlan().days[0].date?'arrivalTime':'returnTime']=e.target.value;ctx.saveFlights?.(a);}
             save(); render(); root.querySelector('[data-testid=add-flight-time]').focus(); announce('Flight time updated');
         }
     });
@@ -1205,56 +1434,32 @@ function mount(root, ctx = {}) {
         if (e.target.matches('.db-time-editor')) {
             e.preventDefault();
             const form = e.target, row = form.closest('[data-db-id]');
+            days[date] ||= buildSuggested(date);
             const item = current().items.find(i => i.id === row.dataset.dbId);
-            if (!item || item.locked) return;
-            const time = v => /^([01]\d|2[0-3]):[0-5]\d$/.test(v) ? Number(v.slice(0,2))*60 + Number(v.slice(3)) : NaN;
-            const start = time(form.elements.start.value);
+            if (!item) return;
+            if (item.locked && suggestLocked(item, 'time')) return;
+            const start = hm(form.elements.start.value);
             const durationField = form.elements.duration;
             const endField = form.elements.end;
-            const explicitDuration = durationField.value && form.dataset.lastManual !== 'end';
-            const length = explicitDuration ? Number(durationField.value) : endField.dataset.manual ? time(endField.value)-start : item.duration;
-            if (!Number.isFinite(start) || !Number.isFinite(length) || length <= 0 || start + length > 1440 || !form.checkValidity()) {
-                form.querySelector('[role=alert]').textContent = 'Enter valid times and a positive duration. End must be after start.';
+            const end = hm(endField.value);
+            // The last field the traveler edited wins; Start alone keeps the duration.
+            const length = form.dataset.lastManual === 'end' && end !== null ? end - start : Number(durationField.value) || (end !== null ? end - start : item.duration);
+            if (start === null || !Number.isFinite(length) || length <= 0 || start + length > 1440 || !form.checkValidity()) {
+                form.querySelector('[role=alert]').textContent = 'Enter valid times. End must be after start.';
                 form.setAttribute('aria-invalid','true');
                 [form.elements.start, endField, durationField].forEach(field => field.setAttribute('aria-invalid','true')); return;
             }
+            const touched = !!form.dataset.touched || endField.dataset.manual === 'true';
+            // An explicit time is the traveler's call: opening hours only warn (the card shows the heads-up).
             resolveTime(date,item,start,length,()=>{
             reviewTransfers(current(),item);
             item.originalTitle ||= item.title; item.title=cleanTimeTitle(item.title,item.preferred);
-            Object.assign(item,{preferred:start,duration:length,manualTime:true,estimate: !(durationField.value || endField.dataset.manual)});
-            sortDay(date); save(); closeTime(); announce(item.kind === 'travel' ? 'Departure time updated.' : 'Activity time updated. Travel and prep are estimated separately.');
-            });
+            Object.assign(item,{preferred:start,duration:length,manualTime:true,estimate: !touched,hoursOk:!!blockedOn({...item,preferred:start,duration:length},date,ruleContext())});
+            sortDay(date); save(); closeTime(); announce(item.kind === 'travel' ? 'Departure time updated.' : 'Activity time updated.');
+            },{explicit:true});
             return;
         }
-        if (!e.target.matches('.db-form')) return;
-        e.preventDefault();
-        const values = new FormData(e.target);
-        const toMinutes = s => {
-            const [h, m] = s.split(':').map(Number);
-            return h * 60 + m;
-        };
-        const start = toMinutes(values.get('start'));
-        const end = toMinutes(values.get('end'));
-        if (end <= start) {
-            root.querySelector('[data-testid="db-form-note"]').textContent = 'End must be after start';
-            return;
-        }
-        const item = {id: 'custom-' + Date.now(), title: values.get('name').trim(), preferred: start,
-            duration: end - start, place: values.get('place'), locked: true, custom: true};
-        if (!item.title) return;
-        if(block(item,date,on=>addToDay(on,{...item,time:clock(start)})))return;
-        const d = current();
-        const at = d.items.findIndex(i => (i.preferred ?? 1440) > start);
-        d.items.splice(at < 0 ? d.items.length : at, 0, item);
-        const overlap = d.items.find(i => i.id !== item.id && i.locked && i.preferred < end && i.preferred + i.duration > start);
-        formStatus = overlap ? 'Overlaps ' + (overlap.venue || (overlap.dressy ? 'La Mer at Halekulani' : overlap.title)) : '';
-        save();
-        const result = render({id: item.id, zone: 'day'});
-        if (!formStatus && result.conflicts.length) {
-            formStatus = result.conflicts[0].note;
-            root.querySelector('[data-testid=db-form-note]').textContent = formStatus;
-        }
-        announce('Locked booking added. ' + formStatus);
+
     });
     root.addEventListener('keydown', e => {
         if (e.key === 'Escape' && drag) {
@@ -1323,7 +1528,7 @@ function mount(root, ctx = {}) {
     }
     function dropTarget(x, y) {
         const hit = document.elementFromPoint(x, y);
-        const tray = hit?.closest('[data-testid="db-tray"], [data-testid="db-tray-toggle"]');
+        const tray = hit?.closest('[data-testid="db-tray"]');
         const day = hit?.closest('[data-testid="db-day-list"]');
         if (!tray && !day) return null;
         const zone = tray ? 'tray' : 'day';
@@ -1416,7 +1621,7 @@ function mount(root, ctx = {}) {
             if(before.some(i=>i.locked&&!after.some(j=>j.id===i.id&&j.start===i.start&&j.end===i.end)))return false;
             days[on]=copy;save();render();return true;
         },
-        swapItem: (id, alternative) => { const item=current().items.find(i=>i.id===id); if(!item || item.locked)return false; if(block({...item,...alternative},date,target=>addToDay(target,alternative)))return false; Object.assign(item, alternative, {id:item.id, preferred:alternative.start ?? item.preferred, manualTime:true, duration:item.duration, checkinSwap:true}); delete item.textTime; save(); render(); return true; },
+        swapItem: (id, alternative) => { const item=current().items.find(i=>i.id===id); if(item?.locked&&suggestLocked(item,'swap',{alternative}))return false; if(!item || item.locked)return false; if(block({...item,...alternative},date,target=>addToDay(target,alternative)))return false; Object.assign(item, alternative, {id:item.id, preferred:alternative.start ?? item.preferred, manualTime:true, duration:item.duration, checkinSwap:true}); delete item.textTime; save(); render(); return true; },
         render, selectDay, renderPrint, root, openTime, timeInstances, draftItems: () => clone(draftItems()),
         getDay: () => clone(current()),
         date: () => date,
@@ -1430,7 +1635,7 @@ function mount(root, ctx = {}) {
     return api;
 }
 const active = () => (session.active && session.active.root.isConnected ? session.active : null);
-window.DayBuilder = {estimateTravel,parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
+window.DayBuilder = {convert,slotCandidates,estimateTravel,parseClock:parse,closedOn,blockedOn,nearestAllowed,operatingRules,canShiftUnlocked,cleanTimeTitle, overlaps, shiftConflicts,replanStay,setStay: name => {stayOverride=name||'';},parseDuration, buildSuggested, reflow, commuteMinutes, mount, render: mount, trayItems, clock, range,
     toggleLock, exportDays, importDays, importForPlan, sourceOf,
     selectDay: (date, focus) => active()?.selectDay(date, focus),
     openTime: (date, id) => active()?.openTime(date, id),

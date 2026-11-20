@@ -45,10 +45,13 @@
         node('p','Timezone: '+info.timezone,parent);
         var clock=node('p','',parent);
         function time(){clock.textContent='Local time now: '+new Intl.DateTimeFormat(undefined,{timeZone:info.timezone,dateStyle:'medium',timeStyle:'short'}).format(new Date());}time();
-        node('p','Currency: '+info.currency+' · Languages: '+info.languages,parent);
+        node('p',(info.currency==='USD'?'Uses US dollars (USD)':'Currency: '+info.currency)+' · Languages: '+info.languages,parent);
         node('p','Plugs: Types '+info.plugs+' · '+info.voltage+' V',parent);
+        var emergency={oahu:'911',kyoto:'110 police · 119 ambulance',lisbon:'112',cancun:'911',reykjavik:'112',bali:'112',barcelona:'112',banff:'911',costarica:'911',capetown:'112 from mobile',newyork:'911'};
+        node('p','Emergency: '+emergency[id],parent);
         node('p',info.tipping,parent);node('small','Guidance checked: '+info.checked,parent);
-        var weather=node('div','Open this tile to load weather.',parent),fx=node('div',info.currency==='USD'?'Uses US dollars (USD)':'Open this tile to load a reference exchange rate.',parent);
+        var entry=node('p','',parent),entryLink=node('a','Entry rules · Check official guidance',entry);entryLink.href='https://travel.state.gov/content/travel/en/international-travel/International-Travel-Country-Information-Pages.html';entryLink.target='_blank';entryLink.rel='noopener';
+        var weather=node('div','Open this tile to load weather.',parent),fx=node('div',info.currency==='USD'?'':'Open this tile to load a reference exchange rate.',parent);if(info.currency==='USD')fx.hidden=true;
         var loaded=false;
         async function loadWeather(force) {
             weather.replaceChildren();node('p','Loading weather…',weather);

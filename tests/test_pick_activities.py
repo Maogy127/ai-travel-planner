@@ -56,7 +56,7 @@ async def checks(browser):
             await pg.get_by_test_id('change-answers').click()
             await expect(pg.get_by_test_id('date-start')).to_be_visible()
             # Revisit the fork through Draft answer editing, then take extra questions.
-            for _ in range(5):
+            for _ in range(6):  # Includes optional flights after dates.
                 await pg.get_by_test_id('q-continue').click()
             await expect(pg.get_by_test_id('fork-yes')).to_be_visible()
             await pg.get_by_test_id('fork-yes').click()

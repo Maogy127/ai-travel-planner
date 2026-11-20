@@ -133,7 +133,8 @@ console.log('PASS engine templates reject closure/diving and time-edit suggestio
  saved.builder={days:Object.fromEntries(api.state.plan.days.map(d=>[d.date,{date:d.date,items:[],unscheduled:[]}]))};
  memory.set('gonow:trips',JSON.stringify(savedTrips));api.state.viewing='finished';
  assert.equal(H.prepRemaining(),tasks.length,'frozen prep ignores later draft removals');
- api.state.viewing='draft';assert.equal(H.prepRemaining(),1,'draft prep honors removed builder bookings');
+ api.state.viewing='draft';// Item H keeps flight booking and insurance after all stops are removed.
+ assert.equal(H.prepRemaining(),2,'draft prep honors removed builder bookings');
  memory.set('gonow:trips',tripsBefore);api.state.viewing='draft';
  console.log('PASS frozen action count remains isolated from draft builder changes');
  api.state.answers.destination='Lisbon';api.state.answers.origin='Los Angeles';

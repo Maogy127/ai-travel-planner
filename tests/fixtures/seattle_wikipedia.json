@@ -1,0 +1,12 @@
+{
+  "title": "Seattle Art Museum",
+  "extract": "Seattle Art Museum is a museum in Seattle. Its collections span many periods.",
+  "thumbnail": {
+    "source": "https://upload.wikimedia.org/wikipedia/commons/fixture-museum.jpg"
+  },
+  "content_urls": {
+    "desktop": {
+      "page": "https://en.wikipedia.org/wiki/Seattle_Art_Museum"
+    }
+  }
+}
