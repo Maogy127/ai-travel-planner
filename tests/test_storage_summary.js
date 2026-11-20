@@ -21,9 +21,9 @@ const Cloud=require('../js/cloud.js');
  // A failed upload must never claim the account copy is current.
  const failing=Object.assign({},sdk,{setDoc:()=>Promise.reject(Error('offline'))});
  const values2=new Map(),storage2={getItem:k=>values2.get(k),setItem:(k,v)=>values2.set(k,v)};
- const f=Cloud.create({sdk:failing,storage:storage2,local:()=>rows});await f.load();await f.google();
+ const rows2=[{id:'fresh',updatedAt:Date.now(),title:'Local'}];const f=Cloud.create({sdk:failing,storage:storage2,local:()=>rows2});await f.load();await f.google();
  await f.sync(true);assert.equal(f.storageSummary(),'Saved on this device','failed upload');assert.equal(f.status,'offline','failed upload is queued, shown as offline');assert(f.pending()>=1,'kept for retry');
- rows[0].title='Edited';f.write(rows);await new Promise(r=>setTimeout(r,400));assert.equal(f.storageSummary(),'Saved on this device','failed write');
+ rows2[0].title='Edited';rows2[0].updatedAt=Date.now();f.write(rows2);await new Promise(r=>setTimeout(r,400));assert.equal(f.storageSummary(),'Saved on this device','failed write');
  c.dispose();f.dispose();guest.dispose();
  console.log('PASS storage summary guest, Not now, uploaded and failed states');
 })().catch(e=>{console.error(e);process.exitCode=1;});

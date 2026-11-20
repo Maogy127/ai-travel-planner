@@ -50,7 +50,9 @@ function create(options={}){
  function timed(p){let t;return Promise.race([p,new Promise((_,no)=>{t=setTimeout(()=>no(Object.assign(Error('offline'),{code:'unavailable'})),WRITE_WAIT);})]).finally(()=>clearTimeout(t));}
  async function upload(trip){if(!user||!sdk)return;const ref=sdk.doc(db,'users',user.uid,'trips',trip.id);
   // Never overwrite a tombstone left by another device.
-  try{const cur=await timed(sdk.getDoc(ref));if(cur.exists()&&cur.data().deleted){const t=tombs();t[trip.id]=stamp(cur.data().deletedAt)||Date.now();keep(TOMBS,t);emit('trips',merge(local(),[Object.assign({},cur.data(),{id:trip.id})],t));return;}}catch(e){if(e&&e.code==='unavailable')throw e;}
+  try{const cur=await timed(sdk.getDoc(ref));if(cur.exists()&&cur.data().deleted){const t=tombs();t[trip.id]=stamp(cur.data().deletedAt)||Date.now();keep(TOMBS,t);emit('trips',merge(local(),[Object.assign({},cur.data(),{id:trip.id})],t));return;}
+   // A newer account copy (another device) wins; this older one is not uploaded over it.
+   if(cur.exists()&&stamp(cur.data().updatedAt)>stamp(trip.updatedAt)+1000){emit('trips',merge(local(),[Object.assign({},cur.data(),{id:trip.id})],tombs()));return;}}catch(e){if(e&&e.code==='unavailable')throw e;}
   await timed(sdk.setDoc(ref,Object.assign({},clean(trip),{updatedAt:sdk.serverTimestamp()})));}
  async function bury(id){if(!user||!sdk)return;await timed(sdk.setDoc(sdk.doc(db,'users',user.uid,'trips',id),{id,deleted:true,deletedAt:sdk.serverTimestamp(),updatedAt:sdk.serverTimestamp()}));}
  // Local changes are marked dirty and kept until the account copy confirms them; failures retry with backoff.

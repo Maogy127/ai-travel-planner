@@ -76,7 +76,7 @@ const tick=(ms=0)=>new Promise(r=>setTimeout(r,ms));
 
  // 4) Retry queue + status: offline writes are kept and sent once when back.
  const statuses=[];const F=account('fay','Fay',[{id:'f',title:'Oslo',updatedAt:1}],{});F.storage.setItem('gonow:sync:fay','yes');await F.c.load();await tick(450);
- down=true;F.rows[0].title='Oslo edit';F.rows[0].updatedAt=2;F.c.write(F.rows);assert.equal(F.c.status,'saving');await tick(450);
+ down=true;F.rows[0].title='Oslo edit';F.rows[0].updatedAt=Date.now()+5000;F.c.write(F.rows);assert.equal(F.c.status,'saving');await tick(450);
  assert.equal(F.c.status,'offline');assert.equal(F.c.pending(),1);assert.notEqual(mock.dump()['users/fay/trips/f'].title,'Oslo edit');
  B.open('t1');down=true;await B.c.vote('tram');assert.equal(B.c.pending(),1,'vote queued');assert.equal(B.c.status,'offline');
  down=false;await F.c.flush();assert.equal(F.c.status,'saved');assert.equal(F.c.pending(),0);assert.equal(mock.dump()['users/fay/trips/f'].title,'Oslo edit');
