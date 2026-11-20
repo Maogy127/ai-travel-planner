@@ -18,12 +18,12 @@ const tick=(ms=0)=>new Promise(r=>setTimeout(r,ms));
  // 1) Share only the trip: personal answers, notes, check-ins, flights and snapshots never reach the group doc.
  const personal={id:'t1',planId:'p1',title:'Lisbon',destination:'Lisbon',start:'2026-12-01',end:'2026-12-03',timeZone:'Europe/Lisbon',updatedAt:1,
   answers:{pace:'slow',diet:'vegan',fitness:'low',origin:'SFO'},checkins:[{feel:2}],snapshot:{x:1},draftEdits:{note:'private'},
-  plan:{id:'p1',days:[{date:'2026-12-01',items:[{id:'f1',kind:'flight',title:'UA 123 SFO→LIS'},{id:'cafe',title:'Cafe',note:'my private note'}]}],stay:'Hotel Avenida',answers:{pace:'slow'}},
-  builder:{days:{'2026-12-01':{items:[{id:'cafe',title:'Cafe',notes:'secret'},{id:'f1',kind:'flight',title:'UA 123'}],unscheduled:[{id:'tram',title:'Tram 28'}]}}}};
+  plan:{id:'p1',days:[{date:'2026-12-01',items:[{id:'f1',kind:'flight',title:'UA 123 SFO→LIS'},{id:'cafe',title:'Cafe',userNote:'my private note',note:'Curated tip'}]}],stay:'Hotel Avenida',answers:{pace:'slow'}},
+  builder:{days:{'2026-12-01':{items:[{id:'cafe',title:'Cafe',privateNote:'secret'},{id:'f1',kind:'flight',title:'UA 123'}],unscheduled:[{id:'tram',title:'Tram 28'}]}}}};
  const s=Cloud.shareable(personal);
  assert.deepEqual(Object.keys(s).sort(),['builder','destination','end','id','plan','planId','start','timeZone','title']);
- const flat=JSON.stringify(s);for(const bad of ['vegan','SFO','private','secret','UA 123','Avenida','feel','pace'])assert(!flat.includes(bad),'shared copy leaks '+bad);
- assert.equal(s.builder.days['2026-12-01'].unscheduled[0].id,'tram','tray is shared');
+ const flat=JSON.stringify(s);for(const bad of ['vegan','SFO','private','secret','UA 123','feel','pace'])assert(!flat.includes(bad),'shared copy leaks '+bad);
+ assert.equal(s.builder.days['2026-12-01'].unscheduled[0].id,'tram','tray is shared');assert(flat.includes('Curated tip')&&flat.includes('Hotel Avenida'),'plan content and stay kept');
  const A=account('sam','Sam',[JSON.parse(JSON.stringify(personal))]);await A.c.load();await tick();
  const link=await A.c.invite(A.rows[0]);const inv=link.split('#join=')[1];const gid='group-'+inv;
  const doc=mock.dump()['trips/'+gid];assert(!JSON.stringify(doc.trip).includes('vegan')&&!('answers' in doc.trip),'invite doc is trip-only');

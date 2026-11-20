@@ -8,9 +8,9 @@ function merge(local,remote,tombs={}){const rows=new Map(local.filter(t=>!tombs[
 // What a group sees: the trip itself (places, days, times, order, locks via the day plan), never anyone's personal
 // answers (pace, diet, fitness, origin, budget, ages), feel check-ins, private notes, flights or confirmation snapshot.
 const SHARED_KEYS=['id','planId','title','destination','start','end','timeZone','plan','builder','tombstones','appliedChanges'];
-const PRIVATE_FIELDS=/^(answers|note|notes|userNote|privateNote|feel|feels|checkins?|wellness|diet|fitness|pace|origin|ages|budget|flightNumber|confirmation|bookingRef|group)$/;
+const PRIVATE_FIELDS=/^(answers|userNote|privateNote|feel|feels|checkins?|diet|fitness|pace|origin|ages|budget|flightNumber|confirmation|bookingRef|group)$/;
 function scrubShared(v){if(Array.isArray(v))return v.filter(x=>!(x&&typeof x==='object'&&x.kind==='flight')).map(scrubShared);if(v&&typeof v==='object'){const o={};Object.keys(v).forEach(k=>{if(PRIVATE_FIELDS.test(k)||v[k]===undefined)return;o[k]=scrubShared(v[k]);});return o;}return v;}
-function shareable(trip){const out={};SHARED_KEYS.forEach(k=>{if(trip&&trip[k]!==undefined&&trip[k]!==null)out[k]=k==='plan'||k==='builder'?scrubShared(trip[k]):JSON.parse(JSON.stringify(trip[k]));});if(out.plan){delete out.plan.stay;delete out.plan.answers;}return out;}
+function shareable(trip){const out={};SHARED_KEYS.forEach(k=>{if(trip&&trip[k]!==undefined&&trip[k]!==null)out[k]=k==='plan'||k==='builder'?scrubShared(trip[k]):JSON.parse(JSON.stringify(trip[k]));});if(out.plan)delete out.plan.answers;return out;}
 const CID=/^[A-Za-z0-9_-]{6,40}$/;
 function newCid(){const b=new Uint8Array(9);(root.crypto||globalThis.crypto).getRandomValues(b);return Array.from(b,x=>x.toString(36).padStart(2,'0')).join('').slice(0,16);}
 // Day plans come in two shapes: full {days:{date:{items,unscheduled}}} and compact {d:{date:{i,u}}}.
@@ -82,7 +82,7 @@ function create(options={}){
  // The owner's device is the source of truth for each shared plan, whether or not account sync is on. Only the
  // shareable part is sent; deleted items stay deleted (tombstones are merged, never dropped); folded member changes
  // are recorded by id and cleared from the queue.
- async function pushGroups(trips){if(!user)return;for(const g of groups.values()){if(g.ownerId!==user.uid||!g.trip)continue;const trip=trips.find(t=>t.id===g.trip.id);if(!trip)continue;const next=shareable(trip);
+ async function pushGroups(trips){if(!user)return;for(const g of groups.values()){if(g.ownerId!==user.uid||!g.trip)continue;const trip=trips.find(t=>t.id===g.trip.id);if(!trip)continue;const next=shareable(trip);if(!next.builder&&g.trip.builder)next.builder=g.trip.builder;
    const t=Object.assign({},g.trip.tombstones||{},next.tombstones||{});if(Object.keys(t).length){next.tombstones=t;next.builder=dropDead(next.builder,t);}
    const applied=[...new Set([...(g.trip.appliedChanges||[]),...(next.appliedChanges||[])])].slice(-300);if(applied.length)next.appliedChanges=applied;
    const done=Object.entries(g.planContent||{}).filter(([,c])=>c&&c.cid&&applied.includes(c.cid)).map(([k])=>k).filter(k=>SAFE.test(k));

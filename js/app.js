@@ -133,7 +133,7 @@
     }
     function planBanner(p) {
         var dest=Engine.matchDestination(state.answers.destination);
-        p.meta=Engine.dateRange(p.start||p.days[0].date,p.end||p.days[p.days.length-1].date)+' · '+p.days.length+' days · '+(state.answers.who||'Travelers').replace(/^./,function(c){return c.toUpperCase();})+' · Ages '+(state.answers.ages||[]).join(' & ');
+        p.meta=Engine.dateRange(p.start||p.days[0].date,p.end||p.days[p.days.length-1].date)+' · '+p.days.length+' days · '+(state.answers.who||'Travelers').replace(/^./,function(c){return c.toUpperCase();})+((state.answers.ages||[]).length?' · Ages '+state.answers.ages.join(' & '):'');
         var image=dest.id==='custom'?'images/hero.jpg':'images/'+dest.id+'.jpg';
         var visual=state.answers.templateOahu&&dest.id==='oahu'?'':photo(image, p.title, 'banner-photo');
         if(visual){ var bid=image.split('/').pop().replace('.jpg',''); var bc=window.PHOTO_CREDITS.find(function(c){return c.id===bid;}); visual+='<div class="banner-credit">'+creditHTML(bc)+'</div>'; }
@@ -1248,7 +1248,7 @@
         result.days.forEach(function(d){var template=p.days.find(function(t){return t.date===d.date;});if(template&&template.car)d.car=template.car;});
         p.destinationId=Engine.matchDestination(state.answers.destination).id;if(pickCatalog().generic)p.destinationId=GoNowPlaceSource.slug(state.answers.destination);p.id=p.destinationId+'-picks-'+p.start;p.days=result.days;p.unfit=result.unfit;p.bookingIssues=result.bookingIssues;p.curatedMismatch=false;p.banner='';
         p.start=result.days[0].date;p.end=result.days[result.days.length-1].date;p.flightTime=result.flightTime;
-        p.meta=Engine.dateRange(p.start,p.end)+' · '+(state.answers.who||'Travelers')+' · Ages '+state.answers.ages.join(' & ');
+        p.meta=Engine.dateRange(p.start,p.end)+' · '+(state.answers.who||'Travelers')+((state.answers.ages||[]).length?' · Ages '+state.answers.ages.join(' & '):'');
         result.days.forEach(function(d){d.items.forEach(function(i){if(i.photo)ITEM_PHOTOS[i.id]=i.photo;});});
         showPlan(Engine.applyAgeRules(p,state.answers),false);
     }
