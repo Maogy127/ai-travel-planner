@@ -2,7 +2,7 @@
 account day plans reload the open plan. Firebase is the local ESM mock; no real accounts or network."""
 import asyncio, json
 from playwright.async_api import expect
-from test_full import new, continue_prep, open_share_menu
+from test_full import new, continue_prep, open_share_menu, open_more
 from test_wellness_home import serve_checks
 from test_fixes_batch import mock_sdk, checkout_oahu
 
@@ -45,7 +45,7 @@ async def undo_vs_notice(b):
     await expect(pg.get_by_test_id('cloud-notice')).to_have_text('Invite link copied')
     ok('cloud notice is not the toast', await pg.locator('#toast').inner_text() == '')
     path = await pg.evaluate("Object.keys(__fbMock.dump()).find(p=>p.startsWith('trips/'))")
-    await pg.get_by_test_id('edit-picks').click(); await pg.get_by_test_id('pick-activities').wait_for()
+    await open_more(pg); await pg.get_by_test_id('edit-picks').click(); await pg.get_by_test_id('pick-activities').wait_for()
     await pg.locator('[data-pick-toggle="waimea"]').click(); await pg.get_by_test_id('pick-next').click(); await pg.get_by_test_id('pick-next').click()
     await expect(pg.get_by_test_id('plan-toast')).to_have_text('Plan updated · Undo')
     await pg.evaluate('(p)=>__fbMock.simulateAlex(p)', path)

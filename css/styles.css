@@ -1906,3 +1906,33 @@ html.reduce-motion .nav-panel{transition:none}
 .group-badge{margin-left:6px;background:#e3eef0;color:#1f4a55}
 @media print{#cloud-notice,.sync-status{display:none!important}}
 .topbar .sync-status{margin-left:auto}.topbar .sync-status+[data-testid=account-button],.topbar .sync-status+[data-testid=sign-in]{margin-left:4px}
+/* Declutter pass: trip overview card — one primary action, details behind ⋯ More, quiet meta lines. */
+.plan-title .plan-meta{margin:10px 0 0}
+.plan-title .plan-stay{display:flex;align-items:center;flex-wrap:wrap;gap:4px 6px;margin:16px 0 0;font-size:14px;color:var(--ink-2)}
+.plan-title .plan-stay a{color:inherit}
+.plan-title .local-times{display:block;margin:6px 0 0;font-size:12px;color:var(--ink-2)}
+.plan-title .origin-ask{margin-top:16px}
+.plan-title .trip-hotel-form{display:flex;align-items:flex-end;gap:8px;flex-wrap:wrap;margin-top:16px}.plan-title .trip-hotel-form[hidden]{display:none}.plan-title .trip-hotel-form label{display:grid;gap:4px;font-size:13px;flex:1 1 200px}
+.plan-title .plan-actions{margin-top:28px;flex-wrap:nowrap}
+.plan-more{position:relative;margin-left:auto;flex:none}
+.plan-title .plan-more-toggle{margin:0;padding:10px 14px;font-size:14px;white-space:nowrap}
+.plan-more-menu{position:absolute;right:0;top:calc(100% + 8px);width:230px;max-width:calc(100vw - 64px);padding:6px;border:1px solid var(--boundary);border-radius:12px;background:var(--surface);box-shadow:0 8px 24px #0003;z-index:10;display:grid;gap:2px}
+.plan-more-menu[hidden]{display:none}
+.plan-title .plan-more-menu button{display:block;width:100%;text-align:left;white-space:nowrap;font-size:14px;padding:12px 10px;margin:0;border:0;background:transparent;border-radius:6px}
+.plan-title .plan-more-menu button:hover,.plan-title .plan-more-menu button:focus{background:var(--soft)}
+@media(min-width:768px){.plan-header{padding-block:40px}}
+@media print{.plan-more,.plan-actions{display:none!important}}
+/* Declutter pass: Your trips cards — title, one meta line, one action row; equal heights. */
+.dashboard-grid{gap:24px}
+.dashboard .trip-card{display:flex;flex-direction:column;gap:10px;padding:24px;min-height:176px;box-sizing:border-box;overflow:visible}
+.dashboard .trip-card h2{margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trip-meta{display:flex;align-items:center;flex-wrap:wrap;gap:6px 8px;font-size:14px;color:var(--ink-2)}
+.trip-meta .badge{margin:0;white-space:nowrap}
+.trip-dates{white-space:nowrap}
+.trip-card-actions{display:flex;align-items:center;gap:12px;margin-top:auto;padding-top:8px;min-height:60px;box-sizing:border-box}
+.trip-card-actions [data-testid=card-trip-prep]{margin:0}
+.trip-card-actions .trip-menu{position:relative;margin-left:auto}
+.trip-card-actions .trip-menu>button{margin:0}
+.trip-card-actions .trip-menu>div{position:absolute;right:0;top:calc(100% + 6px);z-index:10;display:grid;gap:4px;padding:6px;min-width:150px;border:1px solid var(--boundary);border-radius:12px;background:var(--surface);box-shadow:0 8px 24px #0003}
+.trip-card-actions .trip-menu>div[hidden]{display:none}
+.trip-card-actions .trip-menu>div button{margin:0;width:100%;text-align:left}

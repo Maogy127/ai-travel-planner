@@ -1,7 +1,7 @@
 """Supervisor-only Chromium checks; actual desktop and mobile viewports."""
 import asyncio
 from playwright.async_api import expect
-from test_full import new, answer
+from test_full import new, answer, open_more
 from test_wellness_home import serve_checks
 
 async def open_picks(pg):
@@ -53,7 +53,7 @@ async def checks(browser):
             assert await empty.evaluate('e=>e.getBoundingClientRect().height<=parseFloat(getComputedStyle(e).lineHeight)+1')
             await pg.get_by_test_id('pick-next').click()
             await pg.get_by_test_id('pick-next').click()
-            await pg.get_by_test_id('change-answers').click()
+            await open_more(pg); await pg.get_by_test_id('change-answers').click()
             await expect(pg.get_by_test_id('date-start')).to_be_visible()
             # Revisit the fork through Draft answer editing, then take extra questions.
             for _ in range(6):  # Includes optional flights after dates.

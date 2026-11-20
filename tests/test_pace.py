@@ -1,5 +1,5 @@
 """Supervisor-run browser regressions. No synthetic state changes."""
-from test_full import reopen_dashboard
+from test_full import reopen_dashboard, open_more
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
 from playwright.async_api import expect
@@ -16,7 +16,7 @@ async def reopen(pg):
 
 async def expand_group(pg):
     if await pg.get_by_test_id('track-toggle').get_attribute('aria-pressed') != 'true':
-        await pg.get_by_test_id('track-toggle').click()
+        await open_more(pg); await pg.get_by_test_id('track-toggle').click()
     toggle = pg.get_by_test_id('group-toggle')
     if await toggle.get_attribute('aria-expanded') != 'true':
         await toggle.click()

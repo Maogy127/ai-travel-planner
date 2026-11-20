@@ -10,7 +10,7 @@ import json
 import os
 from pathlib import Path
 from playwright.async_api import expect
-from test_full import (new, continue_prep, show_day, open_share_menu,
+from test_full import (new, continue_prep, show_day, open_share_menu, open_more,
                        dashboard_action, errors as shared_errors, is_place_url)
 from test_wellness_home import serve_checks
 from test_accounts import mock_sdk
@@ -233,7 +233,7 @@ async def checkin(browser, width):
         await pg.goto(BASE + '?today=2026-11-28&fast=1')
         await pg.get_by_test_id('demo-oahu').click()
         await continue_prep(pg)
-        await pg.get_by_test_id('track-toggle').click()
+        await open_more(pg); await pg.get_by_test_id('track-toggle').click()
         await show_day(pg, 3)
         await audit.capture('checkin-collapsed')
         await pg.get_by_test_id('morning-checkin').locator('summary').click()

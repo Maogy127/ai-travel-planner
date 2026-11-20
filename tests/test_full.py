@@ -17,6 +17,11 @@ OAHU_EXPORT_PICKS = ['diamond-head', 'kualoa', 'hanauma',
   'bishop-museum', 'waimea', 'laniakea', 'surf', 'leonards',
   'helenas', 'matsumoto', 'udon']
 
+async def open_more(pg):
+  # Secondary trip actions live in the plan card's ⋯ More sheet.
+  t=pg.get_by_test_id('plan-more')
+  if await t.count() and await t.first.get_attribute('aria-expanded')!='true': await t.first.click()
+
 async def through_picks(pg, picks=()):
   await pg.locator('[data-testid=pick-activities]:visible, [data-testid=pick-food]:visible, [data-testid=confirm-plan]:visible, [data-testid=db-root]:visible, [data-testid=trip-prep]:visible, [data-testid=treasure-map]:visible, [data-testid=plan-day]:visible').first.wait_for(timeout=45000)
   for screen in ('pick-activities', 'pick-food'):
@@ -68,7 +73,7 @@ async def open_add_menu(pg):
   # Item F: actions are directly available, with no Add disclosure.
   await pg.get_by_test_id('day-add-own').wait_for()
 async def open_group(pg):
-  if await pg.get_by_test_id('track-toggle').get_attribute('aria-pressed')!='true': await pg.get_by_test_id('track-toggle').click()
+  if await pg.get_by_test_id('track-toggle').get_attribute('aria-pressed')!='true': await open_more(pg); await pg.get_by_test_id('track-toggle').click()
   button=pg.get_by_test_id('group-toggle').first
   if await button.get_attribute('aria-expanded')!='true': await button.click()
 async def open_info(pg):
@@ -305,7 +310,7 @@ async def extra(b, base, label):
   await open_trip_prep(pg)
   # custom item + quantity survive Reset my edits
   await pg.get_by_test_id('packing-add').first.click(); await pg.get_by_test_id('packing-name').fill('Reef socks test'); await pg.get_by_test_id('form-add').click()
-  await continue_prep(pg); await pg.get_by_test_id('reset-edits').click(); await pg.get_by_test_id('modal-0').click()
+  await continue_prep(pg); await open_more(pg); await pg.get_by_test_id('reset-edits').click(); await pg.get_by_test_id('modal-0').click()
   await open_trip_prep(pg)
   ok(f'{label} Reset my edits keeps custom packing item', await pg.get_by_text('Reef socks test').count()>=1)
   ok(f'{label} 390 no h-scroll (packing)', not await overflow(pg))

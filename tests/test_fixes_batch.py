@@ -2,7 +2,7 @@
 import asyncio, re
 from pathlib import Path
 from playwright.async_api import expect
-from test_full import new, continue_prep, open_share_menu, answer
+from test_full import new, continue_prep, open_share_menu, answer, open_more
 from test_wellness_home import serve_checks
 from test_pick_activities import open_picks
 from test_any_city import routes, enter
@@ -117,7 +117,7 @@ async def undo_scope(b):
     ctx, pg = await new(b, BASE, 390); await checkout_oahu(pg)
     await pg.evaluate("localStorage.setItem('gonow:sync:test','yes')")
     before = await pg.evaluate("JSON.stringify(__gonow.state.plan.days.map(d=>d.items.map(i=>i.id||i.title)))")
-    await pg.get_by_test_id('edit-picks').click(); await pg.get_by_test_id('pick-activities').wait_for()
+    await open_more(pg); await pg.get_by_test_id('edit-picks').click(); await pg.get_by_test_id('pick-activities').wait_for()
     await pg.evaluate("localStorage.setItem('gonow:invite:test:trip','inv');localStorage.setItem('gonow:sync:test','no');localStorage.setItem('gonow:places:geo:x',JSON.stringify({value:1,until:9e15}))")
     await pg.locator('[data-pick-toggle="waimea"]').click(); await pg.get_by_test_id('pick-next').click(); await pg.get_by_test_id('pick-next').click()
     await expect(pg.get_by_test_id('plan-toast')).to_have_text('Plan updated · Undo'); await pg.get_by_test_id('plan-undo').click(); await pg.wait_for_timeout(500)
@@ -145,7 +145,7 @@ async def any_city_reload(b):
     await row.get_by_test_id('db-swap').click(); sheet = pg.get_by_test_id('swap-sheet'); await sheet.wait_for()
     ok('any-city Swap after reload offers options', await sheet.get_by_test_id('swap-option').count() >= 1)
     await sheet.locator('[data-close]').click()
-    errs.clear(); await pg.get_by_test_id('edit-picks').click(); await pg.wait_for_timeout(1000)
+    errs.clear(); await open_more(pg); await pg.get_by_test_id('edit-picks').click(); await pg.wait_for_timeout(1000)
     ok('any-city Edit picks after reload opens picks without errors', await pg.evaluate('__gonow.state.screen') == 'pick-activities' and not errs, errs)
     ok('Edit picks keeps the current pick ticked', await pg.locator('[data-pick-toggle=osm-node-100][aria-pressed=true]').count() == 1)
     # A new session without the stored catalog loads it on demand (Swap shows Loading, then options).

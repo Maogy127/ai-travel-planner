@@ -137,7 +137,7 @@
         var image=dest.id==='custom'?'images/hero.jpg':'images/'+dest.id+'.jpg';
         var visual=state.answers.templateOahu&&dest.id==='oahu'?'':photo(image, p.title, 'banner-photo');
         if(visual){ var bid=image.split('/').pop().replace('.jpg',''); var bc=window.PHOTO_CREDITS.find(function(c){return c.id===bid;}); visual+='<div class="banner-credit">'+creditHTML(bc)+'</div>'; }
-        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted">'+esc(p.meta)+'</p><p>'+icon('hotel')+' Staying: '+esc(p.stay)+'</p>'+hotelControls()+'<small class="local-times" data-testid="time-diff">'+esc(timeDiffLine())+'</small>'+originAsk()+'<div class="row">'+btn('Change my answers', 'change-answers', '')+btn('Reset my edits', 'reset-edits', '')+trackToggle()+'</div></div></header>';
+        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted plan-meta">'+esc(p.meta)+'</p>'+stayLine(p)+'<small class="local-times" data-testid="time-diff">'+esc(timeDiffLine())+'</small>'+originAsk()+hotelForm()+'<div class="draft-confirm-row plan-actions">'+planPrimaryHTML()+planMoreHTML()+'</div></div></header>';
     }
     function shareMenuHTML() {
         return '<div class="share-controls"><button type="button" data-testid="share-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="plan-share-menu"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m-5 5 5-5 5 5M5 13v7h14v-7"/></svg>Share</button><div id="plan-share-menu" data-testid="share-menu" role="menu" aria-label="Share" hidden>'+[['Print / Save as PDF','print-plan'],['Copy as text','copy'],['Share link','share-link'],['Download calendar','download-ics'],['Invite friends','invite-friends']].map(function(item){var wrapper=item[1]==='print-plan'?'print':item[1]==='share-link'?'share':'';return (wrapper?'<span data-testid="'+wrapper+'">':'')+btn(item[0],item[1],'','role="menuitem" tabindex="-1"')+(wrapper?'</span>':'');}).join('')+'</div></div>';
@@ -168,7 +168,26 @@
         document.addEventListener('keydown',keys,true);
         shareMenuCleanup=function(){document.removeEventListener('click',outside);document.removeEventListener('keydown',keys,true);};
     }
-    function hotelControls(){if(state.answers.mode==='local')return '';var d=Engine.matchDestination(state.answers.destination);return (state.answers.stayUnsure?'<p data-testid="stay-later-note">Planning around '+esc(window.GoNowJetlag.center(d))+" for now. Add your hotel later and we’ll re-plan around it.</p>":'')+'<span class="hotel-actions">'+(!state.answers.stay||state.answers.stayUnsure?partnerLink('booking','',false,'Find a hotel','find-hotel'):'')+'<button type="button" data-testid="trip-add-hotel">'+(state.answers.stayUnsure||!state.answers.stay?'Add your hotel':'Edit your hotel')+'</button></span><form data-testid="trip-hotel-form" hidden><label>Hotel name<input data-testid="trip-hotel-name" value="'+esc(state.answers.stay)+'" required></label><button data-testid="trip-hotel-save">Save</button></form>';}
+    // One quiet hotel line; booking/editing the hotel lives in the ⋯ More sheet.
+    function stayLine(p){var local=state.answers.mode==='local',unsure=!local&&state.answers.stayUnsure,find=!local&&(!state.answers.stay||state.answers.stayUnsure)?' · '+partnerLink('booking','',false,'Find a hotel','find-hotel'):'';return '<p class="plan-stay">'+icon('hotel')+' '+(unsure?'<span data-testid="stay-later-note">Planning around '+esc(window.GoNowJetlag.center(Engine.matchDestination(state.answers.destination)))+' for now</span>':'Staying: '+esc(p.stay))+find+'</p>';}
+    function hotelForm(){if(state.answers.mode==='local')return '';return '<form class="trip-hotel-form" data-testid="trip-hotel-form" hidden><label>Hotel name<input data-testid="trip-hotel-name" value="'+esc(state.answers.stay)+'" required></label><button data-testid="trip-hotel-save">Save</button></form>';}
+    function hotelControls(){if(state.answers.mode==='local')return '';return '<button type="button" data-testid="trip-add-hotel">'+(state.answers.stayUnsure||!state.answers.stay?'Add your hotel':'Edit your hotel')+'</button>';}
+    // Secondary trip actions, one tap away: Edit picks (added by bindPlanPrep), answers, edits, tracking, hotel.
+    // One primary action: Confirm plan on a draft, Trip prep once confirmed (none on a shared read-only view).
+    function planPrimaryHTML(){if(state.shared)return '';return tripConfirmed(currentTrip())?btn('Trip prep · '+(prepRemaining()?prepRemaining()+' left':'All set'),'trip-prep-button','prep-header'):'<span class="badge">Draft</span>'+btn('Confirm plan','confirm-plan','primary');}
+    function planMoreHTML(){return '<div class="plan-more"><button type="button" class="plan-more-toggle" data-testid="plan-more" aria-expanded="false" aria-controls="plan-more-menu">⋯ More</button><div id="plan-more-menu" class="plan-more-menu" data-testid="plan-more-menu" hidden>'+(!state.shared&&isPickPlan(state.plan)?btn('Edit picks','edit-picks',''):'')+btn('Change my answers', 'change-answers', '')+btn('Reset my edits', 'reset-edits', '')+trackToggle()+hotelControls()+'</div></div>';}
+    var planMoreCleanup;
+    function bindPlanMore(){
+        if(planMoreCleanup)planMoreCleanup();
+        var toggle=get('plan-more'),menu=get('plan-more-menu');if(!toggle||!menu)return;
+        function close(focus){menu.hidden=true;toggle.setAttribute('aria-expanded','false');if(focus)toggle.focus({preventScroll:true});}
+        toggle.onclick=function(){if(menu.hidden){menu.hidden=false;toggle.setAttribute('aria-expanded','true');var first=menu.querySelector('button');if(first)first.focus({preventScroll:true});}else close(true);};
+        menu.addEventListener('click',function(e){if(e.target.closest('button'))close(false);});
+        function outside(e){if(!menu.hidden&&!toggle.parentElement.contains(e.target))close(false);}
+        function keys(e){if(!toggle.isConnected||menu.hidden)return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();close(true);}}
+        document.addEventListener('click',outside);document.addEventListener('keydown',keys,true);
+        planMoreCleanup=function(){document.removeEventListener('click',outside);document.removeEventListener('keydown',keys,true);};
+    }
     function applyStay(){var name=state.answers.stayUnsure||!state.answers.stay?window.GoNowJetlag.center(Engine.matchDestination(state.answers.destination)):state.answers.stay;var old=state.plan.stay;state.plan.stay=name;window.DayBuilder.setStay(name);state.plan.days.forEach(function(d){if(!mergedPlan())d.items=window.DayBuilder.replanStay(d.items,old,name);d.items.forEach(function(it,i){['place','from','to','desc','title'].forEach(function(k){if(typeof it[k]==='string'&&old)it[k]=it[k].split(old).join(name);});if(it.kind==='stay')it.desc=name;if(i<d.items.length-1){var next=d.items[i+1];it.travelToNext='approx. '+window.DayBuilder.commuteMinutes(it.place||name,next.place||next.title)+' min from '+(it.kind==='stay'?name:it.place||it.title)+' — confirm route';}});});}
     function bindHotel(){on('track-toggle',function(){state.answers.track=eachPerson()?'together':'each';checkinSelected={};save();rememberTrip();render();});on('trip-add-hotel',function(){get('trip-hotel-form').hidden=false;get('trip-hotel-name').focus();});var form=get('trip-hotel-form');if(form)form.onsubmit=function(e){e.preventDefault();var name=get('trip-hotel-name').value.trim();if(!name)return;state.answers.stay=name;state.answers.stayUnsure=false;state.answers.hotelEdited=true;applyStay();save();rememberTrip();write(KEY+'lastTrip',{answers:state.answers});render();};}
     function planNotices(p) {
@@ -506,6 +525,13 @@
             var previous={plan:state.plan,answers:state.answers,tripId:state.tripId,packed:state.packed,edits:state.edits,viewing:state.viewing};
             try{state.plan=plan;state.answers=Object.assign({},defaults,t.answers||{});state.tripId=t.id;state.packed=t.packed||{};state.edits=t.snapshot&&t.snapshot.edits||t.draftEdits||{};state.viewing=t.snapshot?'finished':'draft';return prepRemaining();}finally{Object.assign(state,previous);}
         }
+        // One-line card meta: "Nov 25–29" (year only when it isn't this year); the status tag carries the countdown.
+        function cardDates(t){
+            if(!t.start)return 'Dates not set';
+            var a=new Date(t.start+'T12:00:00'),b=new Date((t.end||t.start)+'T12:00:00'),M=function(d){return d.toLocaleDateString('en-US',{month:'short'});},yr=b.getFullYear()!==new Date().getFullYear()?', '+b.getFullYear():'';
+            return (t.end&&t.end!==t.start?(M(a)===M(b)&&a.getFullYear()===b.getFullYear()?M(a)+' '+a.getDate()+'–'+b.getDate():M(a)+' '+a.getDate()+(a.getFullYear()!==b.getFullYear()?', '+a.getFullYear():'')+' – '+M(b)+' '+b.getDate()):M(a)+' '+a.getDate())+yr;
+        }
+        function fullDates(t){return t.start?dateLabel(t.start)+(t.end?' – '+dateLabel(t.end):''):'Dates not set';}
         function zone(t){return t.timeZone||Engine.matchDestination(t.destination||'').tz||'UTC';}
         function todayBlock(t,status){
             if(status.kind!=='progress')return '';
@@ -521,7 +547,7 @@
             var values=dayRingContext(day,todayItems,nextDay&&nextDay.items,ringDays).ringResult.values;var rings=window.GoNowRings.summary(values);state.plan=savedPlan;state.answers=savedAnswers;
             return '<section class="card today-block" data-testid="today-block"><h2>Today</h2><p>'+esc(dateLabel(day.date))+' · '+esc(day.theme||day.title||'Your day')+'</p><p>'+esc(rings)+'</p><p>'+esc(next?'Next · '+(next.start==null?next.time:window.DayBuilder.clock(next.start))+' · '+next.title:'No more scheduled activities today')+'</p><button data-open-trip="'+esc(t.id)+'" data-today="'+day.date+'">Open today</button></section>';
         }
-        view.innerHTML='<div class="shell dashboard" data-testid="dashboard"><h1>Your trips</h1>'+btn('+ New trip','new-trip','primary')+trips.map(function(t){return todayBlock(t,window.GoNowDashboard.status(t,{today:override,timeZone:zone(t)}));}).join('')+'<div class="dashboard-grid">'+trips.map(function(t){var status=window.GoNowDashboard.status(t,{today:override,timeZone:zone(t)}),left=prepCount(t);return '<article class="card" data-testid="trip-card" data-trip="'+esc(t.id)+'"><span class="badge" data-testid="trip-status">'+esc(status.label)+'</span><h2><button class="trip-title" data-open-trip="'+esc(t.id)+'">'+esc(t.destination||t.title||'Trip')+'</button></h2><p>'+(t.start?esc(dateLabel(t.start))+(t.end?' – '+esc(dateLabel(t.end)):''):'Dates not set')+'</p>'+(tripConfirmed(t)?btn('Trip prep · '+(left===0?'All set':left+' left'),'card-trip-prep','outline','data-trip="'+esc(t.id)+'"'):'')+'<div class="trip-menu"><button type="button" data-trip-more aria-expanded="false" aria-label="More options for '+esc(t.destination||'trip')+'">⋯</button><div hidden>'+btn('Open','view-finished','outline','data-trip="'+esc(t.id)+'"')+btn('Edit draft','edit-draft','outline','data-trip="'+esc(t.id)+'"')+btn('Delete','delete-trip','outline','data-trip="'+esc(t.id)+'"')+'</div></div></article>';}).join('')+'</div></div>';
+        view.innerHTML='<div class="shell dashboard" data-testid="dashboard"><h1>Your trips</h1>'+btn('+ New trip','new-trip','primary')+trips.map(function(t){return todayBlock(t,window.GoNowDashboard.status(t,{today:override,timeZone:zone(t)}));}).join('')+'<div class="dashboard-grid">'+trips.map(function(t){var status=window.GoNowDashboard.status(t,{today:override,timeZone:zone(t)}),left=prepCount(t);return '<article class="card trip-card" data-testid="trip-card" data-trip="'+esc(t.id)+'"><h2><button class="trip-title" data-open-trip="'+esc(t.id)+'">'+esc(t.destination||t.title||'Trip')+'</button></h2><div class="trip-meta" data-testid="trip-meta"><span class="trip-dates" aria-hidden="true">'+esc(cardDates(t))+'</span><span class="sr-only">'+esc(fullDates(t))+'</span><span class="badge" data-testid="trip-status">'+esc(status.label)+'</span></div><div class="trip-card-actions">'+(tripConfirmed(t)?btn('Trip prep · '+(left===0?'All set':left+' left'),'card-trip-prep','outline','data-trip="'+esc(t.id)+'"'):'')+'<div class="trip-menu"><button type="button" data-trip-more aria-expanded="false" aria-label="More options for '+esc(t.destination||'trip')+'">⋯</button><div hidden>'+btn('Open','view-finished','outline','data-trip="'+esc(t.id)+'"')+btn('Edit draft','edit-draft','outline','data-trip="'+esc(t.id)+'"')+btn('Delete','delete-trip','outline','data-trip="'+esc(t.id)+'"')+'</div></div></div></article>';}).join('')+'</div></div>';
         view.querySelectorAll('[data-trip-more]').forEach(function(b){b.onclick=function(){var open=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(open));b.nextElementSibling.hidden=!open;};});
         on('new-trip',function(){archiveTrip();newTripFlow=true;state.tripId=null;state.plan=null;state.answers=Object.assign({},defaults,{level:state.answers.level,activities:(state.answers.activities||[]).slice()});home();});
         function open(id){var t=trips.find(function(t){return t.id===id;});newTripFlow=false;openSaved(id,t.snapshot?'plan':'draft');}
@@ -1117,10 +1143,8 @@
     function bindPlanPrep(){
         if(state.shared)return;
         var confirmed=tripConfirmed(currentTrip());
-        // One compact action row: status/primary action first, Edit picks beside it.
-        var editPicksBtn=isPickPlan(state.plan)?btn('Edit picks','edit-picks','outline'):'';
-        view.querySelector('.plan-title').insertAdjacentHTML('afterbegin',confirmed?'<div class="draft-confirm-row">'+btn('Trip prep · '+(prepRemaining()?prepRemaining()+' left':'All set'),'trip-prep-button','prep-header')+editPicksBtn+'</div>':'<div class="draft-confirm-row"><span class="badge">Draft</span>'+btn('Confirm plan','confirm-plan','primary')+editPicksBtn+'</div>');
-        if(editPicksBtn)on('edit-picks',beginEditPicks);
+        // The primary action and Edit picks are rendered with the header (planPrimaryHTML / planMoreHTML).
+        on('edit-picks',beginEditPicks);
         on('confirm-plan',confirmTrip);
         on('trip-prep-button',function(){go('prep');});
     }
@@ -1887,6 +1911,7 @@
             ]);
         });
         bindShareMenu();
+        bindPlanMore();
         on('print-plan', function() { earn('Printed a plan'); window.print(); });
         on('share-link', shareTrip);
         on('download-ics', downloadICS);
