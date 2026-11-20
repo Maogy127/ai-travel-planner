@@ -84,7 +84,7 @@
   const esc=s=>String(s||'').replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
   function summary(v){var m=Math.round(v.sleep*60);return 'Sleep '+Math.floor(m/60)+'h'+String(m%60).padStart(2,'0')+' · Move '+Math.round(v.move)+' min'+(Math.round(v.rec)>0?' · Recover '+Math.round(v.rec)+' min':'');}
   // v2 rings card: one row per ring (label, big numeral, unit). Text reads exactly like summary().
-  function summaryHTML(v){var m=Math.round(v.sleep*60);const row=(k,label,num,unit)=>'<span class="cv cv-'+k+'"><i>'+label+'</i> <b>'+num+'</b>'+(unit?' <small>'+unit+'</small>':'')+'</span>';
+  function summaryHTML(v){var m=Math.round(v.sleep*60);const row=(k,label,num,unit)=>'<span class="cv cv-'+k+'"><i>'+label+'</i> <span class="cv-num"><b>'+num+'</b>'+(unit?' <small>'+unit+'</small>':'')+'</span></span>';
     return row('sleep','Sleep',Math.floor(m/60)+'h'+String(m%60).padStart(2,'0'),'')+'<span class="cv-sep"> · </span>'+row('move','Move',Math.round(v.move),'min')+(Math.round(v.rec)>0?'<span class="cv-sep"> · </span>'+row('rec','Recover',Math.round(v.rec),'min'):'');}
   function render(result,options){
     options=options||{};

@@ -2147,7 +2147,8 @@ input[type=checkbox]:checked::after{clip-path:inset(0 0 0 0)}
 .compact-values .cv i{font-family:var(--font-display);font-style:italic;font-size:14px;color:var(--ink-2);display:flex;align-items:center;gap:7px}
 .compact-values .cv i::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--sleep)}
 .compact-values .cv-move i::before{background:var(--move)}.compact-values .cv-rec i::before{background:var(--rec)}
-.compact-values .cv b{margin-left:auto;font-family:var(--font-display);font-weight:400;font-size:22px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums lining-nums}
+.compact-values .cv-num{margin-left:auto;white-space:nowrap}
+.compact-values .cv b{font-family:var(--font-display);font-weight:400;font-size:22px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums lining-nums}
 .compact-values .cv small{font-size:12px;color:var(--ink-2);font-weight:500}
 .compact-values .cv-sep{display:none}
 .day-head .compact-rings>button,.day-head .compact-rings>p,.day-head .compact-rings>[data-testid=ring-breakdown]{grid-column:1/-1}
@@ -2180,3 +2181,7 @@ html.reduce-motion button:active{transform:none!important}
 .sync-status,[data-testid=sync-status]{font-size:13px}
 .plan-title .plan-stay{display:flex;flex-direction:row;flex-wrap:nowrap;align-items:flex-start;gap:8px}
 .plan-title .plan-stay svg{width:18px;height:18px;flex:none;margin-top:3px;color:var(--ink-2)}
+
+/* v2: pick cards keep the spring but no colour transition, so hover never shows a half-tinted card */
+.pick-card button.pick-toggle.pick-toggle:not(:disabled){transition:transform 900ms var(--spring)}
+.pick-card button.pick-toggle.pick-toggle:not(:disabled):active{transition:transform 90ms cubic-bezier(.3,.7,.4,1)}
