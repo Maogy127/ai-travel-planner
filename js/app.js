@@ -529,7 +529,7 @@
         view.querySelectorAll('[data-testid=view-finished]').forEach(function(b){b.onclick=function(){var t=trips.find(function(t){return t.id===b.dataset.trip;});newTripFlow=false;openSaved(t.id,t.snapshot?'finished':'draft');};});
         view.querySelectorAll('[data-testid=card-trip-prep]').forEach(function(b){b.onclick=function(){newTripFlow=false;openSaved(b.dataset.trip,'prep');};});
         view.querySelectorAll('[data-testid=edit-draft]').forEach(function(b){b.onclick=function(){newTripFlow=false;openSaved(b.dataset.trip,'draft');};});
-        view.querySelectorAll('[data-testid=delete-trip]').forEach(function(b){b.onclick=function(){var t=trips.find(function(t){return t.id===b.dataset.trip;}),dialog=document.createElement('dialog');dialog.setAttribute('role','alertdialog');dialog.setAttribute('aria-labelledby','delete-trip-title');dialog.innerHTML='<h2 id="delete-trip-title">Delete your '+esc(t.destination||t.title||'')+' trip?</h2><p>This removes it from this device.</p><button data-cancel>Cancel</button><button data-delete>Delete</button>';document.body.append(dialog);function close(){dialog.close();dialog.remove();if(b.isConnected)b.focus();}dialog.querySelector('[data-cancel]').onclick=close;dialog.oncancel=function(e){e.preventDefault();close();};dialog.querySelector('[data-delete]').onclick=function(){if(window.goNowAccount&&window.goNowAccount.stopSharing)window.goNowAccount.stopSharing(t.id).catch(function(){});var remaining=readTrips().filter(function(x){return x.id!==t.id;});writeTrips(remaining);var records=read('gonow.prep.v1',{});delete records[t.id];write('gonow.prep.v1',records);if(!remaining.some(function(x){return x.planId===t.planId;})&&t.planId){['daybuilder:','edits:','packing:','packing-meta:'].forEach(function(key){erase(KEY+key+t.planId);});}if(state.tripId===t.id){state.tripId=null;state.plan=null;state.answers=Object.assign({},defaults);erase(KEY+'activeTrip');}erase(KEY+'answers');erase(KEY+'lastTrip');close();home();var target=view.querySelector('h1');if(target){target.tabIndex=-1;target.focus();}};dialog.showModal();dialog.querySelector('[data-cancel]').focus();};});
+        view.querySelectorAll('[data-testid=delete-trip]').forEach(function(b){b.onclick=function(){var t=trips.find(function(t){return t.id===b.dataset.trip;}),dialog=document.createElement('dialog');dialog.setAttribute('role','alertdialog');dialog.setAttribute('aria-labelledby','delete-trip-title');dialog.innerHTML='<h2 id="delete-trip-title">Delete your '+esc(t.destination||t.title||'')+' trip?</h2><p>This removes it from this device.</p><button data-cancel>Cancel</button><button data-delete>Delete</button>';document.body.append(dialog);function close(){dialog.close();dialog.remove();if(b.isConnected)b.focus();}dialog.querySelector('[data-cancel]').onclick=close;dialog.oncancel=function(e){e.preventDefault();close();};dialog.querySelector('[data-delete]').onclick=function(){if(window.goNowAccount&&window.goNowAccount.stopSharing)window.goNowAccount.stopSharing(t.id).catch(function(){});if(window.goNowAccount&&window.goNowAccount.remove)window.goNowAccount.remove(t.id);var remaining=readTrips().filter(function(x){return x.id!==t.id;});writeTrips(remaining);var records=read('gonow.prep.v1',{});delete records[t.id];write('gonow.prep.v1',records);if(!remaining.some(function(x){return x.planId===t.planId;})&&t.planId){['daybuilder:','edits:','packing:','packing-meta:'].forEach(function(key){erase(KEY+key+t.planId);});}if(state.tripId===t.id){state.tripId=null;state.plan=null;state.answers=Object.assign({},defaults);erase(KEY+'activeTrip');}erase(KEY+'answers');erase(KEY+'lastTrip');close();home();var target=view.querySelector('h1');if(target){target.tabIndex=-1;target.focus();}};dialog.showModal();dialog.querySelector('[data-cancel]').focus();};});
     }
     function home(){
         archiveTrip();
@@ -1223,7 +1223,7 @@
         var days={};p.days.forEach(function(d){var old=previous.raw.days[d.date];days[d.date]={date:d.date,chronological:old&&old.chronological,unscheduled:d.unscheduled||[],items:d.items.map(function(i){var prior=old&&old.items.find(function(x){return x.id===i.id;});return prior&&prior.preferred===i.start?prior:DayBuilder.convert(i);})};});
         var builder={days:days,flightTime:previous.raw.flightTime||result.flightTime};
         write('gonow:daybuilder:'+p.id,builder);
-        var savedTrips=readTrips(),savedTrip=savedTrips.find(function(t){return t.id===state.tripId;});if(savedTrip){savedTrip.builder=cloneData(builder);writeTrips(savedTrips);}
+        var savedTrips=readTrips(),savedTrip=savedTrips.find(function(t){return t.id===state.tripId;});if(savedTrip){GC().noteTombstones(savedTrip,builder);memberEdits(savedTrip,savedTrip.builder,builder);savedTrip.builder=cloneData(builder);writeTrips(savedTrips);}
         editingPicks=null;save();showPlan(p,true);
         var trips=readTrips(),trip=trips.find(function(t){return t.id===state.tripId;});if(tripConfirmed(trip)){trip.snapshot.builder=DayBuilder.exportState();writeTrips(trips);}
         toast('Plan updated ·',function(){
@@ -1756,7 +1756,7 @@
         function find(id,date){return model(date).items.find(function(it){return it.id===id;});}
         return {
             flightAnswers:Object.assign({},state.answers,{start:p.start,end:p.end}),saveFlights:function(a){Object.assign(state.answers,a);save();},
-            saveDraft:function(raw){if(state.shared||state.viewing==='finished')return;var list=readTrips(),t=list.find(function(t){return t.id===state.tripId;});if(t){t.builder=cloneData(raw);t.answers=cloneData(state.answers);writeTrips(list);}},
+            saveDraft:function(raw){if(state.shared||state.viewing==='finished')return;var list=readTrips(),t=list.find(function(t){return t.id===state.tripId;});if(t){var prev=t.builder;GC().noteTombstones(t,raw);memberEdits(t,prev,raw);t.builder=cloneData(raw);t.answers=cloneData(state.answers);writeTrips(list);}},
             swapCatalog:function(){var c=pickCatalog();if(c)return (c.activities||[]).concat(c.restaurants||[]);if(isPickPlan(state.plan)&&!curatedCatalog()&&window.GoNowPlaceSource){ensureNearby().catch(function(){});return loadingNearby?null:[];}return [];},
             swapPicks:function(oldPick,newPick){var before=cloneData(state.answers.picks||{activities:[],restaurants:[]});state.answers.picks=cloneData(before);var c=pickCatalog();[oldPick,newPick].forEach(function(p,index){if(!p)return;var key=c.restaurants.some(function(x){return x.id===p.id;})?'restaurants':'activities';state.answers.picks[key]=(state.answers.picks[key]||[]).filter(function(id){return id!==p.id;});if(index)state.answers.picks[key].push(p.id);});save();return function(){state.answers.picks=before;save();};},
             undo:function(message,restore){toast(message,restore);toastEl.setAttribute('data-testid','plan-toast');toastEl.querySelector('button').setAttribute('data-testid','plan-undo');},
@@ -2352,7 +2352,7 @@
     function midFlow(){var s=state.screen;if(state.shared)return false;if(steps.indexOf(s)>=0||extra.indexOf(s)>=0||['fork','recommendations','pick-activities','pick-food'].indexOf(s)>=0)return true;if((s==='plan'||s==='draft')&&state.plan&&!tripConfirmed(currentTrip()))return true;return false;}
     // Same reorder rule as DayBuilder: unlocked items run in order from the day's first start.
     function releaseTimes(d){var first=null,seen=false;d.items.forEach(function(x){if(x.locked||x.booked||x.textTime||x.kind==='flight'||x.kind==='prep')return;if(!seen){seen=true;first=Number.isFinite(x.preferred)?x.preferred:null;}x.preferred=null;delete x.manualTime;delete x.hoursOk;});var lead=d.items.find(function(x){return !(x.locked||x.booked||x.textTime||x.kind==='flight'||x.kind==='prep');});if(lead&&first!==null)lead.preferred=first;}
-    var lastGroupTrip=null,seenGroupId=null,appliedGroupChanges={};
+    var groupSeen={},appliedGroupChanges={},applyingGroup=false;
     // Earlier preview builds stored Google photo URLs with the key; rewrite them to key-free tokens.
     function scrubPhotoKeys(){try{var re=/https:\/\/places\.googleapis\.com\/v1\/(places\/[\w-]+\/photos\/[\w-]+)\/media\?[^"\s]*/g;Object.keys(localStorage).filter(function(k){return k.indexOf('gonow')===0;}).forEach(function(k){var v=localStorage.getItem(k);if(v&&v.indexOf('places.googleapis.com/v1/places/')>=0&&/key=/.test(v)){if(k.indexOf('gonow:places:')===0)localStorage.removeItem(k);else localStorage.setItem(k,v.replace(re,'gplace:$1'));}});}catch(e){}}
     function tripRange(t){var a=t.start||(t.plan&&t.plan.start)||'',b=t.end||(t.plan&&t.plan.end)||'';if(!a)return '';try{return dateLabel(a,{month:'short',day:'numeric'})+(b&&b!==a?'–'+dateLabel(b,{month:'short',day:'numeric'}):'');}catch(e){return a;}}
@@ -2381,42 +2381,74 @@
         var list=readTrips();list.unshift(trip);writeTrips(list);
         if(plan){openSaved(id,'plan');toast('Copied to your trips as a draft');}else{state.tripId=id;state.answers=answers;save();go('start');}
     }
+    // A member's day-plan edits (order, tray, hand-set times) go to the group as small changes; the owner folds them in.
+    function GC(){return window.GoNowCloud||{shareable:function(t){return t;},dropDead:function(b){return b;},noteTombstones:function(t){return t;}};}
+    function clockText(m){var h=Math.floor(m/60)%24,mm=m%60;return ((h%12)||12)+':'+(mm<10?'0':'')+mm+' '+(h<12?'AM':'PM');}
+    function memberEdits(trip,prev,next){var acct=window.goNowAccount;if(applyingGroup||!acct||!acct.groupFor||!acct.user)return;var g=acct.groupFor(trip.id);if(!g||g.ownerId===acct.user.uid||!next||!next.days)return;
+        var idOf=function(i){return i&&i.id;},prevDays=(prev&&prev.days)||{},prevItems=[];Object.values(prevDays).forEach(function(d){(d.items||[]).forEach(function(i){prevItems.push(i);});});
+        Object.keys(next.days).forEach(function(date){var b=next.days[date],a=prevDays[date];if(!b||!Array.isArray(b.items))return;
+            var was=a?[(a.items||[]).map(idOf),(a.unscheduled||[]).map(idOf)]:[window.DayBuilder.buildSuggested?window.DayBuilder.buildSuggested(date).items.map(idOf):[],[]],now=[b.items.map(idOf),(b.unscheduled||[]).map(idOf)];
+            if(JSON.stringify(was)!==JSON.stringify(now))acct.change('day_'+String(date).replace(/[^A-Za-z0-9_-]/g,''),{action:'order',date:date,ids:now[0].join(','),tray:now[1].join(',')});
+            b.items.forEach(function(i){var old=prevItems.find(function(x){return x.id===i.id;});if(old&&i.manualTime&&Number.isFinite(i.preferred)&&i.preferred!==old.preferred&&!(g.locks||{})[i.id])acct.change(i.id,{time:clockText(i.preferred),title:String(i.title||'').slice(0,100)});});});}
     var pages=window.GoNowCommunity?window.GoNowCommunity.create({state:state,go:go,toast:toast,readTrips:readTrips,currentTrip:currentTrip,openSaved:openSaved,tripConfirmed:tripConfirmed,dateRange:tripRange,copyTrip:copyTrip,builderFor:builderFor}):null;
     window.__gonow= {
         currentTrip:currentTrip,copyTrip:copyTrip,pages:function(){return pages;},
-        acceptGroup:function(group){
-            var first=seenGroupId!==group.id;seenGroupId=group.id;var version=JSON.stringify(group.trip), changed=lastGroupTrip!==version;
-            lastGroupTrip=version;
-            // The owner's device holds the real trip: never import the shared copy over it (it may be stale).
-            // Only a new device without the trip adopts it; the owner's newer copy is pushed back instead.
-            var owner=window.goNowAccount&&window.goNowAccount.owner(),mine=readTrips().find(function(t){return t.id===group.trip.id;});
-            if(owner&&mine){if(JSON.stringify(mine)!==version&&typeof window.goNowAccount.write==='function')window.goNowAccount.write(readTrips());}
-            else {var list=readTrips().filter(function(t){return t.id!==group.trip.id;});list.unshift(group.trip);localStorage.setItem(TRIPS,JSON.stringify(list));}
-            if(!first&&state.tripId!==group.trip.id)return;
-            if(changed&&!(owner&&mine)){appliedGroupChanges={};if(group.trip.builder)write('gonow:daybuilder:'+group.trip.planId,group.trip.builder);}
-            if(first){appliedGroupChanges={};if(state.tripId!==group.trip.id&&!owner)openSaved(group.trip.id,'plan');}
-            else if(changed&&state.screen==='plan')go('plan');
-            if(!window.goNowAccount.owner()){
+        acceptGroup:function(group){applyingGroup=true;try{window.__gonow.acceptGroupNow(group);}finally{applyingGroup=false;}},
+        acceptGroupNow:function(group){
+            var acct=window.goNowAccount,tid=group&&group.trip&&group.trip.id;if(!tid)return;
+            if((read('gonow:tombstones',{})||{})[tid])return;
+            var seen=groupSeen[group.id],first=!seen,version=JSON.stringify(group.trip),changed=!seen||seen!==version;groupSeen[group.id]=version;
+            var owner=!!(acct&&(acct.user?group.ownerId===acct.user.uid:acct.owner&&acct.owner())),list=readTrips(),mine=list.find(function(t){return t.id===tid;});
+            // The owner's device holds the real trip: never import the shared copy over it (it may be stale); a newer
+            // local copy is pushed back instead. Members adopt only the shared part and keep their own answers and notes.
+            if(owner&&mine){if(typeof acct.write==='function'&&JSON.stringify(GC().shareable(mine))!==version)acct.write(readTrips());}
+            else if(changed||!mine){var shared=cloneData(group.trip);shared.builder=GC().dropDead(shared.builder,shared.tombstones);
+                var merged=Object.assign({},mine||{answers:{destination:shared.destination||'',start:shared.start||'',end:shared.end||''},updatedAt:Date.now()},shared);
+                if(mine&&mine.answers)merged.answers=mine.answers;
+                list=list.filter(function(t){return t.id!==tid;});list.unshift(merged);localStorage.setItem(TRIPS,JSON.stringify(list));
+                // The builder now matches the owner's: changes already folded into it are done.
+                appliedGroupChanges={};write('gonow:applied:'+group.id,(shared.appliedChanges||[]).slice(-500));
+                if(shared.builder&&shared.planId&&(state.tripId===tid||read(KEY+'activeTrip',null)!==tid))write('gonow:daybuilder:'+shared.planId,shared.builder);}
+            // Only a fresh join opens the group trip; other groups update quietly in the background.
+            if(first&&!owner&&state.tripId!==tid&&(group.justJoined||!state.tripId))openSaved(tid,'plan');
+            if(state.tripId!==tid)return;
+            if(!first&&changed&&!(owner&&mine)&&state.screen==='plan')go('plan');
+            if(!owner&&state.plan){
                 var raw=window.DayBuilder.importForPlan(window.DayBuilder.exportState(),state.plan),lockChanged=false;
-                if(raw&&raw.days)Object.values(raw.days).forEach(function(d){d.items.forEach(function(i){if(Object.prototype.hasOwnProperty.call(group.locks,i.id)&&i.locked!==group.locks[i.id]){i.locked=group.locks[i.id];i.userLocked=i.locked;lockChanged=true;}});});
+                if(raw&&raw.days)Object.values(raw.days).forEach(function(d){d.items.forEach(function(i){if(Object.prototype.hasOwnProperty.call(group.locks||{},i.id)&&i.locked!==group.locks[i.id]){i.locked=group.locks[i.id];i.userLocked=i.locked;lockChanged=true;}});});
                 if(lockChanged){write('gonow:daybuilder:'+state.plan.id,raw);if(state.screen==='plan')go('plan');}
             }
-            Object.keys(group.planContent||{}).forEach(function(id){window.__gonow.applyGroupChange({itemId:id,change:group.planContent[id]});});
+            Object.keys(group.planContent||{}).forEach(function(id){window.__gonow.applyGroupChange({itemId:id,change:group.planContent[id],gid:group.id,owner:owner});});
         },
+        // Each change applies exactly once per device: by its change id (cid), or for old cid-less changes by content.
         applyGroupChange:function(s){
-            var signature=JSON.stringify(s.change);if(appliedGroupChanges[s.itemId]===signature||!state.plan)return;
+            if(!state.plan||!s||!s.change)return;var gid=s.gid||(window.goNowAccount&&window.goNowAccount.group&&window.goNowAccount.group.id)||'';
+            var cid=s.change.cid,applied=read('gonow:applied:'+gid,[])||[];
+            var signature=JSON.stringify(s.change);if(cid?applied.indexOf(cid)>=0:appliedGroupChanges[s.itemId]===signature)return;
             // Share exports are compact d/i records; edits and local storage use days/items.
             var raw=window.DayBuilder.importForPlan(window.DayBuilder.exportState(),state.plan);
             state.plan.days.forEach(function(d){if(!raw.days[d.date])raw.days[d.date]=window.DayBuilder.buildSuggested(d.date);});
-            var changed=false;Object.values(raw.days).forEach(function(d){var index=d.items.findIndex(function(i){return i.id===s.itemId;}),item=d.items[index];if(!item)return;var change=s.change;
+            var change=s.change,changed=false;
+            if(change.action==='order'&&raw.days[change.date]){var day=raw.days[change.date],ids=String(change.ids||'').split(',').filter(Boolean),trayIds=String(change.tray||'').split(',').filter(Boolean),before=JSON.stringify([day.items.map(function(i){return i.id;}),(day.unscheduled||[]).map(function(i){return i.id;})]);
+                // An item named in this day's order is taken from wherever it is now (another day, or the tray).
+                var take=function(id){var found=null;Object.values(raw.days).forEach(function(d){if(found)return;var k=d.items.findIndex(function(i){return i.id===id;});if(k>=0){found=d.items.splice(k,1)[0];if(d!==day)releaseTimes(d);return;}var u=(d.unscheduled||[]).findIndex(function(i){return i.id===id;});if(u>=0)found=d.unscheduled.splice(u,1)[0];});return found;};
+                var ordered=ids.map(take).filter(Boolean),tray=trayIds.map(take).filter(Boolean);day.items=ordered.concat(day.items);day.unscheduled=(day.unscheduled||[]).concat(tray);
+                if(JSON.stringify([day.items.map(function(i){return i.id;}),day.unscheduled.map(function(i){return i.id;})])!==before){day.chronological=false;releaseTimes(day);changed=true;}}
+            Object.values(raw.days).forEach(function(d){var index=d.items.findIndex(function(i){return i.id===s.itemId;}),item=d.items[index];if(!item||change.action==='order')return;
                 if(change.time){var start=window.DayBuilder.parseClock(change.time);if(item.preferred!==start){item.preferred=start;item.manualTime=true;changed=true;}}
                 if(change.action==='move-day'&&raw.days[change.date]&&raw.days[change.date]!==d){d.items.splice(index,1);raw.days[change.date].items.push(item);changed=true;}
                 if(change.action==='remove'){d.items.splice(index,1);releaseTimes(d);changed=true;}
+                if(change.action==='tray'){d.items.splice(index,1);d.unscheduled=(d.unscheduled||[]).concat([item]);releaseTimes(d);changed=true;}
                 if(['up','down','position'].includes(change.action)){var at=change.action==='up'?index-1:change.action==='down'?index+1:change.target;d.items.splice(index,1);d.items.splice(Math.max(0,Math.min(d.items.length,at)),0,item);d.chronological=false;releaseTimes(d);changed=true;}
                 if(change.alternative){Object.assign(item,change.alternative);changed=true;}
             });
             appliedGroupChanges[s.itemId]=signature;
-            if(changed){write('gonow:daybuilder:'+state.plan.id,raw);if(state.screen==='plan')go('plan');}
+            if(cid){applied=read('gonow:applied:'+gid,[])||[];applied.push(cid);write('gonow:applied:'+gid,applied.slice(-500));}
+            if(changed)write('gonow:daybuilder:'+state.plan.id,raw);
+            // The owner folds the change into the real trip and records its id, so the shared queue can be cleared.
+            var acct=window.goNowAccount,trips=readTrips(),trip=trips.find(function(t){return t.id===state.tripId;});
+            if(trip&&(changed||(cid&&s.owner))){if(changed)trip.builder=cloneData(raw);if(cid&&acct&&acct.owner())trip.appliedChanges=(trip.appliedChanges||[]).filter(function(x){return x!==cid;}).concat([cid]).slice(-300);writeTrips(trips);}
+            var was=applyingGroup;applyingGroup=true;try{if(changed&&state.screen==='plan')go('plan');}finally{applyingGroup=was;}
         },
         restart:restart, home:goHome, startFromHome:function(){state.tripId=null;state.viewing='live';state.fromHome=true;go('start');}, midFlow:midFlow, tripConfirmed:tripConfirmed,
         state:state, go:go, isOahuPlan:isOahuPlan, isPickPlan:isPickPlan, buildICS:buildICS, planText:planText

@@ -22,7 +22,7 @@ const Cloud=require('../js/cloud.js');
  const failing=Object.assign({},sdk,{setDoc:()=>Promise.reject(Error('offline'))});
  const values2=new Map(),storage2={getItem:k=>values2.get(k),setItem:(k,v)=>values2.set(k,v)};
  const f=Cloud.create({sdk:failing,storage:storage2,local:()=>rows});await f.load();await f.google();
- await assert.rejects(f.sync(true));assert.equal(f.storageSummary(),'Saved on this device','failed upload');
+ await f.sync(true);assert.equal(f.storageSummary(),'Saved on this device','failed upload');assert.equal(f.status,'offline','failed upload is queued, shown as offline');assert(f.pending()>=1,'kept for retry');
  rows[0].title='Edited';f.write(rows);await new Promise(r=>setTimeout(r,400));assert.equal(f.storageSummary(),'Saved on this device','failed write');
  c.dispose();f.dispose();guest.dispose();
  console.log('PASS storage summary guest, Not now, uploaded and failed states');

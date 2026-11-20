@@ -1894,3 +1894,14 @@ html.reduce-motion .nav-panel{transition:none}
 .community-tabs.cx-tabs button[aria-selected=true]{color:var(--ink);border-bottom-color:var(--orange-text,#b4532a)}
 .db-root .db-pair[data-db-zone=day] .db-note.flight-conflict-notice{padding-top:0;padding-bottom:0}
 .nav-logo{font-size:26px;font-weight:750;letter-spacing:-1.5px;color:var(--ink)}.nav-logo span{color:var(--accent-text)}
+/* Group sync: Undo toast always on top; cloud notices in their own strip under the header; one-line sync status. */
+#toast{z-index:2000}
+#cloud-notice{position:fixed;top:calc(64px + env(safe-area-inset-top));left:50%;transform:translate(-50%,-8px);max-width:calc(100vw - 32px);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;background:#1f3a44;color:#fff;font-size:13px;padding:8px 14px;border-radius:999px;box-shadow:0 6px 18px #0003;z-index:150;opacity:0;pointer-events:none;transition:opacity .2s,transform .2s}
+#cloud-notice.show{opacity:1;transform:translate(-50%,0)}
+#cloud-notice:empty{display:none}
+.sync-status{min-height:32px;padding:0 10px!important;border:0!important;border-radius:999px!important;background:transparent!important;color:var(--ink-2,#4b5b57)!important;font-size:12px!important;font-weight:500;white-space:nowrap;box-shadow:none!important;cursor:pointer}
+.sync-status[data-state=saved]::before{content:'✓ ';color:#2f6b48}
+.sync-status[data-state=offline]{color:#7a5410!important;background:#fbefd4!important}
+.sync-status[data-state=failed]{color:#8a2d1c!important;background:#fbe3dc!important;text-decoration:underline}
+.group-badge{margin-left:6px;background:#e3eef0;color:#1f4a55}
+@media print{#cloud-notice,.sync-status{display:none!important}}
