@@ -43,7 +43,7 @@ function create(options={}){
   // Anything that failed to upload last time (offline, closed tab) is retried now.
   flush();
  }
- async function sync(yes){if(!user)return;saved=false;setStatus('saving');remember('gonow:sync:'+user.uid,yes?'yes':'no');if(yes){const dirty=json(dirtyKey(),{});local().forEach(t=>{dirty[t.id]=1;});keep(dirtyKey(),dirty);await flush();}baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));saved=!!yes&&status==='saved';if(!yes)setStatus('idle');emit('synced');}
+ async function sync(yes){if(!user)return;saved=false;setStatus('saving');remember('gonow:sync:'+user.uid,yes?'yes':'no');if(yes){const dirty=json(dirtyKey(),{});local().forEach(t=>{dirty[t.id]=1;});keep(dirtyKey(),dirty);await flush();}baseline=new Map(local().map(t=>[t.id,JSON.stringify(t)]));saved=!!yes&&status==='saved';if(!yes)setStatus(groups.size?'saved':'idle');emit('synced');}
  function clean(trip){return JSON.parse(JSON.stringify(trip,(k,v)=>k==='group'?undefined:v));}
  // Firestore keeps offline writes pending instead of failing; past this the status says "Offline, will sync".
  const WRITE_WAIT=10000;

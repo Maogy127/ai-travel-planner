@@ -2389,7 +2389,9 @@
         Object.keys(next.days).forEach(function(date){var b=next.days[date],a=prevDays[date];if(!b||!Array.isArray(b.items))return;
             var was=a?[(a.items||[]).map(idOf),(a.unscheduled||[]).map(idOf)]:[window.DayBuilder.buildSuggested?window.DayBuilder.buildSuggested(date).items.map(idOf):[],[]],now=[b.items.map(idOf),(b.unscheduled||[]).map(idOf)];
             if(JSON.stringify(was)!==JSON.stringify(now))acct.change('day_'+String(date).replace(/[^A-Za-z0-9_-]/g,''),{action:'order',date:date,ids:now[0].join(','),tray:now[1].join(',')});
-            b.items.forEach(function(i){var old=prevItems.find(function(x){return x.id===i.id;});if(old&&i.manualTime&&Number.isFinite(i.preferred)&&i.preferred!==old.preferred&&!(g.locks||{})[i.id])acct.change(i.id,{time:clockText(i.preferred),title:String(i.title||'').slice(0,100)});});});}
+            b.items.forEach(function(i){var old=prevItems.find(function(x){return x.id===i.id;});if(old&&i.manualTime&&Number.isFinite(i.preferred)&&i.preferred!==old.preferred&&!(g.locks||{})[i.id])acct.change(i.id,{time:clockText(i.preferred),title:String(i.title||'').slice(0,100)});});});
+        // Removed from the plan entirely (not moved to another day or the tray): the owner removes it too.
+        var still={};Object.values(next.days).forEach(function(d){(d.items||[]).concat(d.unscheduled||[]).forEach(function(i){still[i.id]=1;});});prevItems.forEach(function(i){if(i&&i.id&&!still[i.id]&&!i.custom&&!['flight','travel','prep','hotel'].includes(i.kind))acct.change(i.id,{action:'remove',title:String(i.title||'').slice(0,100)});});}
     var pages=window.GoNowCommunity?window.GoNowCommunity.create({state:state,go:go,toast:toast,readTrips:readTrips,currentTrip:currentTrip,openSaved:openSaved,tripConfirmed:tripConfirmed,dateRange:tripRange,copyTrip:copyTrip,builderFor:builderFor}):null;
     window.__gonow= {
         currentTrip:currentTrip,copyTrip:copyTrip,pages:function(){return pages;},
