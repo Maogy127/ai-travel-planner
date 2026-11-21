@@ -1880,3 +1880,6 @@ Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deploy
 - New: `tests/test_gemini.js`, `tests/test_ai.py`. No other assertions changed.
 
 - `tests/test_full.py` local-info check: "no weather or FX requests" became "no FX requests; weather only daily Open-Meteo". The free daily weather line now deliberately calls Open-Meteo's keyless forecast/archive endpoints (daily fields only); FX calls are still asserted absent.
+
+- AI preview note: App Check for Firebase AI Logic is Unenforced for the preview (Nov 21, 2026). It must get a real provider (reCAPTCHA Enterprise / Fraud Defense, site key in `js/ai-config.js`) and be re-enforced before **Jan 21, 2027**, when Firebase re-enforces it automatically. AI tests stay mocked; they don't depend on App Check.
+- `tests/test_gemini.js`: a `429 … prepayment credits are depleted` answer (Paid-tier project with no Prepay credit) is classed as AI off (10 min), not "busy"; a free-tier daily 429 that mentions "billing details" is still a daily pause.

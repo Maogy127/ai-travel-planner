@@ -28,6 +28,8 @@ function msToPacificMidnight(now){
 function classify(err,now=Date.now()){
  const data=err&&err.customErrorData||{},status=data.status||err&&err.status||0;
  const text=[err&&err.code,err&&err.message,status,data.statusText,JSON.stringify(data.errorDetails||'')].join(' ');
+ // Paid-tier projects with no prepay credit answer 429 too; that isn't a free limit, so treat AI as off (never prompt to pay).
+ if(/prepay|credits? (are |is )?depleted/i.test(text))return {kind:'off',until:now+10*60000};
  if(/RESOURCE_EXHAUSTED|\b429\b|quota|rate.?limit/i.test(text)){
   if(/PerDay|per.day|daily|RPD/i.test(text))return {kind:'day',until:now+msToPacificMidnight(now)};
   const retry=text.match(/retryDelay\W+(\d+)s/);return {kind:'minute',until:now+Math.min(300,Math.max(20,retry?+retry[1]:60))*1000};

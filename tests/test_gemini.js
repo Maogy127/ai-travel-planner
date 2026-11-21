@@ -60,6 +60,8 @@ let k=AI.classify({code:'fetch-error',message:'[429 ] Resource exhausted',custom
 k=AI.classify({message:'429 RESOURCE_EXHAUSTED GenerateRequestsPerMinutePerProjectPerModel-FreeTier retryDelay":"22s"'},now);assert.equal(k.kind,'minute');assert.equal(k.until,now+22000);
 k=AI.classify({message:'Firebase AI Logic API has not been used in project 937789728448 before or it is disabled. SERVICE_DISABLED'},now);assert.equal(k.kind,'off');
 k=AI.classify({message:'Failed to fetch'},now);assert.equal(k.kind,'network');
+k=AI.classify({code:'fetch-error',message:'[429 ] Your prepayment credits are depleted. Please go to AI Studio at https://ai.studio/projects to manage your project and billing.'},now);assert.equal(k.kind,'off');assert.equal(k.until,now+600000);
+k=AI.classify({message:'429 You exceeded your current quota, please check your plan and billing details. GenerateRequestsPerDayPerProjectPerModel-FreeTier'},now);assert.equal(k.kind,'day');
 ctx.GONOW_AI_CONFIG={enabled:true,deviceDailyLimit:2};
 assert.equal(AI.status().state,'ready');
 ls.setItem('gonow:ai:pause',JSON.stringify({kind:'day',until:Date.now()+3600000}));assert.equal(AI.status().state,'resting');assert(/until tomorrow/.test(AI.status().line));assert.equal(AI.available(),false);
