@@ -1873,3 +1873,20 @@ Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deploy
   - Date tiles now read Day N / weekday / date numeral, with the same accessible name, plus " · nothing planned" on an empty day.
   - Group votes over 3 read "A B C · 5" (was "A B C 👍 5").
   - Community buttons drop the ♡ ☆ 💬 glyphs for line icons. Their labels are unchanged.
+
+## Elements preview (cache tag `elements-20261121`)
+- **New suite**: `test_elements.js` (node). It checks:
+  - Travel, flight and prep items have no elements.
+  - Inclusive mappings (lake meditation = water + wind; beach yoga = water + wind; pilates = wood + wind).
+  - Curated Oahu picks (1–2 elements) and restaurants (earth).
+  - Demo Day 2 and Day 4 collect all five and celebrate; Days 1, 3 and 5 do not.
+  - Celebration copy has no "missing" or nagging language.
+- **Updated expectations**:
+  - `test_travel_time.py`: the asset count is 34 (`js/elements.js` added); cache tag is `elements-20261121`.
+- **COPY-AUDIT** (new visible strings, English, one line):
+  - "Four elements, quietly gathered."
+  - "All five elements, in one day."
+  - "A day that gathered its elements."
+  - "A day that gathered every element."
+  - Detail labels: "Water · 水", "Fire · 火", "Wood · 木", "Wind · 风", "Earth · 土".
+  - No new morning question.

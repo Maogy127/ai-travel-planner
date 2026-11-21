@@ -843,6 +843,7 @@ function mount(root, ctx = {}) {
         const noteId = 'db-note-' + uid;
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
         const placeText = tray ? '' : `${esc(i.place)}${i.estimate ? ' · ' + durationText : ''}`;
+        const elIcons = !transport && window.GoNowElements ? window.GoNowElements.iconsHTML(i,{size:14}) : '';
         const heading = detail
             ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}><strong title="${esc(title)}">${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}</button>`
             : `<strong id="db-title-${uid}" title="${esc(title)}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}>${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}`;
@@ -853,7 +854,7 @@ function mount(root, ctx = {}) {
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
             ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt=""${ctx.photoCredit && ctx.photoCredit(src) ? ` title="${esc(ctx.photoCredit(src))}"` : ''}>` : ''}
             <div class="db-activity" data-testid="db-activity">
-                ${heading}${tray ? '' : `<div class="db-meta">${timeEl}${canLock ? (i.locked ? `<span class="db-mini-lock" aria-hidden="true">${icons.lock}</span>` : '') : lockChip}${placeText && !transport ? `<small class="db-place">${placeText}</small>` : ''}</div>`}${flightEdit?`<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${Number.isFinite(i.preferred)?String(Math.floor(i.preferred/60)).padStart(2,'0')+':'+String(i.preferred%60).padStart(2,'0'):''}"><span data-testid="add-flight-time"><button type="button" data-testid="edit-flight" aria-haspopup="dialog" ${ctx.shared?'disabled':''}>Edit flight</button></span>`:''}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
+                ${heading}${elIcons}${tray ? '' : `<div class="db-meta">${timeEl}${canLock ? (i.locked ? `<span class="db-mini-lock" aria-hidden="true">${icons.lock}</span>` : '') : lockChip}${placeText && !transport ? `<small class="db-place">${placeText}</small>` : ''}</div>`}${flightEdit?`<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${Number.isFinite(i.preferred)?String(Math.floor(i.preferred/60)).padStart(2,'0')+':'+String(i.preferred%60).padStart(2,'0'):''}"><span data-testid="add-flight-time"><button type="button" data-testid="edit-flight" aria-haspopup="dialog" ${ctx.shared?'disabled':''}>Edit flight</button></span>`:''}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
 
                 ${!tray && i.detail ? `<small>${esc(i.detail)}</small>` : ''}
                 ${tray && !canLock ? lockChip : ''}
@@ -1133,7 +1134,7 @@ function mount(root, ctx = {}) {
         }).join('');
         const index = dayIndex(date);
         const card = inner => ctx.dayHead
-            ? `<section class="card day db-daycard" id="day-${index}" data-testid="plan-day" data-date="${date}">${ctx.dayHead(date)}${inner}${ctx.dayFooter ? ctx.dayFooter(date) : ''}</section>`
+            ? `<section class="card day db-daycard${window.GoNowElements&&window.GoNowElements.day(result.items).celebrated?' is-elements-day':''}" id="day-${index}" data-testid="plan-day" data-date="${date}">${ctx.dayHead(date)}${inner}${ctx.dayFooter ? ctx.dayFooter(date) : ''}</section>`
             : inner;
         content.innerHTML = `<div class="db-heading"><h2>${ctx.dayHead ? 'Your days' : 'Build your day'}</h2><span class="db-summary" data-testid="db-summary">${summary}</span></div>
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
@@ -1175,7 +1176,7 @@ function mount(root, ctx = {}) {
         printAll.innerHTML = sourcePlan().days.map(day => {
             const stored = days[day.date] || buildSuggested(day.date);
             const result = dayResult(stored, day.date);
-            return `<section class="card day db-print-day" data-date="${day.date}">${ctx.dayHead ? ctx.dayHead(day.date, {print: true}) : ''}<div class="db-day">${timelineHTML(result, {print: true, date: day.date})}</div>${ctx.dayExtras ? ctx.dayExtras(day.date, {print: true}) : ''}</section>`;
+            return `<section class="card day db-print-day${window.GoNowElements&&window.GoNowElements.day(result.items).celebrated?' is-elements-day':''}" data-date="${day.date}">${ctx.dayHead ? ctx.dayHead(day.date, {print: true}) : ''}<div class="db-day">${timelineHTML(result, {print: true, date: day.date})}</div>${ctx.dayExtras ? ctx.dayExtras(day.date, {print: true}) : ''}</section>`;
         }).join('');
         printAll.querySelectorAll('[data-testid]').forEach(element => element.removeAttribute('data-testid'));
         printAll.querySelectorAll('.db-print-day').forEach(element=>element.setAttribute('data-testid','plan-day'));

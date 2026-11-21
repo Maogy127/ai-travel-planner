@@ -131,7 +131,12 @@
     park:'M12 3l5 8h-3l4 6H6l4-6H7zM12 17v4',wave:'M3 10c3-3 6 3 9 0s6 3 9 0M3 15c3-3 6 3 9 0s6 3 9 0',museum:'M3 9l9-5 9 5zM5 11v7M9.5 11v7M14.5 11v7M19 11v7M3 20h18',
     view:'M3 19l6-9 4 5 3-3 5 7zM16 6.5a1.5 1.5 0 1 0 3 0 1.5 1.5 0 0 0-3 0',spot:'M12 4l7 8-7 8-7-8z',cup:'M5 9h11v5a5 5 0 0 1-5 5h-1a5 5 0 0 1-5-5zM16 10h1.5a2.5 2.5 0 0 1 0 5H16M8 3v3M12 3v3',
     bowl:'M4 11h16a8 8 0 0 1-16 0zM9 4c-1 1.5 1 2.5 0 4M13 4c-1 1.5 1 2.5 0 4',thumb:'M7 11v9H4v-9zM7 11l4-7c1.5 0 2.5 1 2 3l-1 3h6a2 2 0 0 1 2 2.3l-1.2 6A2 2 0 0 1 16.8 20H7',
-    mark:'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4'
+    mark:'M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4',
+    water:'M12 4c0 0 6 7.2 6 11.2A6 6 0 1 1 6 15.2C6 11.2 12 4 12 4z',
+    fire:'M12 21c3.2 0 5.5-2.2 5.5-5.3 0-3.3-2.4-5.1-3.6-7.1C13.1 7.2 12 4.8 12 4.8S10.9 7.2 9.9 8.6C8.7 10.6 6.5 12.4 6.5 15.7 6.5 18.8 8.8 21 12 21z',
+    wood:'M12 21v-6M8 21h8M12 3l5.4 8h-3.1l2.6 5.2H7.1L9.7 11H6.6z',
+    wind:'M4 8.5h11.5a2.6 2.6 0 1 0-2.6-2.6M4 12h14a2.6 2.6 0 1 1-2.6 2.6M4 15.5h8',
+    earth:'M3 17.5h18M5.2 17.5C7 12.2 9.8 9.5 12 9.5s5 2.7 6.8 8'
   };
   function icon(name,size,cls){
     return '<svg class="v2-icon'+(cls?' '+cls:'')+'" viewBox="0 0 24 24" width="'+(size||20)+'" height="'+(size||20)+'" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="'+(P[name]||P.spot)+'"/></svg>';
