@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-21T02:23:32.563Z",
+  "generatedAt": "2026-11-21T02:27:52.932Z",
   "source": "OpenStreetMap (ODbL) and Wikidata (CC0)",
   "base": "data/cities/",
   "cities": [
@@ -564,6 +564,60 @@
       "restaurants": 40,
       "wellness": 20,
       "bytes": 49335
+    },
+    {
+      "slug": "paris",
+      "name": "Paris",
+      "aliases": [
+        "Paris",
+        "paris",
+        "paris, france"
+      ],
+      "file": "paris.json",
+      "center": {
+        "lat": 48.8566,
+        "lng": 2.3522
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 51137
+    },
+    {
+      "slug": "barcelona",
+      "name": "Barcelona",
+      "aliases": [
+        "Barcelona",
+        "barcelona",
+        "barcelona, spain"
+      ],
+      "file": "barcelona.json",
+      "center": {
+        "lat": 41.3874,
+        "lng": 2.1686
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 46341
+    },
+    {
+      "slug": "rome",
+      "name": "Rome",
+      "aliases": [
+        "Rome",
+        "rome",
+        "roma"
+      ],
+      "file": "rome.json",
+      "center": {
+        "lat": 41.9028,
+        "lng": 12.4964
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45810
     }
   ]
 }
