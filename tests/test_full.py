@@ -142,6 +142,10 @@ async def local_api_fixture(ctx):
     await ctx.route('https://'+host+'/**',mock_local_api)
 def is_place_url(url):
   host = urlparse(str(url)).hostname or ''
+  path = urlparse(str(url)).path or ''
+  # Existing suites stay on fixtures / the no-places fallback. Pre-warmed snapshots are covered by test_city_prewarm.
+  if '/data/cities/' in path:
+    return True
   return host in ('places.googleapis.com', 'nominatim.openstreetmap.org', 'overpass-api.de', 'overpass.kumi.systems', 'upload.wikimedia.org') or any(host == domain or host.endswith('.' + domain) for domain in ('wikipedia.org', 'wikidata.org'))
 
 async def new(b, base, w=390, h=844, reduced_motion='no-preference', has_touch=False, nudge=False):

@@ -1,0 +1,331 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-21T02:05:24.089Z",
+  "source": "OpenStreetMap (ODbL) and Wikidata (CC0)",
+  "base": "data/cities/",
+  "cities": [
+    {
+      "slug": "los-angeles",
+      "name": "Los Angeles",
+      "aliases": [
+        "Los Angeles",
+        "los angeles",
+        "la",
+        "lax",
+        "los angeles (lax)",
+        "los angeles, ca"
+      ],
+      "file": "los-angeles.json",
+      "center": {
+        "lat": 34.0522,
+        "lng": -118.2437
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 48901
+    },
+    {
+      "slug": "honolulu",
+      "name": "Honolulu",
+      "aliases": [
+        "Honolulu",
+        "honolulu",
+        "oahu",
+        "waikiki",
+        "hawaii",
+        "honolulu (hnl)",
+        "hnl"
+      ],
+      "file": "honolulu.json",
+      "center": {
+        "lat": 21.3069,
+        "lng": -157.8583
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45830
+    },
+    {
+      "slug": "shanghai",
+      "name": "Shanghai",
+      "aliases": [
+        "Shanghai",
+        "shanghai",
+        "pvg",
+        "shanghai (pvg)"
+      ],
+      "file": "shanghai.json",
+      "center": {
+        "lat": 31.2304,
+        "lng": 121.4737
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 43668
+    },
+    {
+      "slug": "hong-kong",
+      "name": "Hong Kong",
+      "aliases": [
+        "Hong Kong",
+        "hong kong",
+        "hk",
+        "hkg",
+        "hong kong (hkg)"
+      ],
+      "file": "hong-kong.json",
+      "center": {
+        "lat": 22.3193,
+        "lng": 114.1694
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 47170
+    },
+    {
+      "slug": "new-york",
+      "name": "New York",
+      "aliases": [
+        "New York",
+        "new york",
+        "nyc",
+        "ny",
+        "new york city",
+        "new york (nyc)",
+        "manhattan"
+      ],
+      "file": "new-york.json",
+      "center": {
+        "lat": 40.7128,
+        "lng": -74.006
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 51614
+    },
+    {
+      "slug": "san-francisco",
+      "name": "San Francisco",
+      "aliases": [
+        "San Francisco",
+        "san francisco",
+        "sf",
+        "sfo",
+        "san francisco (sfo)"
+      ],
+      "file": "san-francisco.json",
+      "center": {
+        "lat": 37.7749,
+        "lng": -122.4194
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 50082
+    },
+    {
+      "slug": "las-vegas",
+      "name": "Las Vegas",
+      "aliases": [
+        "Las Vegas",
+        "las vegas",
+        "vegas"
+      ],
+      "file": "las-vegas.json",
+      "center": {
+        "lat": 36.1699,
+        "lng": -115.1398
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 44225
+    },
+    {
+      "slug": "seattle",
+      "name": "Seattle",
+      "aliases": [
+        "Seattle",
+        "seattle",
+        "sea",
+        "seattle (sea)"
+      ],
+      "file": "seattle.json",
+      "center": {
+        "lat": 47.6062,
+        "lng": -122.3321
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 54153
+    },
+    {
+      "slug": "chicago",
+      "name": "Chicago",
+      "aliases": [
+        "Chicago",
+        "chicago",
+        "ord",
+        "chicago (ord)"
+      ],
+      "file": "chicago.json",
+      "center": {
+        "lat": 41.8781,
+        "lng": -87.6298
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 47938
+    },
+    {
+      "slug": "miami",
+      "name": "Miami",
+      "aliases": [
+        "Miami",
+        "miami"
+      ],
+      "file": "miami.json",
+      "center": {
+        "lat": 25.7617,
+        "lng": -80.1918
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 46364
+    },
+    {
+      "slug": "san-diego",
+      "name": "San Diego",
+      "aliases": [
+        "San Diego",
+        "san diego"
+      ],
+      "file": "san-diego.json",
+      "center": {
+        "lat": 32.7157,
+        "lng": -117.1611
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 43754
+    },
+    {
+      "slug": "washington-dc",
+      "name": "Washington DC",
+      "aliases": [
+        "Washington DC",
+        "washington dc",
+        "dc",
+        "washington",
+        "washington, dc",
+        "iad",
+        "dca"
+      ],
+      "file": "washington-dc.json",
+      "center": {
+        "lat": 38.9072,
+        "lng": -77.0369
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 51315
+    },
+    {
+      "slug": "boston",
+      "name": "Boston",
+      "aliases": [
+        "Boston",
+        "boston"
+      ],
+      "file": "boston.json",
+      "center": {
+        "lat": 42.3601,
+        "lng": -71.0589
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 47857
+    },
+    {
+      "slug": "austin",
+      "name": "Austin",
+      "aliases": [
+        "Austin",
+        "austin"
+      ],
+      "file": "austin.json",
+      "center": {
+        "lat": 30.2672,
+        "lng": -97.7431
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 44390
+    },
+    {
+      "slug": "denver",
+      "name": "Denver",
+      "aliases": [
+        "Denver",
+        "denver"
+      ],
+      "file": "denver.json",
+      "center": {
+        "lat": 39.7392,
+        "lng": -104.9903
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45950
+    },
+    {
+      "slug": "portland",
+      "name": "Portland",
+      "aliases": [
+        "Portland",
+        "portland",
+        "portland, or"
+      ],
+      "file": "portland.json",
+      "center": {
+        "lat": 45.5152,
+        "lng": -122.6784
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 53015
+    },
+    {
+      "slug": "new-orleans",
+      "name": "New Orleans",
+      "aliases": [
+        "New Orleans",
+        "new orleans",
+        "nola"
+      ],
+      "file": "new-orleans.json",
+      "center": {
+        "lat": 29.9511,
+        "lng": -90.0715
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 46578
+    }
+  ]
+}
