@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-21T02:34:33.808Z",
+  "generatedAt": "2026-11-21T02:34:52.742Z",
   "source": "OpenStreetMap (ODbL) and Wikidata (CC0)",
   "base": "data/cities/",
   "cities": [
@@ -879,6 +879,42 @@
       "restaurants": 40,
       "wellness": 20,
       "bytes": 49348
+    },
+    {
+      "slug": "toronto",
+      "name": "Toronto",
+      "aliases": [
+        "Toronto",
+        "toronto"
+      ],
+      "file": "toronto.json",
+      "center": {
+        "lat": 43.6532,
+        "lng": -79.3832
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45091
+    },
+    {
+      "slug": "mexico-city",
+      "name": "Mexico City",
+      "aliases": [
+        "Mexico City",
+        "mexico city",
+        "cdmx",
+        "ciudad de mexico"
+      ],
+      "file": "mexico-city.json",
+      "center": {
+        "lat": 19.4326,
+        "lng": -99.1332
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45112
     }
   ]
 }
