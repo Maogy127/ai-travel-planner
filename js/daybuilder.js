@@ -843,7 +843,7 @@ function mount(root, ctx = {}) {
         const noteId = 'db-note-' + uid;
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
         const placeText = tray ? '' : `${esc(i.place)}${i.estimate ? ' · ' + durationText : ''}`;
-        const elIcons = !transport && window.GoNowElements ? window.GoNowElements.iconsHTML(i,{size:14}) : '';
+        const elIcons = !transport && window.GoNowElements ? window.GoNowElements.iconsHTML(i,{size:16}) : '';
         const heading = detail
             ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}><strong title="${esc(title)}">${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}</button>`
             : `<strong id="db-title-${uid}" title="${esc(title)}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}>${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}`;

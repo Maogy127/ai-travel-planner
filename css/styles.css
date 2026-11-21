@@ -2197,7 +2197,7 @@ html.reduce-motion button:active{transform:none!important}
   --el-earth:#F2B820;
   --el-earth-deep:#634D3D;
 }
-.el-icons{display:inline-flex;align-items:center;gap:3px;margin:2px 0 4px;color:var(--ink-2);line-height:0}
+.el-icons{display:inline-flex;align-items:center;gap:4px;margin:2px 0 4px;color:var(--ink);opacity:.72;line-height:0}
 .el-icons .el-icon,.el-dot .el-icon{display:block;flex:none}
 .item .el-icons{margin:0 0 6px}
 .db-activity .el-icons{margin:2px 0 0}
