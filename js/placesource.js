@@ -115,8 +115,17 @@ function create(options={}){
   const parsed=p.parsedHours||parseHours(p.openingHours)||null;
   return Object.assign({},p,{parsedHours:parsed,hours:p.hours&&Number.isFinite(p.hours.open)?p.hours:(parsed||{}),generic:true,section:p.section||'popular',photo:p.photo||'',intro:p.intro||'',price:p.price||'',closed:p.closed||[],closedDates:p.closedDates||[],tags:p.tags||[]});
  }
+ function snapshotFromFile(url){
+  try{
+   if(String(url).startsWith('file:'))return true;
+   // Browsers cannot fetch sibling JSON from a file:// page (and they log a console error if we try).
+   if(root.location&&root.location.protocol==='file:'&&!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(String(url)))return true;
+  }catch(e){}
+  return false;
+ }
  function snapshot(city){
   const meta=matchSnapshot(city);if(!meta)return Promise.resolve(null);
+  if(snapshotFromFile(snapshotUrl(meta)))return Promise.resolve(null);
   const key='snap:'+SNAPSHOT_VERSION+':'+meta.slug;
   return cached(key,30*DAY,async()=>{
    const data=await json(snapshotUrl(meta),{timeout:4000});

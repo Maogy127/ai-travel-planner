@@ -87,5 +87,17 @@ const fixture=(city,kind)=>JSON.parse(fs.readFileSync(`tests/fixtures/${city}_${
   assert(!lagosTimes.some(u=>/data\/cities\//.test(u)||/fixtures\/cities\//.test(u)),'unknown cities never fetch a snapshot');
   assert(took<2000,'unknown-city failure does not wait on a snapshot timeout: '+took);
 
+  // file:// pages cannot fetch data/cities/*.json; skip the snapshot so the console stays quiet.
+  const fileCalls=[];
+  ctx.window.location={protocol:'file:',href:'file:///tmp/index.html'};
+  const fileSrc=S.create({storage:memory(),snapshotBase:'data/cities/',sleep:async()=>{},fetch:async url=>{
+    fileCalls.push(url);
+    throw Error('offline');
+  }});
+  const fileResult=await fileSrc.load('Paris');
+  assert(fileResult.fallback,'file:// falls through when a snapshot cannot be fetched');
+  assert(!fileCalls.some(u=>/cities\/paris\.json/.test(u)),'file:// pages do not request city snapshots');
+  delete ctx.window.location;
+
   console.log('PASS city prewarm snapshots load first, merge wellness, revive hours, alias match, and fall back to live');
 })().catch(e=>{console.error(e);process.exitCode=1;});
