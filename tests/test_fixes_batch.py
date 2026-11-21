@@ -2,7 +2,7 @@
 import asyncio, re
 from pathlib import Path
 from playwright.async_api import expect
-from test_full import new, continue_prep, open_share_menu, answer
+from test_full import new, continue_prep, open_share_menu, answer, open_more
 from test_wellness_home import serve_checks
 from test_pick_activities import open_picks
 from test_any_city import routes, enter
@@ -40,7 +40,7 @@ async def owner_invite(b, sync):
     await pg.evaluate("Object.defineProperty(navigator,'clipboard',{configurable:true,value:{writeText:async t=>window.__invite=t}})")
     await pg.get_by_test_id('sign-in').click(); await pg.get_by_test_id('sign-in-google').click()
     await pg.get_by_test_id('sync-yes' if sync else 'sync-no').click(); await pg.wait_for_timeout(500)
-    await open_share_menu(pg); await pg.get_by_test_id('invite-friends').click(); await expect(pg.locator('#toast')).to_have_text('Invite link copied')
+    await open_share_menu(pg); await pg.get_by_test_id('invite-friends').click(); await expect(pg.locator('#cloud-notice')).to_have_text('Invite link copied')
     return ctx, pg
 
 async def cold_invite(b):
@@ -71,7 +71,7 @@ async def returning_member(b):
     await pg.evaluate('(l)=>location.hash=new URL(l).hash', link); await pg.wait_for_timeout(1200)
     sheet = pg.get_by_test_id('sign-in-sheet'); text = await sheet.inner_text() if await sheet.is_visible() else ''
     ok('returning member re-opening the invite gets no error', 'isn’t available' not in text and 'Couldn’t join' not in text, text)
-    ok('returning member sees "already in this trip"', 'already in this trip' in await pg.locator('#toast').inner_text())
+    ok('returning member sees "already in this trip"', 'already in this trip' in await pg.locator('#cloud-notice').inner_text())
     # Owner opening their own link: also no error.
     await opg.evaluate('(l)=>location.hash=new URL(l).hash', link); await opg.wait_for_timeout(1200)
     osheet = opg.get_by_test_id('sign-in-sheet')
@@ -117,7 +117,7 @@ async def undo_scope(b):
     ctx, pg = await new(b, BASE, 390); await checkout_oahu(pg)
     await pg.evaluate("localStorage.setItem('gonow:sync:test','yes')")
     before = await pg.evaluate("JSON.stringify(__gonow.state.plan.days.map(d=>d.items.map(i=>i.id||i.title)))")
-    await pg.get_by_test_id('edit-picks').click(); await pg.get_by_test_id('pick-activities').wait_for()
+    await open_more(pg); await pg.get_by_test_id('edit-picks').click(); await pg.get_by_test_id('pick-activities').wait_for()
     await pg.evaluate("localStorage.setItem('gonow:invite:test:trip','inv');localStorage.setItem('gonow:sync:test','no');localStorage.setItem('gonow:places:geo:x',JSON.stringify({value:1,until:9e15}))")
     await pg.locator('[data-pick-toggle="waimea"]').click(); await pg.get_by_test_id('pick-next').click(); await pg.get_by_test_id('pick-next').click()
     await expect(pg.get_by_test_id('plan-toast')).to_have_text('Plan updated · Undo'); await pg.get_by_test_id('plan-undo').click(); await pg.wait_for_timeout(500)
@@ -145,7 +145,7 @@ async def any_city_reload(b):
     await row.get_by_test_id('db-swap').click(); sheet = pg.get_by_test_id('swap-sheet'); await sheet.wait_for()
     ok('any-city Swap after reload offers options', await sheet.get_by_test_id('swap-option').count() >= 1)
     await sheet.locator('[data-close]').click()
-    errs.clear(); await pg.get_by_test_id('edit-picks').click(); await pg.wait_for_timeout(1000)
+    errs.clear(); await open_more(pg); await pg.get_by_test_id('edit-picks').click(); await pg.wait_for_timeout(1000)
     ok('any-city Edit picks after reload opens picks without errors', await pg.evaluate('__gonow.state.screen') == 'pick-activities' and not errs, errs)
     ok('Edit picks keeps the current pick ticked', await pg.locator('[data-pick-toggle=osm-node-100][aria-pressed=true]').count() == 1)
     # A new session without the stored catalog loads it on demand (Swap shows Loading, then options).
@@ -253,4 +253,5 @@ async def checks(b):
     print(f'SUMMARY pass {len(RESULTS)-len(failed)} fail {len(failed)}')
     assert not failed, failed
 
-asyncio.run(serve_checks(8896, checks))
+if __name__ == '__main__':
+    asyncio.run(serve_checks(8896, checks))

@@ -1,7 +1,7 @@
 """Supervisor-only track/empty-section regressions; port 8852."""
 import asyncio
 from playwright.async_api import expect
-from test_full import new, wait_plan, show_day
+from test_full import new, wait_plan, show_day, open_more
 from test_wellness_home import serve_checks
 
 BASE = 'http://127.0.0.1:8852/index.html'
@@ -58,11 +58,11 @@ async def checks(browser):
                     await expect(pg.get_by_test_id('group-section')).to_have_count(int(track=='each'))
                     await expect(pg.get_by_test_id('track-toggle')).to_have_count(int(n>1))
                     if n>1:
-                        await pg.get_by_test_id('track-toggle').click()
+                        await open_more(pg); await pg.get_by_test_id('track-toggle').click()
                         await expect(pg.get_by_test_id('group-section')).to_have_count(int(track!='each'))
                         saved = await pg.evaluate("JSON.parse(localStorage.getItem('gonow:answers')).track")
                         assert saved == ('together' if track=='each' else 'each')
-                        await pg.get_by_test_id('track-toggle').click()
+                        await open_more(pg); await pg.get_by_test_id('track-toggle').click()
                     await audit_days(pg, track, n)
                     # Full plan and Trip prep also have no heading-only disclosures.
                     result = await pg.locator('#view').evaluate(SCAN)

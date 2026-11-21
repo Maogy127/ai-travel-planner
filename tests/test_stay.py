@@ -1,5 +1,5 @@
 """Supervisor Chromium stay flow, port 8844; actual UI toggles and save."""
-from test_full import open_home_flow
+from test_full import open_home_flow, open_more
 from test_full import reopen_dashboard
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
@@ -34,14 +34,14 @@ async def checks(browser):
             # Stay answers now lead through activities and restaurants to the draft.
             await through_picks(pg)
             await expect(pg.get_by_test_id('confirm-plan')).to_be_visible()
-            await pg.get_by_test_id('trip-add-hotel').wait_for(timeout=45000)
+            await pg.get_by_test_id('trip-add-hotel').wait_for(state='attached', timeout=45000)
             await expect(pg.get_by_test_id('stay-later-note')).to_contain_text('Waikiki')
             print('PASS test_stay.py check line 35')
             header = await pg.locator('.plan-header').inner_text()
             assert 'Kahala' not in header and 'Resort' not in header
             print('PASS test_stay.py check line 38')
             before = await pg.locator('[data-testid=travel-chip]').all_text_contents()
-            await pg.get_by_test_id('trip-add-hotel').click()
+            await open_more(pg); await pg.get_by_test_id('trip-add-hotel').click()
             await pg.get_by_test_id('trip-hotel-name').fill('My booked place')
             await pg.get_by_test_id('trip-hotel-save').click()
             await expect(pg.get_by_test_id('stay-later-note')).to_have_count(0)

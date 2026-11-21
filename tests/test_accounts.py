@@ -53,7 +53,7 @@ async def checks(browser):
             assert await pg.evaluate("Object.keys(window.__fbMock.dump()).some(p=>p.startsWith('users/owner/trips/'))")
             await open_share_menu(pg)
             await pg.get_by_test_id('invite-friends').click()
-            await expect(pg.locator('#toast')).to_have_text('Invite link copied')
+            await expect(pg.locator('#cloud-notice')).to_have_text('Invite link copied')
             link = await pg.evaluate('window.__invite')
             assert '#join=' in link
             records = await pg.evaluate('window.__fbMock.dump()')
@@ -75,7 +75,7 @@ async def checks(browser):
             assert await member.evaluate('window.goNowAccount.group.members[window.goNowAccount.user.uid].name === "Alex"')
             assert await member.evaluate('window.__fbMock.state.calls.filter(c=>c[0]==="update" && c[2].joinInvite).length === 1')
             await pg.evaluate('(p)=>window.__fbMock.simulateAlex(p)', trip_path)
-            await expect(pg.locator('#toast')).to_have_text('Alex added Kualoa')
+            await expect(pg.locator('#cloud-notice')).to_have_text('Alex added Kualoa')
             # Vote through the visible card, then exercise a real locked dinner row.
             await pg.evaluate("()=>{window.__gonow.state.answers.picks=window.__gonow.state.answers.picks||{activities:[],restaurants:[]};window.__gonow.go('pick-activities')}")
             await pg.locator('[data-pick-toggle=kualoa]').click()
@@ -97,7 +97,7 @@ async def checks(browser):
             suggestion_sheet = member.get_by_test_id('group-time-suggestion')
             await suggestion_sheet.locator('input').fill('19:00')
             await suggestion_sheet.get_by_role('button', name='Send suggestion').click()
-            await expect(member.locator('#toast')).to_have_text('Sent to Sam for OK')
+            await expect(member.locator('#cloud-notice')).to_have_text('Sent to Sam for OK')
             assert ''.join((await member_dinner.get_by_test_id('db-time').text_content()).split()) == original_time
             await member.wait_for_function('Object.keys(window.goNowAccount.group.suggestions).length === 1')
             member_group = await member.evaluate('(p)=>window.__fbMock.dump()[p]', trip_path)

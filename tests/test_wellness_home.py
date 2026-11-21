@@ -59,7 +59,8 @@ async def checks(browser):
             await expect(pg.get_by_test_id('rank-badge')).to_have_count(0)
             await expect(pg.get_by_text('A gentle day by the coast', exact=True)).to_have_count(0)
             await pg.evaluate('document.fonts.ready')
-            assert await pg.evaluate('''() => ['Fraunces Variable','Inter Variable'].every(name => [...document.fonts].some(f => f.family.replace(/["']/g,'') === name && f.status === 'loaded'))''')
+            # v2 type (Nov 20, 2026): Fraunces + Hanken Grotesk replace Fraunces Variable + Inter Variable.
+            assert await pg.evaluate('''() => ['Fraunces','Hanken Grotesk'].every(name => [...document.fonts].some(f => f.family.replace(/["']/g,'') === name && f.status === 'loaded'))''')
             assert any('/fonts/' in u and '.woff2' in u for u in requests), requests
             assert not any('fonts.googleapis.com' in u for u in requests)
             await calm(pg, f'home {width}')

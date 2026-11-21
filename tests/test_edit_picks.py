@@ -1,7 +1,7 @@
 """Supervisor-only Edit picks checks; no external services."""
 import asyncio
 from playwright.async_api import expect
-from test_full import new
+from test_full import new, open_more
 from test_pick_activities import open_picks
 from test_any_city import routes, enter
 from test_wellness_home import serve_checks
@@ -28,7 +28,7 @@ async def checks(browser):
                     await pg.get_by_test_id('confirm-plan').click()
                     await pg.get_by_test_id('prep-continue').click()
                 before = await snapshot(pg)
-                await pg.get_by_test_id('edit-picks').click()
+                await open_more(pg); await pg.get_by_test_id('edit-picks').click()
                 for id in ('kahala', 'bishop-museum'):
                     card=pg.locator(f'[data-pick-id="{id}"]')
                     await expect(card).to_contain_text('Locked')
@@ -65,7 +65,7 @@ async def checks(browser):
             await pg.locator('[data-pick-toggle=osm-node-100]').click()
             await pg.get_by_test_id('pick-next').click()
             await pg.get_by_test_id('pick-next').click()
-            await pg.get_by_test_id('edit-picks').click()
+            await open_more(pg); await pg.get_by_test_id('edit-picks').click()
             await expect(pg.locator('[data-pick-toggle=osm-node-100]')).to_have_attribute('aria-pressed','true')
             await pg.get_by_test_id('pick-next').click()
             await pg.get_by_test_id('pick-next').click()

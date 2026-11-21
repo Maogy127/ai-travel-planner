@@ -1,6 +1,6 @@
 # Ring trim replaces duplicate recovery prose with a working rest action.
 """Supervisor-run optional check-in regressions, desktop/mobile, port 8836."""
-from test_full import reopen_dashboard
+from test_full import reopen_dashboard, open_more
 from test_full import wait_plan, open_day_pace, open_guidance, open_add_menu
 import asyncio
 import re
@@ -30,7 +30,7 @@ async def checks(browser):
             from test_full import continue_prep
             await continue_prep(pg)
             await wait_plan(pg)
-            await pg.get_by_test_id('track-toggle').click()
+            await open_more(pg); await pg.get_by_test_id('track-toggle').click()
             await expect(pg.get_by_test_id('morning-checkin')).to_have_count(0)
             await pg.evaluate("__gonow.go('food')")
             await expect(pg.get_by_test_id('morning-checkin')).to_have_count(0)

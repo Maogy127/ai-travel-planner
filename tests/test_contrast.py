@@ -48,9 +48,11 @@ async def checks(browser):
             await pg.locator('[data-testid=activity-chip]').first.click()
             await pair(pg,'[data-testid=activity-chip][aria-pressed=true]','selected chip')
             await pair(pg,'.pace-option:has(input:checked) strong','selected pace')
-            hues=await pg.evaluate('''() => {const css=getComputedStyle(document.documentElement);function hue(hex){let [r,g,b]=hex.trim().slice(1).match(/../g).map(x=>parseInt(x,16)/255);let max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;return ((max===r?(g-b)/d:max===g?(b-r)/d+2:(r-g)/d+4)*60+360)%360;}let diff=Math.abs(hue(css.getPropertyValue('--move'))-hue(css.getPropertyValue('--accent')));return Math.min(diff,360-diff);}''')
+            # v2: the Move ring is tomato, the same as the Energized accent (DESIGN-SPEC.md). What has to stay
+            # distinguishable is the three rings from each other.
+            hues=await pg.evaluate('''() => {const css=getComputedStyle(document.documentElement);function hue(hex){let [r,g,b]=hex.trim().slice(1).match(/../g).map(x=>parseInt(x,16)/255);let max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;return ((max===r?(g-b)/d:max===g?(b-r)/d+2:(r-g)/d+4)*60+360)%360;}const d=(a,b)=>{let diff=Math.abs(hue(css.getPropertyValue(a))-hue(css.getPropertyValue(b)));return Math.min(diff,360-diff);};return Math.min(d('--move','--rec'),d('--move','--sleep'),d('--rec','--sleep'));}''')
             assert hues>=20,hues
-            print(f'PASS movement vs terracotta hue difference {hues:.2f} degrees')
+            print(f'PASS ring hues differ by at least {hues:.2f} degrees')
             await pg.evaluate("__gonow.go('musts')")
             await pg.get_by_test_id('voice-btn').click()
             await pair(pg,'[data-testid=voice-btn].is-listening','voice listening')

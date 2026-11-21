@@ -70,6 +70,7 @@
     var activeGeneration=0, toastTimer, undoPending=false;
     // Only web links reach href; javascript:, data: and other schemes become inert.
     function safeHref(u){u=String(u==null?'':u).trim();return /^https?:\/\//i.test(u)?u:'#';}
+    function v2i(name,size){return window.GoNowIcons?window.GoNowIcons.icon(name,size||16):'';}
     function esc(s, keepEmoji) {
         var text=String(s==null?'':s);
         if(!keepEmoji)text=text.replace(/[\p{Extended_Pictographic}\u200d\ufe0f]/gu,'');
@@ -133,11 +134,11 @@
     }
     function planBanner(p) {
         var dest=Engine.matchDestination(state.answers.destination);
-        p.meta=Engine.dateRange(p.start||p.days[0].date,p.end||p.days[p.days.length-1].date)+' · '+p.days.length+' days · '+(state.answers.who||'Travelers').replace(/^./,function(c){return c.toUpperCase();})+' · Ages '+(state.answers.ages||[]).join(' & ');
+        p.meta=Engine.dateRange(p.start||p.days[0].date,p.end||p.days[p.days.length-1].date)+' · '+p.days.length+' days · '+(state.answers.who||'Travelers').replace(/^./,function(c){return c.toUpperCase();})+((state.answers.ages||[]).length?' · Ages '+state.answers.ages.join(' & '):'');
         var image=dest.id==='custom'?'images/hero.jpg':'images/'+dest.id+'.jpg';
         var visual=state.answers.templateOahu&&dest.id==='oahu'?'':photo(image, p.title, 'banner-photo');
         if(visual){ var bid=image.split('/').pop().replace('.jpg',''); var bc=window.PHOTO_CREDITS.find(function(c){return c.id===bid;}); visual+='<div class="banner-credit">'+creditHTML(bc)+'</div>'; }
-        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted">'+esc(p.meta)+'</p><p>'+icon('hotel')+' Staying: '+esc(p.stay)+'</p>'+hotelControls()+'<small class="local-times" data-testid="time-diff">'+esc(timeDiffLine())+'</small>'+originAsk()+'<div class="row">'+btn('Change my answers', 'change-answers', '')+btn('Reset my edits', 'reset-edits', '')+trackToggle()+'</div></div></header>';
+        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted plan-meta">'+esc(p.meta)+'</p>'+stayLine(p)+'<small class="local-times" data-testid="time-diff">'+esc(timeDiffLine())+'</small>'+originAsk()+hotelForm()+'<div class="draft-confirm-row plan-actions">'+planPrimaryHTML()+planMoreHTML()+'</div></div></header>';
     }
     function shareMenuHTML() {
         return '<div class="share-controls"><button type="button" data-testid="share-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="plan-share-menu"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m-5 5 5-5 5 5M5 13v7h14v-7"/></svg>Share</button><div id="plan-share-menu" data-testid="share-menu" role="menu" aria-label="Share" hidden>'+[['Print / Save as PDF','print-plan'],['Copy as text','copy'],['Share link','share-link'],['Download calendar','download-ics'],['Invite friends','invite-friends']].map(function(item){var wrapper=item[1]==='print-plan'?'print':item[1]==='share-link'?'share':'';return (wrapper?'<span data-testid="'+wrapper+'">':'')+btn(item[0],item[1],'','role="menuitem" tabindex="-1"')+(wrapper?'</span>':'');}).join('')+'</div></div>';
@@ -168,7 +169,26 @@
         document.addEventListener('keydown',keys,true);
         shareMenuCleanup=function(){document.removeEventListener('click',outside);document.removeEventListener('keydown',keys,true);};
     }
-    function hotelControls(){if(state.answers.mode==='local')return '';var d=Engine.matchDestination(state.answers.destination);return (state.answers.stayUnsure?'<p data-testid="stay-later-note">Planning around '+esc(window.GoNowJetlag.center(d))+" for now. Add your hotel later and we’ll re-plan around it.</p>":'')+'<span class="hotel-actions">'+(!state.answers.stay||state.answers.stayUnsure?partnerLink('booking','',false,'Find a hotel','find-hotel'):'')+'<button type="button" data-testid="trip-add-hotel">'+(state.answers.stayUnsure||!state.answers.stay?'Add your hotel':'Edit your hotel')+'</button></span><form data-testid="trip-hotel-form" hidden><label>Hotel name<input data-testid="trip-hotel-name" value="'+esc(state.answers.stay)+'" required></label><button data-testid="trip-hotel-save">Save</button></form>';}
+    // One quiet hotel line; booking/editing the hotel lives in the ⋯ More sheet.
+    function stayLine(p){var local=state.answers.mode==='local',unsure=!local&&state.answers.stayUnsure,find=!local&&(!state.answers.stay||state.answers.stayUnsure)?' · '+partnerLink('booking','',false,'Find a hotel','find-hotel'):'';return '<p class="plan-stay">'+icon('hotel')+' '+(unsure?'<span data-testid="stay-later-note">Planning around '+esc(window.GoNowJetlag.center(Engine.matchDestination(state.answers.destination)))+' for now</span>':'Staying: '+esc(p.stay))+find+'</p>';}
+    function hotelForm(){if(state.answers.mode==='local')return '';return '<form class="trip-hotel-form" data-testid="trip-hotel-form" hidden><label>Hotel name<input data-testid="trip-hotel-name" value="'+esc(state.answers.stay)+'" required></label><button data-testid="trip-hotel-save">Save</button></form>';}
+    function hotelControls(){if(state.answers.mode==='local')return '';return '<button type="button" data-testid="trip-add-hotel">'+(state.answers.stayUnsure||!state.answers.stay?'Add your hotel':'Edit your hotel')+'</button>';}
+    // Secondary trip actions, one tap away: Edit picks (added by bindPlanPrep), answers, edits, tracking, hotel.
+    // One primary action: Confirm plan on a draft, Trip prep once confirmed (none on a shared read-only view).
+    function planPrimaryHTML(){if(state.shared)return '';return tripConfirmed(currentTrip())?btn('Trip prep · '+(prepRemaining()?prepRemaining()+' left':'All set'),'trip-prep-button','prep-header'):'<span class="badge">Draft</span>'+btn('Confirm plan','confirm-plan','primary');}
+    function planMoreHTML(){return '<div class="plan-more"><button type="button" class="plan-more-toggle" data-testid="plan-more" aria-expanded="false" aria-controls="plan-more-menu">'+v2i('more',18)+'More</button><div id="plan-more-menu" class="plan-more-menu" data-testid="plan-more-menu" hidden>'+(!state.shared&&isPickPlan(state.plan)?btn('Edit picks','edit-picks',''):'')+btn('Change my answers', 'change-answers', '')+btn('Reset my edits', 'reset-edits', '')+trackToggle()+hotelControls()+'</div></div>';}
+    var planMoreCleanup;
+    function bindPlanMore(){
+        if(planMoreCleanup)planMoreCleanup();
+        var toggle=get('plan-more'),menu=get('plan-more-menu');if(!toggle||!menu)return;
+        function close(focus){menu.hidden=true;toggle.setAttribute('aria-expanded','false');if(focus)toggle.focus({preventScroll:true});}
+        toggle.onclick=function(){if(menu.hidden){menu.hidden=false;toggle.setAttribute('aria-expanded','true');var first=menu.querySelector('button');if(first)first.focus({preventScroll:true});}else close(true);};
+        menu.addEventListener('click',function(e){if(e.target.closest('button'))close(false);});
+        function outside(e){if(!menu.hidden&&!toggle.parentElement.contains(e.target))close(false);}
+        function keys(e){if(!toggle.isConnected||menu.hidden)return;if(e.key==='Escape'){e.preventDefault();e.stopImmediatePropagation();close(true);}}
+        document.addEventListener('click',outside);document.addEventListener('keydown',keys,true);
+        planMoreCleanup=function(){document.removeEventListener('click',outside);document.removeEventListener('keydown',keys,true);};
+    }
     function applyStay(){var name=state.answers.stayUnsure||!state.answers.stay?window.GoNowJetlag.center(Engine.matchDestination(state.answers.destination)):state.answers.stay;var old=state.plan.stay;state.plan.stay=name;window.DayBuilder.setStay(name);state.plan.days.forEach(function(d){if(!mergedPlan())d.items=window.DayBuilder.replanStay(d.items,old,name);d.items.forEach(function(it,i){['place','from','to','desc','title'].forEach(function(k){if(typeof it[k]==='string'&&old)it[k]=it[k].split(old).join(name);});if(it.kind==='stay')it.desc=name;if(i<d.items.length-1){var next=d.items[i+1];it.travelToNext='approx. '+window.DayBuilder.commuteMinutes(it.place||name,next.place||next.title)+' min from '+(it.kind==='stay'?name:it.place||it.title)+' — confirm route';}});});}
     function bindHotel(){on('track-toggle',function(){state.answers.track=eachPerson()?'together':'each';checkinSelected={};save();rememberTrip();render();});on('trip-add-hotel',function(){get('trip-hotel-form').hidden=false;get('trip-hotel-name').focus();});var form=get('trip-hotel-form');if(form)form.onsubmit=function(e){e.preventDefault();var name=get('trip-hotel-name').value.trim();if(!name)return;state.answers.stay=name;state.answers.stayUnsure=false;state.answers.hotelEdited=true;applyStay();save();rememberTrip();write(KEY+'lastTrip',{answers:state.answers});render();};}
     function planNotices(p) {
@@ -506,6 +526,13 @@
             var previous={plan:state.plan,answers:state.answers,tripId:state.tripId,packed:state.packed,edits:state.edits,viewing:state.viewing};
             try{state.plan=plan;state.answers=Object.assign({},defaults,t.answers||{});state.tripId=t.id;state.packed=t.packed||{};state.edits=t.snapshot&&t.snapshot.edits||t.draftEdits||{};state.viewing=t.snapshot?'finished':'draft';return prepRemaining();}finally{Object.assign(state,previous);}
         }
+        // One-line card meta: "Nov 25–29" (year only when it isn't this year); the status tag carries the countdown.
+        function cardDates(t){
+            if(!t.start)return 'Dates not set';
+            var a=new Date(t.start+'T12:00:00'),b=new Date((t.end||t.start)+'T12:00:00'),M=function(d){return d.toLocaleDateString('en-US',{month:'short'});},yr=b.getFullYear()!==new Date().getFullYear()?', '+b.getFullYear():'';
+            return (t.end&&t.end!==t.start?(M(a)===M(b)&&a.getFullYear()===b.getFullYear()?M(a)+' '+a.getDate()+'–'+b.getDate():M(a)+' '+a.getDate()+(a.getFullYear()!==b.getFullYear()?', '+a.getFullYear():'')+' – '+M(b)+' '+b.getDate()):M(a)+' '+a.getDate())+yr;
+        }
+        function fullDates(t){return t.start?dateLabel(t.start)+(t.end?' – '+dateLabel(t.end):''):'Dates not set';}
         function zone(t){return t.timeZone||Engine.matchDestination(t.destination||'').tz||'UTC';}
         function todayBlock(t,status){
             if(status.kind!=='progress')return '';
@@ -521,7 +548,7 @@
             var values=dayRingContext(day,todayItems,nextDay&&nextDay.items,ringDays).ringResult.values;var rings=window.GoNowRings.summary(values);state.plan=savedPlan;state.answers=savedAnswers;
             return '<section class="card today-block" data-testid="today-block"><h2>Today</h2><p>'+esc(dateLabel(day.date))+' · '+esc(day.theme||day.title||'Your day')+'</p><p>'+esc(rings)+'</p><p>'+esc(next?'Next · '+(next.start==null?next.time:window.DayBuilder.clock(next.start))+' · '+next.title:'No more scheduled activities today')+'</p><button data-open-trip="'+esc(t.id)+'" data-today="'+day.date+'">Open today</button></section>';
         }
-        view.innerHTML='<div class="shell dashboard" data-testid="dashboard"><h1>Your trips</h1>'+btn('+ New trip','new-trip','primary')+trips.map(function(t){return todayBlock(t,window.GoNowDashboard.status(t,{today:override,timeZone:zone(t)}));}).join('')+'<div class="dashboard-grid">'+trips.map(function(t){var status=window.GoNowDashboard.status(t,{today:override,timeZone:zone(t)}),left=prepCount(t);return '<article class="card" data-testid="trip-card" data-trip="'+esc(t.id)+'"><span class="badge" data-testid="trip-status">'+esc(status.label)+'</span><h2><button class="trip-title" data-open-trip="'+esc(t.id)+'">'+esc(t.destination||t.title||'Trip')+'</button></h2><p>'+(t.start?esc(dateLabel(t.start))+(t.end?' – '+esc(dateLabel(t.end)):''):'Dates not set')+'</p>'+(tripConfirmed(t)?btn('Trip prep · '+(left===0?'All set':left+' left'),'card-trip-prep','outline','data-trip="'+esc(t.id)+'"'):'')+'<div class="trip-menu"><button type="button" data-trip-more aria-expanded="false" aria-label="More options for '+esc(t.destination||'trip')+'">⋯</button><div hidden>'+btn('Open','view-finished','outline','data-trip="'+esc(t.id)+'"')+btn('Edit draft','edit-draft','outline','data-trip="'+esc(t.id)+'"')+btn('Delete','delete-trip','outline','data-trip="'+esc(t.id)+'"')+'</div></div></article>';}).join('')+'</div></div>';
+        view.innerHTML='<div class="shell dashboard" data-testid="dashboard"><h1>Your trips</h1>'+btn('+ New trip','new-trip','primary')+trips.map(function(t){return todayBlock(t,window.GoNowDashboard.status(t,{today:override,timeZone:zone(t)}));}).join('')+'<div class="dashboard-grid">'+trips.map(function(t){var status=window.GoNowDashboard.status(t,{today:override,timeZone:zone(t)}),left=prepCount(t);return '<article class="card trip-card" data-testid="trip-card" data-trip="'+esc(t.id)+'"><h2><button class="trip-title" data-open-trip="'+esc(t.id)+'">'+esc(t.destination||t.title||'Trip')+'</button></h2><div class="trip-meta" data-testid="trip-meta"><span class="trip-dates" aria-hidden="true">'+esc(cardDates(t))+'</span><span class="sr-only">'+esc(fullDates(t))+'</span><span class="badge" data-testid="trip-status">'+esc(status.label)+'</span></div><div class="trip-card-actions">'+(tripConfirmed(t)?btn('Trip prep · '+(left===0?'All set':left+' left'),'card-trip-prep','outline','data-trip="'+esc(t.id)+'"'):'')+'<div class="trip-menu"><button type="button" data-trip-more aria-expanded="false" aria-label="More options for '+esc(t.destination||'trip')+'">'+v2i('more',20)+'</button><div hidden>'+btn('Open','view-finished','outline','data-trip="'+esc(t.id)+'"')+btn('Edit draft','edit-draft','outline','data-trip="'+esc(t.id)+'"')+btn('Delete','delete-trip','outline','data-trip="'+esc(t.id)+'"')+'</div></div></div></article>';}).join('')+'</div></div>';
         view.querySelectorAll('[data-trip-more]').forEach(function(b){b.onclick=function(){var open=b.getAttribute('aria-expanded')!=='true';b.setAttribute('aria-expanded',String(open));b.nextElementSibling.hidden=!open;};});
         on('new-trip',function(){archiveTrip();newTripFlow=true;state.tripId=null;state.plan=null;state.answers=Object.assign({},defaults,{level:state.answers.level,activities:(state.answers.activities||[]).slice()});home();});
         function open(id){var t=trips.find(function(t){return t.id===id;});newTripFlow=false;openSaved(id,t.snapshot?'plan':'draft');}
@@ -529,7 +556,7 @@
         view.querySelectorAll('[data-testid=view-finished]').forEach(function(b){b.onclick=function(){var t=trips.find(function(t){return t.id===b.dataset.trip;});newTripFlow=false;openSaved(t.id,t.snapshot?'finished':'draft');};});
         view.querySelectorAll('[data-testid=card-trip-prep]').forEach(function(b){b.onclick=function(){newTripFlow=false;openSaved(b.dataset.trip,'prep');};});
         view.querySelectorAll('[data-testid=edit-draft]').forEach(function(b){b.onclick=function(){newTripFlow=false;openSaved(b.dataset.trip,'draft');};});
-        view.querySelectorAll('[data-testid=delete-trip]').forEach(function(b){b.onclick=function(){var t=trips.find(function(t){return t.id===b.dataset.trip;}),dialog=document.createElement('dialog');dialog.setAttribute('role','alertdialog');dialog.setAttribute('aria-labelledby','delete-trip-title');dialog.innerHTML='<h2 id="delete-trip-title">Delete your '+esc(t.destination||t.title||'')+' trip?</h2><p>This removes it from this device.</p><button data-cancel>Cancel</button><button data-delete>Delete</button>';document.body.append(dialog);function close(){dialog.close();dialog.remove();if(b.isConnected)b.focus();}dialog.querySelector('[data-cancel]').onclick=close;dialog.oncancel=function(e){e.preventDefault();close();};dialog.querySelector('[data-delete]').onclick=function(){if(window.goNowAccount&&window.goNowAccount.stopSharing)window.goNowAccount.stopSharing(t.id).catch(function(){});var remaining=readTrips().filter(function(x){return x.id!==t.id;});writeTrips(remaining);var records=read('gonow.prep.v1',{});delete records[t.id];write('gonow.prep.v1',records);if(!remaining.some(function(x){return x.planId===t.planId;})&&t.planId){['daybuilder:','edits:','packing:','packing-meta:'].forEach(function(key){erase(KEY+key+t.planId);});}if(state.tripId===t.id){state.tripId=null;state.plan=null;state.answers=Object.assign({},defaults);erase(KEY+'activeTrip');}erase(KEY+'answers');erase(KEY+'lastTrip');close();home();var target=view.querySelector('h1');if(target){target.tabIndex=-1;target.focus();}};dialog.showModal();dialog.querySelector('[data-cancel]').focus();};});
+        view.querySelectorAll('[data-testid=delete-trip]').forEach(function(b){b.onclick=function(){var t=trips.find(function(t){return t.id===b.dataset.trip;}),dialog=document.createElement('dialog');dialog.setAttribute('role','alertdialog');dialog.setAttribute('aria-labelledby','delete-trip-title');dialog.innerHTML='<h2 id="delete-trip-title">Delete your '+esc(t.destination||t.title||'')+' trip?</h2><p>This removes it from this device.</p><button data-cancel>Cancel</button><button data-delete>Delete</button>';document.body.append(dialog);function close(){dialog.close();dialog.remove();if(b.isConnected)b.focus();}dialog.querySelector('[data-cancel]').onclick=close;dialog.oncancel=function(e){e.preventDefault();close();};dialog.querySelector('[data-delete]').onclick=function(){if(window.goNowAccount&&window.goNowAccount.stopSharing)window.goNowAccount.stopSharing(t.id).catch(function(){});if(window.goNowAccount&&window.goNowAccount.remove)window.goNowAccount.remove(t.id);var remaining=readTrips().filter(function(x){return x.id!==t.id;});writeTrips(remaining);var records=read('gonow.prep.v1',{});delete records[t.id];write('gonow.prep.v1',records);if(!remaining.some(function(x){return x.planId===t.planId;})&&t.planId){['daybuilder:','edits:','packing:','packing-meta:'].forEach(function(key){erase(KEY+key+t.planId);});}if(state.tripId===t.id){state.tripId=null;state.plan=null;state.answers=Object.assign({},defaults);erase(KEY+'activeTrip');}erase(KEY+'answers');erase(KEY+'lastTrip');close();home();var target=view.querySelector('h1');if(target){target.tabIndex=-1;target.focus();}};dialog.showModal();dialog.querySelector('[data-cancel]').focus();};});
     }
     function home(){
         archiveTrip();
@@ -1117,10 +1144,8 @@
     function bindPlanPrep(){
         if(state.shared)return;
         var confirmed=tripConfirmed(currentTrip());
-        // One compact action row: status/primary action first, Edit picks beside it.
-        var editPicksBtn=isPickPlan(state.plan)?btn('Edit picks','edit-picks','outline'):'';
-        view.querySelector('.plan-title').insertAdjacentHTML('afterbegin',confirmed?'<div class="draft-confirm-row">'+btn('Trip prep · '+(prepRemaining()?prepRemaining()+' left':'All set'),'trip-prep-button','prep-header')+editPicksBtn+'</div>':'<div class="draft-confirm-row"><span class="badge">Draft</span>'+btn('Confirm plan','confirm-plan','primary')+editPicksBtn+'</div>');
-        if(editPicksBtn)on('edit-picks',beginEditPicks);
+        // The primary action and Edit picks are rendered with the header (planPrimaryHTML / planMoreHTML).
+        on('edit-picks',beginEditPicks);
         on('confirm-plan',confirmTrip);
         on('trip-prep-button',function(){go('prep');});
     }
@@ -1223,7 +1248,7 @@
         var days={};p.days.forEach(function(d){var old=previous.raw.days[d.date];days[d.date]={date:d.date,chronological:old&&old.chronological,unscheduled:d.unscheduled||[],items:d.items.map(function(i){var prior=old&&old.items.find(function(x){return x.id===i.id;});return prior&&prior.preferred===i.start?prior:DayBuilder.convert(i);})};});
         var builder={days:days,flightTime:previous.raw.flightTime||result.flightTime};
         write('gonow:daybuilder:'+p.id,builder);
-        var savedTrips=readTrips(),savedTrip=savedTrips.find(function(t){return t.id===state.tripId;});if(savedTrip){savedTrip.builder=cloneData(builder);writeTrips(savedTrips);}
+        var savedTrips=readTrips(),savedTrip=savedTrips.find(function(t){return t.id===state.tripId;});if(savedTrip){GC().noteTombstones(savedTrip,builder);memberEdits(savedTrip,savedTrip.builder,builder);savedTrip.builder=cloneData(builder);writeTrips(savedTrips);}
         editingPicks=null;save();showPlan(p,true);
         var trips=readTrips(),trip=trips.find(function(t){return t.id===state.tripId;});if(tripConfirmed(trip)){trip.snapshot.builder=DayBuilder.exportState();writeTrips(trips);}
         toast('Plan updated ·',function(){
@@ -1248,7 +1273,7 @@
         result.days.forEach(function(d){var template=p.days.find(function(t){return t.date===d.date;});if(template&&template.car)d.car=template.car;});
         p.destinationId=Engine.matchDestination(state.answers.destination).id;if(pickCatalog().generic)p.destinationId=GoNowPlaceSource.slug(state.answers.destination);p.id=p.destinationId+'-picks-'+p.start;p.days=result.days;p.unfit=result.unfit;p.bookingIssues=result.bookingIssues;p.curatedMismatch=false;p.banner='';
         p.start=result.days[0].date;p.end=result.days[result.days.length-1].date;p.flightTime=result.flightTime;
-        p.meta=Engine.dateRange(p.start,p.end)+' · '+(state.answers.who||'Travelers')+' · Ages '+state.answers.ages.join(' & ');
+        p.meta=Engine.dateRange(p.start,p.end)+' · '+(state.answers.who||'Travelers')+((state.answers.ages||[]).length?' · Ages '+state.answers.ages.join(' & '):'');
         result.days.forEach(function(d){d.items.forEach(function(i){if(i.photo)ITEM_PHOTOS[i.id]=i.photo;});});
         showPlan(Engine.applyAgeRules(p,state.answers),false);
     }
@@ -1262,12 +1287,12 @@
         view.innerHTML='<section class="shell pick-screen" data-testid="'+state.screen+'"><h1>Pick '+(food?'restaurants':'activities')+'</h1><div class="pick-chips">'+chips.map(function(c){return '<button data-pick-filter="'+c+'" aria-pressed="'+(pickFilter===c)+'">'+c+'</button>';}).join('')+'</div><label class="pick-search">Search<input type="search" data-testid="pick-search" value="'+esc(pickQuery)+'"></label><p class="muted">Sample places for now</p><div id="pick-results"></div><div class="pick-footer"><button data-testid="pick-back">Back</button><span id="pick-count" aria-live="polite"></span>'+btn(food?(editingPicks?'Update plan':'Check out'):'Next: restaurants','pick-next','primary')+'</div></section>';
         function results(){
             var items=PickCatalog.filter(catalog[key],pickQuery,pickFilter,a),mixed=!!pickQuery||pickFilter!=='All';
-            function cards(list){return '<div class="pick-grid">'+list.map(function(i){var selected=a.picks[key].includes(i.id),locked=!!i.reservation||pickLocked(i.id);return '<article class="pick-card '+(selected?'picked':'')+'" data-testid="pick-card" data-pick-id="'+i.id+'"><button class="pick-toggle" data-pick-toggle="'+i.id+'" aria-pressed="'+selected+'" aria-label="'+esc(i.name)+'" '+(locked?'aria-disabled="true"':'')+'><img src="'+i.photo+'" alt="'+esc(i.name)+'"><span><strong>'+esc(i.name)+'</strong><small>'+esc(locked&&food&&mixed&&i.section==='picks'?'🌿 GoNow Pick':food?i.cuisine+' · '+i.area+' · '+i.price:PickCatalog.duration(i.duration)+' · '+i.effort+' · '+i.price,true)+'</small>'+(pickLocked(i.id)?'<small>Locked</small>':locked?'<small>🔒 Booked '+new Date(i.reservation.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'})+' '+DayBuilder.clock(Number(i.reservation.time.slice(0,2))*60+Number(i.reservation.time.slice(3)))+'</small>':!food&&PickCatalog.must(i,a)?'<small>Must-do</small>':food&&mixed&&i.section==='picks'?'<small>🌿 GoNow Pick</small>':'')+'</span><b aria-hidden="true">'+(selected?'✓':'')+'</b></button><button class="pick-info" data-pick-info="'+i.id+'" aria-label="Details: '+esc(i.name)+'">ⓘ</button></article>';}).join('')+'</div>';}
+            function cards(list){return '<div class="pick-grid">'+list.map(function(i){var selected=a.picks[key].includes(i.id),locked=!!i.reservation||pickLocked(i.id);return '<article class="pick-card '+(selected?'picked':'')+'" data-testid="pick-card" data-pick-id="'+i.id+'"><button class="pick-toggle" data-pick-toggle="'+i.id+'" aria-pressed="'+selected+'" aria-label="'+esc(i.name)+'" '+(locked?'aria-disabled="true"':'')+'><img src="'+i.photo+'" alt="'+esc(i.name)+'"><span><strong>'+esc(i.name)+'</strong><small>'+(locked&&food&&mixed&&i.section==='picks'?v2i('leaf',14)+'GoNow Pick':esc(food?i.cuisine+' · '+i.area+' · '+i.price:PickCatalog.duration(i.duration)+' · '+i.effort+' · '+i.price,true))+'</small>'+(pickLocked(i.id)?'<small>Locked</small>':locked?'<small>'+v2i('lock',14)+'Booked '+new Date(i.reservation.date+'T12:00:00').toLocaleDateString('en-US',{weekday:'short'})+' '+DayBuilder.clock(Number(i.reservation.time.slice(0,2))*60+Number(i.reservation.time.slice(3)))+'</small>':!food&&PickCatalog.must(i,a)?'<small>Must-do</small>':food&&mixed&&i.section==='picks'?'<small>'+v2i('leaf',14)+'GoNow Pick</small>':'')+'</span><b aria-hidden="true">'+(selected?'✓':'')+'</b></button><button class="pick-info" data-pick-info="'+i.id+'" aria-label="Details: '+esc(i.name)+'">ⓘ</button></article>';}).join('')+'</div>';}
             document.getElementById('pick-results').innerHTML=!items.length?'<p>No matches · try another word</p>':food&&!mixed?['popular','picks'].map(function(s){return '<h2>'+(s==='popular'?'Popular':'GoNow Picks')+'</h2>'+cards(items.filter(function(i){return i.section===s;}));}).join(''):cards(items);
             var count=a.picks[key].length,total=catalog.activities.filter(function(i){return a.picks.activities.includes(i.id);}).reduce(function(s,i){return s+i.duration;},0);
             document.getElementById('pick-count').textContent=food?'Picked '+count:PickCatalog.count(count,total,PickScheduler.capacity(a));
             view.querySelectorAll('[data-pick-toggle]').forEach(function(b){b.onclick=function(){var i=catalog[key].find(function(i){return i.id===b.dataset.pickToggle;});if(i.reservation||pickLocked(i.id))return;a.picks[key]=a.picks[key].includes(i.id)?a.picks[key].filter(function(id){return id!==i.id;}):a.picks[key].concat(i.id);save();results();};});
-            view.querySelectorAll('[data-pick-info]').forEach(function(b){b.onclick=function(){var i=catalog[key].find(function(i){return i.id===b.dataset.pickInfo;}),sheet=document.getElementById('sheet'),credit=window.PHOTO_CREDITS.find(function(c){return i.photo==='images/'+c.id+'.jpg';});sheet.innerHTML='<button id="pick-close" aria-label="Close">×</button><img class="pick-detail-photo" src="'+i.photo+'" alt="'+esc(i.name)+'">'+(i.exampleDish?'<small>Example dish</small>':'')+(credit?'<small class="pick-photo-credit">Photo: <a href="'+credit.photoUrl+'" target="_blank" rel="noopener">'+esc(credit.photographer)+' · '+esc(credit.license)+'</a></small>':'')+'<h2>'+esc(i.name)+'</h2><p>'+esc(i.intro)+'</p><p>Hours · '+DayBuilder.clock(i.hours.open)+'–'+DayBuilder.clock(i.hours.close)+'</p>'+(i.closedDays&&i.closedDays.length?'<p>Closed · '+i.closedDays.map(function(d){return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d];}).join(', ')+'</p>':'')+(i.closedDates.length?'<p>Closed · '+esc(i.closedDates.join(', '))+'</p>':'')+'<p>How long · '+PickCatalog.duration(i.duration)+'</p><p>Price · '+esc(i.price)+'</p>'+(i.reservation?'<p>🔒 Booked '+esc(i.reservation.date+' '+i.reservation.time)+'</p>':'')+(food?'<h3>Sample menu</h3>'+i.sampleMenu.map(function(m){return '<p>'+esc(m.name)+' · '+esc(m.price)+'</p>';}).join(''):'')+'<h3>Example reviews</h3>'+i.sampleReviews.map(function(r){return '<p>'+r.stars+' ★ · '+esc(r.text)+'</p>';}).join('')+(!i.reservation&&!pickLocked(i.id)?'<footer class="pick-detail-footer"><button class="'+(a.picks[key].includes(i.id)?'outline':'primary')+' full" id="pick-detail-toggle">'+(a.picks[key].includes(i.id)?'Remove':'Add')+'</button></footer>':'');sheet.setAttribute('data-testid','pick-details');sheet.showModal();document.getElementById('pick-close').onclick=function(){sheet.close();};if(document.getElementById('pick-detail-toggle'))document.getElementById('pick-detail-toggle').onclick=function(){view.querySelector('[data-pick-toggle="'+i.id+'"]').click();sheet.close();};};});
+            view.querySelectorAll('[data-pick-info]').forEach(function(b){b.onclick=function(){var i=catalog[key].find(function(i){return i.id===b.dataset.pickInfo;}),sheet=document.getElementById('sheet'),credit=window.PHOTO_CREDITS.find(function(c){return i.photo==='images/'+c.id+'.jpg';});sheet.innerHTML='<button id="pick-close" aria-label="Close">×</button><img class="pick-detail-photo" src="'+i.photo+'" alt="'+esc(i.name)+'">'+(i.exampleDish?'<small>Example dish</small>':'')+(credit?'<small class="pick-photo-credit">Photo: <a href="'+credit.photoUrl+'" target="_blank" rel="noopener">'+esc(credit.photographer)+' · '+esc(credit.license)+'</a></small>':'')+'<h2>'+esc(i.name)+'</h2><p>'+esc(i.intro)+'</p><p>Hours · '+DayBuilder.clock(i.hours.open)+'–'+DayBuilder.clock(i.hours.close)+'</p>'+(i.closedDays&&i.closedDays.length?'<p>Closed · '+i.closedDays.map(function(d){return ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d];}).join(', ')+'</p>':'')+(i.closedDates.length?'<p>Closed · '+esc(i.closedDates.join(', '))+'</p>':'')+'<p>How long · '+PickCatalog.duration(i.duration)+'</p><p>Price · '+esc(i.price)+'</p>'+(i.reservation?'<p>'+v2i('lock',14)+'Booked '+esc(i.reservation.date+' '+i.reservation.time)+'</p>':'')+(food?'<h3>Sample menu</h3>'+i.sampleMenu.map(function(m){return '<p>'+esc(m.name)+' · '+esc(m.price)+'</p>';}).join(''):'')+'<h3>Example reviews</h3>'+i.sampleReviews.map(function(r){return '<p>'+r.stars+' ★ · '+esc(r.text)+'</p>';}).join('')+(!i.reservation&&!pickLocked(i.id)?'<footer class="pick-detail-footer"><button class="'+(a.picks[key].includes(i.id)?'outline':'primary')+' full" id="pick-detail-toggle">'+(a.picks[key].includes(i.id)?'Remove':'Add')+'</button></footer>':'');sheet.setAttribute('data-testid','pick-details');sheet.showModal();document.getElementById('pick-close').onclick=function(){sheet.close();};if(document.getElementById('pick-detail-toggle'))document.getElementById('pick-detail-toggle').onclick=function(){view.querySelector('[data-pick-toggle="'+i.id+'"]').click();sheet.close();};};});
         }
         results();view.querySelectorAll('[data-pick-filter]').forEach(function(b){b.onclick=function(){pickFilter=b.dataset.pickFilter;pickScreen();};});view.querySelector('input').oninput=function(e){pickQuery=e.target.value;results();};
         on('pick-back',function(){if(!food&&editingPicks){state.answers=editingPicks.answers;editingPicks=null;save();go('plan');return;}pickFilter='All';pickQuery='';go(food?'pick-activities':pickBackPage());});on('pick-next',function(){pickFilter='All';pickQuery='';if(food)checkoutPicks();else go('pick-food');});
@@ -1521,7 +1546,7 @@
         });
         return'<article class="item '+esc(it.kind)+'">'+(['travel','flight'].includes(it.kind)?icon('transport'):'')+(opts.photo&&ITEM_PHOTOS[it.id]&&!edit.swapped&&!it.dietReplacement?photo(ITEM_PHOTOS[it.id], title, 'db-photo'):(opts.photo?'<p class="activity-fallback">'+icon('info')+' No verified activity photo.</p>':''))+'<div class="row" style="gap:5px">'+(it.requested?'<span class="badge">'+icon('info')+' You requested this</span>':'')+(it.kind==='meal'?'<span class="badge">Meal pick · '+(/hotel|Kahala|Plumeria|Veranda|Alan Wong|birthday dinner/i.test(title+' '+(it.desc||''))&&!/La Mer|Waikiki|Ala Moana|Kailua|Aunty Pat/i.test(title)?'Near hotel':'Local area')+'</span>':'')+'</div><h3>'+esc(title)+'</h3>'+(it.price?'<p><strong>approx. '+esc(it.price)+'</strong><small> · verify before booking</small></p>':'')+(it.bestTime?'<p><strong>Best at:</strong> '+esc(it.bestTime)+'</p>':'')+'<p>'+esc(edit.desc||it.desc)+'</p>'+dietTag(it)+personalNotes(it)+(note?'<p class="banner">Your note: '+esc(note, true)+'</p>':'')+sources(it.sources)+bookingLink(it)+(it.tips?it.tips.map(function(t) {
             return'<a class="badge tip-chip" data-testid="activity-tip" href="'+esc(safeHref(t.url))+'" target="_blank" rel="noopener noreferrer">'+esc(t.sourceType)+' · '+esc(t.text)+' ↗</a>';
-        }).join(''):'')+(opts.noActions?'':'<div class="row"><details class="item-more"><summary aria-label="More actions for '+esc(title)+'">⋯</summary>'+btn('Edit', 'item-edit', '', 'data-edit="'+esc(it.id)+'"')+btn('Swap', 'item-swap', '', 'data-swap="'+esc(it.id)+'"')+btn('Remove', 'item-remove', '', 'data-remove="'+esc(it.id)+'"')+'</details>'+(opts.noLock?'':btn((edit.locked||it.locked)?icon('lock'):icon('unlock'),'item-lock','icon-button','aria-label="'+((edit.locked||it.locked)?'Unlock ':'Lock ')+esc(title)+'" data-lock="'+esc(it.id)+'"'))+'</div><div id="edit-'+esc(it.id)+'"></div>')+(opts.travel&&it.travelToNext?'<p class="travel-chip db-next" data-testid="travel-chip">'+travelIcon(it.travelToNext)+' <strong>Getting to the next stop:</strong> '+esc(it.travelToNext)+'</p>':'')+'</article>';
+        }).join(''):'')+(opts.noActions?'':'<div class="row"><details class="item-more"><summary aria-label="More actions for '+esc(title)+'">'+v2i('more',20)+'</summary>'+btn('Edit', 'item-edit', '', 'data-edit="'+esc(it.id)+'"')+btn('Swap', 'item-swap', '', 'data-swap="'+esc(it.id)+'"')+btn('Remove', 'item-remove', '', 'data-remove="'+esc(it.id)+'"')+'</details>'+(opts.noLock?'':btn((edit.locked||it.locked)?icon('lock'):icon('unlock'),'item-lock','icon-button','aria-label="'+((edit.locked||it.locked)?'Unlock ':'Lock ')+esc(title)+'" data-lock="'+esc(it.id)+'"'))+'</div><div id="edit-'+esc(it.id)+'"></div>')+(opts.travel&&it.travelToNext?'<p class="travel-chip db-next" data-testid="travel-chip">'+travelIcon(it.travelToNext)+' <strong>Getting to the next stop:</strong> '+esc(it.travelToNext)+'</p>':'')+'</article>';
     }
     function noteCount(count){return count+' '+(count===1?'note':'notes');}
     function dayBookings(items) {
@@ -1733,7 +1758,7 @@
         var current=days.find(function(day){return day.date===d.date;});
         var next=days[days.findIndex(function(day){return day.date===d.date;})+1];
         var ringItems=schedule&&current?current.items:m.items;
-        return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+info+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
+        return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+(window.GoNowTheme?window.GoNowTheme.dialHTML(d.date):'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+info+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
     }
     function dayFooterHTML(d, i, m) {
         if(!d.relax&&!d.rain)return '';
@@ -1756,7 +1781,7 @@
         function find(id,date){return model(date).items.find(function(it){return it.id===id;});}
         return {
             flightAnswers:Object.assign({},state.answers,{start:p.start,end:p.end}),saveFlights:function(a){Object.assign(state.answers,a);save();},
-            saveDraft:function(raw){if(state.shared||state.viewing==='finished')return;var list=readTrips(),t=list.find(function(t){return t.id===state.tripId;});if(t){t.builder=cloneData(raw);t.answers=cloneData(state.answers);writeTrips(list);}},
+            saveDraft:function(raw){if(state.shared||state.viewing==='finished')return;var list=readTrips(),t=list.find(function(t){return t.id===state.tripId;});if(t){var prev=t.builder;GC().noteTombstones(t,raw);memberEdits(t,prev,raw);t.builder=cloneData(raw);t.answers=cloneData(state.answers);writeTrips(list);}},
             swapCatalog:function(){var c=pickCatalog();if(c)return (c.activities||[]).concat(c.restaurants||[]);if(isPickPlan(state.plan)&&!curatedCatalog()&&window.GoNowPlaceSource){ensureNearby().catch(function(){});return loadingNearby?null:[];}return [];},
             swapPicks:function(oldPick,newPick){var before=cloneData(state.answers.picks||{activities:[],restaurants:[]});state.answers.picks=cloneData(before);var c=pickCatalog();[oldPick,newPick].forEach(function(p,index){if(!p)return;var key=c.restaurants.some(function(x){return x.id===p.id;})?'restaurants':'activities';state.answers.picks[key]=(state.answers.picks[key]||[]).filter(function(id){return id!==p.id;});if(index)state.answers.picks[key].push(p.id);});save();return function(){state.answers.picks=before;save();};},
             undo:function(message,restore){toast(message,restore);toastEl.setAttribute('data-testid','plan-toast');toastEl.querySelector('button').setAttribute('data-testid','plan-undo');},
@@ -1887,6 +1912,7 @@
             ]);
         });
         bindShareMenu();
+        bindPlanMore();
         on('print-plan', function() { earn('Printed a plan'); window.print(); });
         on('share-link', shareTrip);
         on('download-ics', downloadICS);
@@ -2352,7 +2378,7 @@
     function midFlow(){var s=state.screen;if(state.shared)return false;if(steps.indexOf(s)>=0||extra.indexOf(s)>=0||['fork','recommendations','pick-activities','pick-food'].indexOf(s)>=0)return true;if((s==='plan'||s==='draft')&&state.plan&&!tripConfirmed(currentTrip()))return true;return false;}
     // Same reorder rule as DayBuilder: unlocked items run in order from the day's first start.
     function releaseTimes(d){var first=null,seen=false;d.items.forEach(function(x){if(x.locked||x.booked||x.textTime||x.kind==='flight'||x.kind==='prep')return;if(!seen){seen=true;first=Number.isFinite(x.preferred)?x.preferred:null;}x.preferred=null;delete x.manualTime;delete x.hoursOk;});var lead=d.items.find(function(x){return !(x.locked||x.booked||x.textTime||x.kind==='flight'||x.kind==='prep');});if(lead&&first!==null)lead.preferred=first;}
-    var lastGroupTrip=null,seenGroupId=null,appliedGroupChanges={};
+    var groupSeen={},appliedGroupChanges={},applyingGroup=false;
     // Earlier preview builds stored Google photo URLs with the key; rewrite them to key-free tokens.
     function scrubPhotoKeys(){try{var re=/https:\/\/places\.googleapis\.com\/v1\/(places\/[\w-]+\/photos\/[\w-]+)\/media\?[^"\s]*/g;Object.keys(localStorage).filter(function(k){return k.indexOf('gonow')===0;}).forEach(function(k){var v=localStorage.getItem(k);if(v&&v.indexOf('places.googleapis.com/v1/places/')>=0&&/key=/.test(v)){if(k.indexOf('gonow:places:')===0)localStorage.removeItem(k);else localStorage.setItem(k,v.replace(re,'gplace:$1'));}});}catch(e){}}
     function tripRange(t){var a=t.start||(t.plan&&t.plan.start)||'',b=t.end||(t.plan&&t.plan.end)||'';if(!a)return '';try{return dateLabel(a,{month:'short',day:'numeric'})+(b&&b!==a?'–'+dateLabel(b,{month:'short',day:'numeric'}):'');}catch(e){return a;}}
@@ -2381,42 +2407,78 @@
         var list=readTrips();list.unshift(trip);writeTrips(list);
         if(plan){openSaved(id,'plan');toast('Copied to your trips as a draft');}else{state.tripId=id;state.answers=answers;save();go('start');}
     }
+    // A member's day-plan edits (order, tray, hand-set times) go to the group as small changes; the owner folds them in.
+    function GC(){return window.GoNowCloud||{shareable:function(t){return t;},dropDead:function(b){return b;},noteTombstones:function(t){return t;}};}
+    function clockText(m){var h=Math.floor(m/60)%24,mm=m%60;return ((h%12)||12)+':'+(mm<10?'0':'')+mm+' '+(h<12?'AM':'PM');}
+    // Only a person's own edits count: saves from re-rendering or adopting the group copy never become group changes.
+    var lastUserInput=0;['pointerdown','keydown','drop','touchend'].forEach(function(t){document.addEventListener(t,function(){lastUserInput=Date.now();},true);});
+    function memberEdits(trip,prev,next){var acct=window.goNowAccount;if(applyingGroup||!acct||!acct.groupFor||!acct.user||Date.now()-lastUserInput>4000)return;var g=acct.groupFor(trip.id);if(!g||g.ownerId===acct.user.uid||!next||!next.days)return;
+        var idOf=function(i){return i&&i.id;},prevDays=(prev&&prev.days)||{},prevItems=[];Object.values(prevDays).forEach(function(d){(d.items||[]).forEach(function(i){prevItems.push(i);});});
+        Object.keys(next.days).forEach(function(date){var b=next.days[date],a=prevDays[date];if(!b||!Array.isArray(b.items))return;
+            if(!a)return;var was=[(a.items||[]).map(idOf),(a.unscheduled||[]).map(idOf)],now=[b.items.map(idOf),(b.unscheduled||[]).map(idOf)];
+            if(JSON.stringify(was)!==JSON.stringify(now))acct.change('day_'+String(date).replace(/[^A-Za-z0-9_-]/g,''),{action:'order',date:date,ids:now[0].join(','),tray:now[1].join(',')});
+            b.items.forEach(function(i){var old=prevItems.find(function(x){return x.id===i.id;});if(old&&i.manualTime&&Number.isFinite(i.preferred)&&i.preferred!==old.preferred&&!(g.locks||{})[i.id])acct.change(i.id,{time:clockText(i.preferred),title:String(i.title||'').slice(0,100)});});});
+        // Removed from the plan entirely (not moved to another day or the tray): the owner removes it too.
+        var still={};Object.values(next.days).forEach(function(d){(d.items||[]).concat(d.unscheduled||[]).forEach(function(i){still[i.id]=1;});});prevItems.forEach(function(i){if(i&&i.id&&!still[i.id]&&!i.custom&&!['flight','travel','prep','hotel'].includes(i.kind))acct.change(i.id,{action:'remove',title:String(i.title||'').slice(0,100)});});}
     var pages=window.GoNowCommunity?window.GoNowCommunity.create({state:state,go:go,toast:toast,readTrips:readTrips,currentTrip:currentTrip,openSaved:openSaved,tripConfirmed:tripConfirmed,dateRange:tripRange,copyTrip:copyTrip,builderFor:builderFor}):null;
     window.__gonow= {
         currentTrip:currentTrip,copyTrip:copyTrip,pages:function(){return pages;},
-        acceptGroup:function(group){
-            var first=seenGroupId!==group.id;seenGroupId=group.id;var version=JSON.stringify(group.trip), changed=lastGroupTrip!==version;
-            lastGroupTrip=version;
-            // The owner's device holds the real trip: never import the shared copy over it (it may be stale).
-            // Only a new device without the trip adopts it; the owner's newer copy is pushed back instead.
-            var owner=window.goNowAccount&&window.goNowAccount.owner(),mine=readTrips().find(function(t){return t.id===group.trip.id;});
-            if(owner&&mine){if(JSON.stringify(mine)!==version&&typeof window.goNowAccount.write==='function')window.goNowAccount.write(readTrips());}
-            else {var list=readTrips().filter(function(t){return t.id!==group.trip.id;});list.unshift(group.trip);localStorage.setItem(TRIPS,JSON.stringify(list));}
-            if(!first&&state.tripId!==group.trip.id)return;
-            if(changed&&!(owner&&mine)){appliedGroupChanges={};if(group.trip.builder)write('gonow:daybuilder:'+group.trip.planId,group.trip.builder);}
-            if(first){appliedGroupChanges={};if(state.tripId!==group.trip.id&&!owner)openSaved(group.trip.id,'plan');}
-            else if(changed&&state.screen==='plan')go('plan');
-            if(!window.goNowAccount.owner()){
+        acceptGroup:function(group){applyingGroup=true;try{window.__gonow.acceptGroupNow(group);}finally{applyingGroup=false;}},
+        acceptGroupNow:function(group){
+            var acct=window.goNowAccount,tid=group&&group.trip&&group.trip.id;if(!tid)return;
+            if((read('gonow:tombstones',{})||{})[tid])return;
+            var stable=(window.GoNowCloud&&window.GoNowCloud.stable)||JSON.stringify,seen=groupSeen[group.id],first=!seen,version=stable(group.trip),changed=!seen||seen!==version;groupSeen[group.id]=version;
+            var owner=!!(acct&&(acct.user?group.ownerId===acct.user.uid:acct.owner&&acct.owner())),list=readTrips(),mine=list.find(function(t){return t.id===tid;});
+            // The owner's device holds the real trip: never import the shared copy over it (it may be stale); a newer
+            // local copy is pushed back instead. Members adopt only the shared part and keep their own answers and notes.
+            if(owner&&mine){if(typeof acct.write==='function'&&stable(GC().shareable(mine))!==version)acct.write(readTrips());}
+            else if(changed||!mine){var shared=cloneData(group.trip);shared.builder=GC().dropDead(shared.builder,shared.tombstones);
+                var merged=Object.assign({},mine||{answers:{destination:shared.destination||'',start:shared.start||'',end:shared.end||''},updatedAt:Date.now()},shared);
+                if(mine&&mine.answers)merged.answers=mine.answers;
+                list=list.filter(function(t){return t.id!==tid;});list.unshift(merged);localStorage.setItem(TRIPS,JSON.stringify(list));
+                // The builder now matches the owner's: changes already folded into it are done.
+                appliedGroupChanges={};write('gonow:applied:'+group.id,(shared.appliedChanges||[]).slice(-500));
+                if(shared.builder&&shared.planId&&(state.tripId===tid||read(KEY+'activeTrip',null)!==tid))write('gonow:daybuilder:'+shared.planId,shared.builder);}
+            // Only a fresh join opens the group trip; other groups update quietly in the background.
+            if(first&&!owner&&state.tripId!==tid&&(group.justJoined||!state.tripId))openSaved(tid,'plan');
+            if(state.tripId!==tid)return;
+            if(!first&&changed&&!(owner&&mine)&&state.screen==='plan')go('plan');
+            if(!owner&&state.plan){
                 var raw=window.DayBuilder.importForPlan(window.DayBuilder.exportState(),state.plan),lockChanged=false;
-                if(raw&&raw.days)Object.values(raw.days).forEach(function(d){d.items.forEach(function(i){if(Object.prototype.hasOwnProperty.call(group.locks,i.id)&&i.locked!==group.locks[i.id]){i.locked=group.locks[i.id];i.userLocked=i.locked;lockChanged=true;}});});
+                if(raw&&raw.days)Object.values(raw.days).forEach(function(d){d.items.forEach(function(i){if(Object.prototype.hasOwnProperty.call(group.locks||{},i.id)&&i.locked!==group.locks[i.id]){i.locked=group.locks[i.id];i.userLocked=i.locked;lockChanged=true;}});});
                 if(lockChanged){write('gonow:daybuilder:'+state.plan.id,raw);if(state.screen==='plan')go('plan');}
             }
-            Object.keys(group.planContent||{}).forEach(function(id){window.__gonow.applyGroupChange({itemId:id,change:group.planContent[id]});});
+            Object.keys(group.planContent||{}).forEach(function(id){window.__gonow.applyGroupChange({itemId:id,change:group.planContent[id],gid:group.id,owner:owner});});
         },
+        // Each change applies exactly once per device: by its change id (cid), or for old cid-less changes by content.
         applyGroupChange:function(s){
-            var signature=JSON.stringify(s.change);if(appliedGroupChanges[s.itemId]===signature||!state.plan)return;
+            if(!state.plan||!s||!s.change)return;var gid=s.gid||(window.goNowAccount&&window.goNowAccount.group&&window.goNowAccount.group.id)||'';
+            var cid=s.change.cid,applied=read('gonow:applied:'+gid,[])||[];
+            var signature=JSON.stringify(s.change);if(cid?applied.indexOf(cid)>=0:appliedGroupChanges[s.itemId]===signature)return;
             // Share exports are compact d/i records; edits and local storage use days/items.
             var raw=window.DayBuilder.importForPlan(window.DayBuilder.exportState(),state.plan);
             state.plan.days.forEach(function(d){if(!raw.days[d.date])raw.days[d.date]=window.DayBuilder.buildSuggested(d.date);});
-            var changed=false;Object.values(raw.days).forEach(function(d){var index=d.items.findIndex(function(i){return i.id===s.itemId;}),item=d.items[index];if(!item)return;var change=s.change;
+            var change=s.change,changed=false;
+            if(change.action==='order'&&raw.days[change.date]){var day=raw.days[change.date],ids=String(change.ids||'').split(',').filter(Boolean),trayIds=String(change.tray||'').split(',').filter(Boolean),before=JSON.stringify([day.items.map(function(i){return i.id;}),(day.unscheduled||[]).map(function(i){return i.id;})]);
+                // An item named in this day's order is taken from wherever it is now (another day, or the tray).
+                var take=function(id){var found=null;Object.values(raw.days).forEach(function(d){if(found)return;var k=d.items.findIndex(function(i){return i.id===id;});if(k>=0){found=d.items.splice(k,1)[0];if(d!==day)releaseTimes(d);return;}var u=(d.unscheduled||[]).findIndex(function(i){return i.id===id;});if(u>=0)found=d.unscheduled.splice(u,1)[0];});return found;};
+                var ordered=ids.map(take).filter(Boolean),tray=trayIds.map(take).filter(Boolean);day.items=ordered.concat(day.items);day.unscheduled=(day.unscheduled||[]).concat(tray);
+                if(JSON.stringify([day.items.map(function(i){return i.id;}),day.unscheduled.map(function(i){return i.id;})])!==before){day.chronological=false;releaseTimes(day);changed=true;}}
+            Object.values(raw.days).forEach(function(d){var index=d.items.findIndex(function(i){return i.id===s.itemId;}),item=d.items[index];if(!item||change.action==='order')return;
                 if(change.time){var start=window.DayBuilder.parseClock(change.time);if(item.preferred!==start){item.preferred=start;item.manualTime=true;changed=true;}}
                 if(change.action==='move-day'&&raw.days[change.date]&&raw.days[change.date]!==d){d.items.splice(index,1);raw.days[change.date].items.push(item);changed=true;}
                 if(change.action==='remove'){d.items.splice(index,1);releaseTimes(d);changed=true;}
+                if(change.action==='tray'){d.items.splice(index,1);d.unscheduled=(d.unscheduled||[]).concat([item]);releaseTimes(d);changed=true;}
                 if(['up','down','position'].includes(change.action)){var at=change.action==='up'?index-1:change.action==='down'?index+1:change.target;d.items.splice(index,1);d.items.splice(Math.max(0,Math.min(d.items.length,at)),0,item);d.chronological=false;releaseTimes(d);changed=true;}
                 if(change.alternative){Object.assign(item,change.alternative);changed=true;}
             });
             appliedGroupChanges[s.itemId]=signature;
-            if(changed){write('gonow:daybuilder:'+state.plan.id,raw);if(state.screen==='plan')go('plan');}
+            if(cid){applied=read('gonow:applied:'+gid,[])||[];applied.push(cid);write('gonow:applied:'+gid,applied.slice(-500));}
+            if(changed)write('gonow:daybuilder:'+state.plan.id,raw);
+            // The owner folds the change into the real trip and records its id, so the shared queue can be cleared.
+            var acct=window.goNowAccount,trips=readTrips(),trip=trips.find(function(t){return t.id===state.tripId;});
+            if(trip&&(changed||(cid&&s.owner))){if(changed)trip.builder=cloneData(raw);if(cid&&acct&&acct.owner())trip.appliedChanges=(trip.appliedChanges||[]).filter(function(x){return x!==cid;}).concat([cid]).slice(-300);writeTrips(trips);}
+            var was=applyingGroup;applyingGroup=true;try{if(changed&&state.screen==='plan')go('plan');}finally{applyingGroup=was;}
         },
         restart:restart, home:goHome, startFromHome:function(){state.tripId=null;state.viewing='live';state.fromHome=true;go('start');}, midFlow:midFlow, tripConfirmed:tripConfirmed,
         state:state, go:go, isOahuPlan:isOahuPlan, isPickPlan:isPickPlan, buildICS:buildICS, planText:planText

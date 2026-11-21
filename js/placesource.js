@@ -39,8 +39,10 @@ const estimates=k=>({duration:['museum','zoo','aquarium'].includes(k)?120:60,eff
 const durationLabel=p=>(p.duration/60)+' h est.';
 const ratingLabel=p=>p.rating?'★ '+p.rating.toFixed(1)+(p.ratingCount?' ('+(p.ratingCount>=1000?Math.round(p.ratingCount/100)/10+'k':p.ratingCount)+')':''):'';
 const cardLine=p=>p.category+' · '+(p.rating?ratingLabel(p):(p.cuisine||durationLabel(p)));
-const icons={park:'♧',beach:'≈',museum:'▥',viewpoint:'△',attraction:'◇',zoo:'◇',aquarium:'≈',gallery:'▥',restaurant:'♨',cafe:'☕'};
-function placeholder(p){return '<div class="place-placeholder" data-testid="place-placeholder" role="img" aria-label="'+(labels[p.type]||'Attraction')+' illustration">'+(icons[p.type]||'◇')+'</div>';}
+// v2: 1.5px line icons on a soft state gradient (no emoji / dingbats).
+const icons={park:'park',beach:'wave',museum:'museum',viewpoint:'view',attraction:'spot',zoo:'spot',aquarium:'wave',gallery:'museum',restaurant:'bowl',cafe:'cup'};
+const lineIcon=n=>root.GoNowIcons?root.GoNowIcons.icon(n,40):'';
+function placeholder(p){return '<div class="place-placeholder" data-testid="place-placeholder" role="img" aria-label="'+(labels[p.type]||'Attraction')+' illustration">'+lineIcon(icons[p.type]||'spot')+'</div>';}
 const root=typeof window==='undefined'?globalThis:window;
 // Drops expired place-cache entries and keeps at most `max` (oldest first). `all` clears the cache to free space.
 function prune(storage,all=false,max=40,now=Date.now()){try{const rows=[];for(let i=0;i<storage.length;i++){const k=storage.key(i);if(!k||!k.startsWith('gonow:places:')||k==='gonow:places:last-geocode')continue;let until=0;try{until=JSON.parse(storage.getItem(k)).until||0;}catch(e){}rows.push([k,until]);}rows.filter(r=>all||r[1]<=now).forEach(r=>storage.removeItem(r[0]));const live=rows.filter(r=>!all&&r[1]>now).sort((a,b)=>a[1]-b[1]);live.slice(0,Math.max(0,live.length-max)).forEach(r=>storage.removeItem(r[0]));}catch(e){}}
