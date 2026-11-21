@@ -4,6 +4,14 @@
 const fs = require('fs');
 const path = require('path');
 const vm = require('vm');
+async function localFetch(url, init){
+  const href = typeof url === 'string' ? url : (url && url.url);
+  if (typeof href === 'string' && !/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(href)) {
+    const body = fs.readFileSync(href);
+    return new Response(body, {status:200, headers:{'Content-Type':'application/json'}});
+  }
+  return fetch(url, init);
+}
 const ROOT = path.resolve(__dirname, '..');
 const ctx = {window:{}, AbortController, setTimeout, clearTimeout, console, Date};
 vm.createContext(ctx);
@@ -19,7 +27,7 @@ async function timeLoad(label, city, opts){
     googleKey: '',
     snapshotBase: path.join(ROOT, 'data/cities') + '/',
     sleep: (ms) => new Promise(r => setTimeout(r, ms)),
-    fetch: (...args) => fetch(...args)
+    fetch: localFetch
   });
   const result = await source.load(city, null, opts);
   const ms = Date.now() - t0;
