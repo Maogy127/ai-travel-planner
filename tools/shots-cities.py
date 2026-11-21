@@ -33,6 +33,8 @@ async def shot(browser, city, width):
     try:
         await pg.goto('http://127.0.0.1:8877/index.html?fast=1')
         await answer(pg, city)
+        # answer() runs question_review_checks, which leaves the page at 390px.
+        await pg.set_viewport_size({'width': width, 'height': 844 if width < 800 else 900})
         await pg.get_by_test_id('fork-no').click()
         await expect(pg.get_by_test_id('pick-card').first).to_be_visible(timeout=20000)
         timing = await pg.evaluate('window.__placeTiming || {}')
