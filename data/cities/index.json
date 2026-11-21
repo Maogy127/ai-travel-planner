@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-21T02:21:48.530Z",
+  "generatedAt": "2026-11-21T02:23:32.563Z",
   "source": "OpenStreetMap (ODbL) and Wikidata (CC0)",
   "base": "data/cities/",
   "cities": [
@@ -488,6 +488,82 @@
       "restaurants": 40,
       "wellness": 20,
       "bytes": 42279
+    },
+    {
+      "slug": "singapore",
+      "name": "Singapore",
+      "aliases": [
+        "Singapore",
+        "singapore"
+      ],
+      "file": "singapore.json",
+      "center": {
+        "lat": 1.3521,
+        "lng": 103.8198
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 44536
+    },
+    {
+      "slug": "bangkok",
+      "name": "Bangkok",
+      "aliases": [
+        "Bangkok",
+        "bangkok"
+      ],
+      "file": "bangkok.json",
+      "center": {
+        "lat": 13.7563,
+        "lng": 100.5018
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 44324
+    },
+    {
+      "slug": "bali",
+      "name": "Bali",
+      "aliases": [
+        "Bali",
+        "bali",
+        "ubud",
+        "denpasar",
+        "canggu",
+        "seminyak",
+        "bali, indonesia"
+      ],
+      "file": "bali.json",
+      "center": {
+        "lat": -8.55,
+        "lng": 115.2
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 40679
+    },
+    {
+      "slug": "london",
+      "name": "London",
+      "aliases": [
+        "London",
+        "london",
+        "london, uk",
+        "lhr",
+        "london (lhr)"
+      ],
+      "file": "london.json",
+      "center": {
+        "lat": 51.5074,
+        "lng": -0.1278
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 49335
     }
   ]
 }
