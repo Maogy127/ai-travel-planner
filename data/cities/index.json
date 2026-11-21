@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-21T02:30:35.716Z",
+  "generatedAt": "2026-11-21T02:34:33.808Z",
   "source": "OpenStreetMap (ODbL) and Wikidata (CC0)",
   "base": "data/cities/",
   "cities": [
@@ -289,6 +289,132 @@
       "bytes": 46594
     },
     {
+      "slug": "nashville",
+      "name": "Nashville",
+      "aliases": [
+        "Nashville",
+        "nashville"
+      ],
+      "file": "nashville.json",
+      "center": {
+        "lat": 36.1627,
+        "lng": -86.7816
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 42678
+    },
+    {
+      "slug": "phoenix",
+      "name": "Phoenix",
+      "aliases": [
+        "Phoenix",
+        "phoenix"
+      ],
+      "file": "phoenix.json",
+      "center": {
+        "lat": 33.4484,
+        "lng": -112.074
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 42393
+    },
+    {
+      "slug": "philadelphia",
+      "name": "Philadelphia",
+      "aliases": [
+        "Philadelphia",
+        "philadelphia",
+        "philly"
+      ],
+      "file": "philadelphia.json",
+      "center": {
+        "lat": 39.9526,
+        "lng": -75.1652
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 49770
+    },
+    {
+      "slug": "tokyo",
+      "name": "Tokyo",
+      "aliases": [
+        "Tokyo",
+        "tokyo",
+        "tokyo, japan",
+        "nrt",
+        "hnd",
+        "tokyo (nrt)",
+        "tokyo (hnd)"
+      ],
+      "file": "tokyo.json",
+      "center": {
+        "lat": 35.6762,
+        "lng": 139.6503
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 49271
+    },
+    {
+      "slug": "kyoto",
+      "name": "Kyoto",
+      "aliases": [
+        "Kyoto",
+        "kyoto",
+        "kyoto, japan"
+      ],
+      "file": "kyoto.json",
+      "center": {
+        "lat": 35.0116,
+        "lng": 135.7681
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 43276
+    },
+    {
+      "slug": "osaka",
+      "name": "Osaka",
+      "aliases": [
+        "Osaka",
+        "osaka"
+      ],
+      "file": "osaka.json",
+      "center": {
+        "lat": 34.6937,
+        "lng": 135.5023
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45037
+    },
+    {
+      "slug": "seoul",
+      "name": "Seoul",
+      "aliases": [
+        "Seoul",
+        "seoul"
+      ],
+      "file": "seoul.json",
+      "center": {
+        "lat": 37.5665,
+        "lng": 126.978
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 43086
+    },
+    {
       "slug": "shanghai",
       "name": "Shanghai",
       "aliases": [
@@ -306,6 +432,25 @@
       "restaurants": 40,
       "wellness": 20,
       "bytes": 43668
+    },
+    {
+      "slug": "beijing",
+      "name": "Beijing",
+      "aliases": [
+        "Beijing",
+        "beijing",
+        "pek",
+        "beijing (pek)"
+      ],
+      "file": "beijing.json",
+      "center": {
+        "lat": 39.9042,
+        "lng": 116.4074
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 43029
     },
     {
       "slug": "hong-kong",
@@ -328,151 +473,6 @@
       "bytes": 47170
     },
     {
-      "slug": "nashville",
-      "name": "Nashville",
-      "aliases": [
-        "Nashville",
-        "nashville"
-      ],
-      "file": "nashville.json",
-      "center": {
-        "lat": 36.1627,
-        "lng": -86.7816
-      },
-      "activities": 50,
-      "restaurants": 40,
-      "wellness": 20,
-      "bytes": 42669
-    },
-    {
-      "slug": "phoenix",
-      "name": "Phoenix",
-      "aliases": [
-        "Phoenix",
-        "phoenix"
-      ],
-      "file": "phoenix.json",
-      "center": {
-        "lat": 33.4484,
-        "lng": -112.074
-      },
-      "activities": 50,
-      "restaurants": 40,
-      "wellness": 20,
-      "bytes": 42390
-    },
-    {
-      "slug": "philadelphia",
-      "name": "Philadelphia",
-      "aliases": [
-        "Philadelphia",
-        "philadelphia",
-        "philly"
-      ],
-      "file": "philadelphia.json",
-      "center": {
-        "lat": 39.9526,
-        "lng": -75.1652
-      },
-      "activities": 50,
-      "restaurants": 40,
-      "wellness": 20,
-      "bytes": 49765
-    },
-    {
-      "slug": "tokyo",
-      "name": "Tokyo",
-      "aliases": [
-        "Tokyo",
-        "tokyo",
-        "tokyo, japan",
-        "nrt",
-        "hnd",
-        "tokyo (nrt)",
-        "tokyo (hnd)"
-      ],
-      "file": "tokyo.json",
-      "center": {
-        "lat": 35.6762,
-        "lng": 139.6503
-      },
-      "activities": 50,
-      "restaurants": 40,
-      "wellness": 20,
-      "bytes": 47864
-    },
-    {
-      "slug": "kyoto",
-      "name": "Kyoto",
-      "aliases": [
-        "Kyoto",
-        "kyoto",
-        "kyoto, japan"
-      ],
-      "file": "kyoto.json",
-      "center": {
-        "lat": 35.0116,
-        "lng": 135.7681
-      },
-      "activities": 50,
-      "restaurants": 40,
-      "wellness": 20,
-      "bytes": 42348
-    },
-    {
-      "slug": "osaka",
-      "name": "Osaka",
-      "aliases": [
-        "Osaka",
-        "osaka"
-      ],
-      "file": "osaka.json",
-      "center": {
-        "lat": 34.6937,
-        "lng": 135.5023
-      },
-      "activities": 50,
-      "restaurants": 40,
-      "wellness": 20,
-      "bytes": 43877
-    },
-    {
-      "slug": "seoul",
-      "name": "Seoul",
-      "aliases": [
-        "Seoul",
-        "seoul"
-      ],
-      "file": "seoul.json",
-      "center": {
-        "lat": 37.5665,
-        "lng": 126.978
-      },
-      "activities": 50,
-      "restaurants": 40,
-      "wellness": 20,
-      "bytes": 41813
-    },
-    {
-      "slug": "beijing",
-      "name": "Beijing",
-      "aliases": [
-        "Beijing",
-        "beijing",
-        "pek",
-        "beijing (pek)"
-      ],
-      "file": "beijing.json",
-      "center": {
-        "lat": 39.9042,
-        "lng": 116.4074
-      },
-      "activities": 50,
-      "restaurants": 40,
-      "wellness": 20,
-      "bytes": 42318
-    },
-    {
       "slug": "taipei",
       "name": "Taipei",
       "aliases": [
@@ -487,7 +487,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 42279
+      "bytes": 43542
     },
     {
       "slug": "singapore",
@@ -504,7 +504,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 44536
+      "bytes": 44540
     },
     {
       "slug": "bangkok",
@@ -521,7 +521,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 44324
+      "bytes": 46747
     },
     {
       "slug": "bali",
@@ -543,7 +543,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 40679
+      "bytes": 40680
     },
     {
       "slug": "london",
@@ -563,7 +563,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 49335
+      "bytes": 49339
     },
     {
       "slug": "paris",
@@ -581,7 +581,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 51137
+      "bytes": 51242
     },
     {
       "slug": "barcelona",
@@ -599,7 +599,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 46341
+      "bytes": 46416
     },
     {
       "slug": "rome",
@@ -617,7 +617,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 45810
+      "bytes": 45827
     },
     {
       "slug": "lisbon",
@@ -636,7 +636,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 45980
+      "bytes": 46072
     },
     {
       "slug": "amsterdam",
@@ -653,7 +653,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 48985
+      "bytes": 48990
     },
     {
       "slug": "berlin",
@@ -670,7 +670,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 51399
+      "bytes": 51495
     },
     {
       "slug": "madrid",
@@ -687,7 +687,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 46193
+      "bytes": 46257
     },
     {
       "slug": "prague",
@@ -705,7 +705,180 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 50225
+      "bytes": 50509
+    },
+    {
+      "slug": "vienna",
+      "name": "Vienna",
+      "aliases": [
+        "Vienna",
+        "vienna",
+        "wien"
+      ],
+      "file": "vienna.json",
+      "center": {
+        "lat": 48.2082,
+        "lng": 16.3738
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 50642
+    },
+    {
+      "slug": "florence",
+      "name": "Florence",
+      "aliases": [
+        "Florence",
+        "florence",
+        "firenze"
+      ],
+      "file": "florence.json",
+      "center": {
+        "lat": 43.7696,
+        "lng": 11.2558
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 43765
+    },
+    {
+      "slug": "venice",
+      "name": "Venice",
+      "aliases": [
+        "Venice",
+        "venice",
+        "venezia"
+      ],
+      "file": "venice.json",
+      "center": {
+        "lat": 45.4408,
+        "lng": 12.3155
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 6,
+      "bytes": 40611
+    },
+    {
+      "slug": "athens",
+      "name": "Athens",
+      "aliases": [
+        "Athens",
+        "athens"
+      ],
+      "file": "athens.json",
+      "center": {
+        "lat": 37.9838,
+        "lng": 23.7275
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 41574
+    },
+    {
+      "slug": "istanbul",
+      "name": "Istanbul",
+      "aliases": [
+        "Istanbul",
+        "istanbul"
+      ],
+      "file": "istanbul.json",
+      "center": {
+        "lat": 41.0082,
+        "lng": 28.9784
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45909
+    },
+    {
+      "slug": "dubai",
+      "name": "Dubai",
+      "aliases": [
+        "Dubai",
+        "dubai"
+      ],
+      "file": "dubai.json",
+      "center": {
+        "lat": 25.2048,
+        "lng": 55.2708
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 41178
+    },
+    {
+      "slug": "sydney",
+      "name": "Sydney",
+      "aliases": [
+        "Sydney",
+        "sydney"
+      ],
+      "file": "sydney.json",
+      "center": {
+        "lat": -33.8688,
+        "lng": 151.2093
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 44035
+    },
+    {
+      "slug": "melbourne",
+      "name": "Melbourne",
+      "aliases": [
+        "Melbourne",
+        "melbourne"
+      ],
+      "file": "melbourne.json",
+      "center": {
+        "lat": -37.8136,
+        "lng": 144.9631
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45871
+    },
+    {
+      "slug": "auckland",
+      "name": "Auckland",
+      "aliases": [
+        "Auckland",
+        "auckland"
+      ],
+      "file": "auckland.json",
+      "center": {
+        "lat": -36.8509,
+        "lng": 174.7645
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 42748
+    },
+    {
+      "slug": "vancouver",
+      "name": "Vancouver",
+      "aliases": [
+        "Vancouver",
+        "vancouver"
+      ],
+      "file": "vancouver.json",
+      "center": {
+        "lat": 49.2827,
+        "lng": -123.1207
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 49348
     }
   ]
 }
