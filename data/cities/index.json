@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-21T02:27:52.932Z",
+  "generatedAt": "2026-11-21T02:30:35.716Z",
   "source": "OpenStreetMap (ODbL) and Wikidata (CC0)",
   "base": "data/cities/",
   "cities": [
@@ -618,6 +618,94 @@
       "restaurants": 40,
       "wellness": 20,
       "bytes": 45810
+    },
+    {
+      "slug": "lisbon",
+      "name": "Lisbon",
+      "aliases": [
+        "Lisbon",
+        "lisbon",
+        "lisboa",
+        "lisbon, portugal"
+      ],
+      "file": "lisbon.json",
+      "center": {
+        "lat": 38.7223,
+        "lng": -9.1393
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 45980
+    },
+    {
+      "slug": "amsterdam",
+      "name": "Amsterdam",
+      "aliases": [
+        "Amsterdam",
+        "amsterdam"
+      ],
+      "file": "amsterdam.json",
+      "center": {
+        "lat": 52.3676,
+        "lng": 4.9041
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 48985
+    },
+    {
+      "slug": "berlin",
+      "name": "Berlin",
+      "aliases": [
+        "Berlin",
+        "berlin"
+      ],
+      "file": "berlin.json",
+      "center": {
+        "lat": 52.52,
+        "lng": 13.405
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 51399
+    },
+    {
+      "slug": "madrid",
+      "name": "Madrid",
+      "aliases": [
+        "Madrid",
+        "madrid"
+      ],
+      "file": "madrid.json",
+      "center": {
+        "lat": 40.4168,
+        "lng": -3.7038
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 46193
+    },
+    {
+      "slug": "prague",
+      "name": "Prague",
+      "aliases": [
+        "Prague",
+        "prague",
+        "praha"
+      ],
+      "file": "prague.json",
+      "center": {
+        "lat": 50.0755,
+        "lng": 14.4378
+      },
+      "activities": 50,
+      "restaurants": 40,
+      "wellness": 20,
+      "bytes": 50225
     }
   ]
 }
