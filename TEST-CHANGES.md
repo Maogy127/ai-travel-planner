@@ -1873,3 +1873,10 @@ Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deploy
   - Date tiles now read Day N / weekday / date numeral, with the same accessible name, plus " · nothing planned" on an empty day.
   - Group votes over 3 read "A B C · 5" (was "A B C 👍 5").
   - Community buttons drop the ♡ ☆ 💬 glyphs for line icons. Their labels are unchanged.
+
+## Free AI and daily weather (cache tag `ai-20261120`)
+
+- `tests/test_travel_time.py:22`: `assert len(assets) == 33` → `assert len(assets) == 35` (adds `js/ai-config.js` and `js/gemini.js`); `?v=v2design-20261120` → `?v=ai-20261120`. Asset HTTP 200 checks unchanged.
+- New: `tests/test_gemini.js`, `tests/test_ai.py`. No other assertions changed.
+
+- `tests/test_full.py` local-info check: "no weather or FX requests" became "no FX requests; weather only daily Open-Meteo". The free daily weather line now deliberately calls Open-Meteo's keyless forecast/archive endpoints (daily fields only); FX calls are still asserted absent.

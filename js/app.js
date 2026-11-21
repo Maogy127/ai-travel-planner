@@ -70,7 +70,7 @@
     var activeGeneration=0, toastTimer, undoPending=false;
     // Only web links reach href; javascript:, data: and other schemes become inert.
     function safeHref(u){u=String(u==null?'':u).trim();return /^https?:\/\//i.test(u)?u:'#';}
-    function v2i(name,size){return window.GoNowIcons?window.GoNowIcons.icon(name,size||16):'';}
+    function v2i(name,size,cls){return window.GoNowIcons?window.GoNowIcons.icon(name,size||16,cls):'';}
     function esc(s, keepEmoji) {
         var text=String(s==null?'':s);
         if(!keepEmoji)text=text.replace(/[\p{Extended_Pictographic}\u200d\ufe0f]/gu,'');
@@ -833,8 +833,8 @@
         if(el)el.disabled=!validQuestion();
     }
     var voiceCleanup;
-    function setupVoice(fieldId, prefix){
-        prefix=prefix||'';
+    function setupVoice(fieldId, prefix, opts){
+        prefix=prefix||'';opts=opts||{};
         function voiceGet(id){return get(prefix+id);}
         if(voiceCleanup)voiceCleanup();
         var field=get(fieldId||'mustdos'), Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
@@ -848,9 +848,9 @@
         if(!Recognition){button.disabled=true;status.outerHTML='<span data-testid="'+prefix+'voice-unsupported">Voice input needs Chrome, Edge or Safari.</span>';return;}
         button.onclick=function(){
             if(listening){recognition.stop();reset();status.textContent='Voice input stopped.';return;}
-            recognition=new Recognition();recognition.lang=lang.value;recognition.interimResults=true;recognition.continuous=false;
+            recognition=new Recognition();recognition.lang=lang.value;recognition.interimResults=true;recognition.continuous=false;if(opts.replace)field.value='';
             recognition.onresult=function(event){if(!field.isConnected)return;var interim=[];
-                for(var i=event.resultIndex;i<event.results.length;i++){var result=event.results[i],text=result[0].transcript.trim();if(result.isFinal&&text){field.value+=(field.value.trim()?(recognition.lang==='zh-CN'?'，':', '):'')+text;field.dispatchEvent(new Event('input',{bubbles:true}));}else interim.push(text);}
+                for(var i=event.resultIndex;i<event.results.length;i++){var result=event.results[i],text=result[0].transcript.trim();if(result.isFinal&&text){field.value+=(field.value.trim()?(recognition.lang==='zh-CN'?'，':', '):'')+text;field.dispatchEvent(new Event('input',{bubbles:true}));if(opts.onFinal)setTimeout(opts.onFinal,0);}else interim.push(text);}
                 status.textContent=interim.join(' ')||'Voice input added.';
             };
             recognition.onerror=function(event){status.textContent=({'not-allowed':'Microphone permission was blocked.','no-speech':'No speech heard. Try again.',network:'Voice input network error. Try again.'})[event.error]||'Voice input could not start. Try again.';reset();};
@@ -1259,14 +1259,23 @@
         });
         toastEl.setAttribute('data-testid','plan-toast');toastEl.querySelector('button').setAttribute('data-testid','plan-undo');
     }
-    function checkoutPicks(){
+    function checkoutPicks(opts){
+        opts=opts&&(opts.ai===true||opts.resume===true)?opts:null; // click handlers pass an Event
         if(window.goNowAccount&&window.goNowAccount.group&&!window.goNowAccount.owner())return;
         if(window.goNowAccount?.group){var voted=Object.keys(window.goNowAccount.group.votes||{}).filter(function(id){return window.goNowAccount.group.votes[id].length;});var catalog=pickCatalog();['activities','restaurants'].forEach(function(key){voted.forEach(function(id){if(catalog[key].some(function(p){return p.id===id;})&&!state.answers.picks[key].includes(id))state.answers.picks[key].push(id);});});}
         if(editingPicks){updatePicks();return;}
         state.answers.level=PickScheduler.pace(state.answers);
         var p=Engine.buildTemplatePlan(state.answers,Engine.matchDestination(state.answers.destination));
         var savedTrip=readTrips().find(function(t){return t.id===state.tripId;});
-        var result=window.PickScheduler.schedule(Object.assign({},state.answers,{start:p.start,end:p.end,builderFlightTime:savedTrip&&savedTrip.builder&&savedTrip.builder.flightTime}),pickCatalog());
+        var args=Object.assign({},state.answers,{start:p.start,end:p.end,builderFlightTime:savedTrip&&savedTrip.builder&&savedTrip.builder.flightTime});
+        var result=window.PickScheduler.schedule(args,pickCatalog());
+        // A saved AI arrangement is replayed through the planner on reload: no new AI call, same days.
+        var key=aiKey(args),saved=state.answers.aiPlan&&state.answers.aiPlan.key===key?state.answers.aiPlan:null;
+        if(!(opts&&opts.ai)&&saved&&saved.stops){var again=PickScheduler.schedule(args,pickCatalog(),{prefer:saved.stops});if(again.aiPlaced&&again.unfit.length<=result.unfit.length&&again.bookingIssues.length<=result.bookingIssues.length){finishCheckout(p,again,saved);return;}}
+        if(window.GoNowAI&&!state.shared&&(opts&&opts.ai||!(opts&&opts.resume)&&!saved&&GoNowAI.autoPlan())){aiCheckout(p,args,result,Object.assign({key:key},opts||{}));return;}
+        finishCheckout(p,result);
+    }
+    function finishCheckout(p,result,ai,resume){
         state.viewing='live';
         var trips=readTrips(),trip=trips.find(function(t){return t.id===state.tripId;});
         if(trip&&!state.shared){trip.confirmed=false;trip.snapshot=null;writeTrips(trips);}
@@ -1275,7 +1284,124 @@
         p.start=result.days[0].date;p.end=result.days[result.days.length-1].date;p.flightTime=result.flightTime;
         p.meta=Engine.dateRange(p.start,p.end)+' · '+(state.answers.who||'Travelers')+((state.answers.ages||[]).length?' · Ages '+state.answers.ages.join(' & '):'');
         result.days.forEach(function(d){d.items.forEach(function(i){if(i.photo)ITEM_PHOTOS[i.id]=i.photo;});});
-        showPlan(Engine.applyAgeRules(p,state.answers),false);
+        if(ai)p.ai={note:ai.note||'',placed:result.aiPlaced||0};
+        showPlan(Engine.applyAgeRules(p,state.answers),!!resume);
+    }
+    // Free AI (js/gemini.js) proposes days and times; PickScheduler still checks every stop. Any failure keeps the standard plan.
+    var aiRun=0;
+    function aiDates(start,end){var out=[];for(var t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z')&&out.length<31;t+=86400000)out.push(new Date(t).toISOString().slice(0,10));return out;}
+    function aiPlanInput(args,p){
+        var c=pickCatalog(),picks=args.picks||{},dates=aiDates(p.start,p.end),hm=GoNowAI.hm;
+        var chosen=c.activities.concat(c.restaurants).filter(function(i){return i.reservation||(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id);});
+        var fw=GoNowFlights.windowFor(Object.assign({},args)),dep=PickScheduler.departure(Object.assign({},args,{generic:c.generic})),T=window.GoNowTheme;
+        var feel={};dates.forEach(function(d){feel[d]=T?T.LABEL[T.stateName(T.valueFor(d))]:'High';});
+        var wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        var list=chosen.map(function(i){var h=i.parsedHours||i.hours,o={id:i.id,name:i.name,kind:i.meals?'meal':'activity',minutes:i.duration||60,area:i.area||''};if(i.meals)o.meals=i.meals;if(i.effort)o.effort=i.effort;if(i.category)o.category=i.category;if(h&&h.open!=null&&h.close!=null&&Number.isFinite(+h.open))o.hours=hm(+h.open)+'-'+hm(+h.close);var closed=(i.closed||[]).flatMap(function(r){return (r.weekdays||[]).map(function(n){return wd[n];});});if(closed.length)o.closed=closed;if(i.reservation)o.booked=i.reservation.date+' '+i.reservation.time;return o;});
+        var input={destination:args.destination||'',dates:dates,pace:PickScheduler.pace(args),capacity:PickScheduler.capacity(args),arrival:hm(Math.min(1410,Math.max(1140,fw.arrivalStart)))+' (meals only)',leave:hm(dep.leave),feel:feel,weather:{},picks:list};
+        var spot=planCoords(chosen);
+        return Promise.race([spot?GoNowAI.weather(spot.lat,spot.lng,dates):Promise.resolve({}),new Promise(function(ok){setTimeout(function(){ok({});},3000);})]).then(function(w){Object.keys(w||{}).forEach(function(k){input.weather[k]=GoNowAI.weatherLine(w[k]);});return input;});
+    }
+    function aiKey(a){var picks=a.picks||{};return JSON.stringify([a.start,a.end,PickScheduler.pace(a),(picks.activities||[]).slice().sort(),(picks.restaurants||[]).slice().sort()]);}
+    function aiCheckout(p,args,ruleResult,opts){
+        var run=++aiRun,base=cloneData(p),prior=state.answers.aiPlan?cloneData(state.answers.aiPlan):null;
+        function remember(v){if(v)state.answers.aiPlan=v;else delete state.answers.aiPlan;save();}
+        function rule(note){if(opts.undo){opts.undo();toast(note);return;}finishCheckout(cloneData(base),cloneData(ruleResult));if(note)toast(note);}
+        view.innerHTML='<section class="loading ai-loading" data-testid="ai-planning">'+heading('Arranging your picks','Free AI is fitting them to your pace, energy and weather.')+'<div class="spinner" aria-hidden="true"></div>'+btn(opts.undo?'Keep my plan':'Use the standard plan','ai-skip','outline')+'</section>';
+        on('ai-skip',function(){aiRun++;if(!opts.undo)remember({key:opts.key,standard:true});rule('');});
+        aiPlanInput(args,p).then(GoNowAI.planFromPicks).then(function(ai){
+            if(run!==aiRun)return;
+            var r=PickScheduler.schedule(args,pickCatalog(),{prefer:ai.stops});
+            // Never accept an AI arrangement that fits fewer picks or breaks a booking.
+            if(!r.aiPlaced||r.unfit.length>ruleResult.unfit.length||r.bookingIssues.length>ruleResult.bookingIssues.length){rule(opts.undo?'AI plan didn’t fit · plan unchanged':'AI plan didn’t fit · standard plan');return;}
+            var undo=opts.undo;remember({key:opts.key,stops:ai.stops,note:ai.note});
+            if(undo){var id=state.plan&&state.plan.id;if(id)localStorage.removeItem('gonow:daybuilder:'+id);}
+            finishCheckout(cloneData(base),r,ai,!!undo);
+            toast('Planned with AI ·',function(){var id=state.plan&&state.plan.id;if(undo){remember(prior);undo();return;}remember({key:opts.key,standard:true});if(id)localStorage.removeItem('gonow:daybuilder:'+id);finishCheckout(cloneData(base),cloneData(ruleResult),null,true);});
+            toastEl.setAttribute('data-testid','ai-toast');
+        }).catch(function(){
+            if(run!==aiRun)return;
+            var st=GoNowAI.status();rule(st.state==='ready'||st.state==='retry'?(opts.undo?'AI didn’t answer · plan unchanged':'AI didn’t answer · standard plan'):st.line.split(' · ')[0]+(opts.undo?' · plan unchanged':' · standard plan'));
+        });
+    }
+    // ---------- Free AI: change the plan by voice or text (js/gemini.js) ----------
+    function aiBarHTML(p){
+        if(!window.GoNowAI||state.shared||state.viewing==='finished')return '';
+        if(window.goNowAccount&&window.goNowAccount.group&&!window.goNowAccount.owner())return '';
+        var picks=/-picks-/.test(p.id||'')&&!!pickCatalog(),st=GoNowAI.status();
+        return '<details class="ai-bar" data-testid="ai-bar"><summary>'+v2i('sparkle',18)+'<span>Change your plan</span><small>Say it or type it</small>'+v2i('chevron',16,'ai-chevron')+'</summary><div class="ai-body">'
+            +'<label class="ai-ask">Your change<input type="text" data-testid="ai-edit-input" autocomplete="off" maxlength="300" placeholder="Move the hike to the morning"></label>'
+            +'<div class="ai-actions">'+btn('Apply','ai-apply','primary','type="button"')+(picks?btn(v2i('sparkle',16)+'Re-plan my picks','ai-replan','outline','type="button"'):'')+'</div>'
+            +'<p class="ai-status" data-testid="ai-status" role="status" aria-live="polite">'+esc(p.ai&&p.ai.note?'Planned with AI · '+p.ai.note:st.line)+'</p></div></details>';
+    }
+    function aiDescribe(ok){
+        if(ok.length>1)return 'Made '+ok.length+' changes';
+        var o=ok[0],title=GoNowAI.short(o.title,32);
+        if(o.type==='remove')return 'Moved '+title+' to Needs a time';
+        var when=o.landed==null?null:GoNowAI.clock(o.landed),day=o.date!==o.from?dateLabel(o.date,{weekday:'short'})+' ':'';
+        return when?'Moved '+title+' to '+day+when+(o.nudged?' · nearest free time':o.overlap?' · overlaps a stop':''):'Moved '+title+' to Needs a time';
+    }
+    function aiFailLine(b){
+        if(!b)return 'No change made';
+        if(b.reason==='missing')return 'Couldn’t find that stop';
+        if(b.reason==='locked')return GoNowAI.short(b.title,32)+' is locked';
+        if(b.reason==='already')return GoNowAI.short(b.title,32)+' already needs a time';
+        if(b.reason==='unclear')return 'Say a day or a time';
+        return GoNowAI.short(b.title,32)+' · '+String(b.reason).replace(/^./,function(c){return c.toLowerCase();});
+    }
+    function bindAiBar(){
+        var bar=get('ai-bar');if(!bar)return;
+        var input=get('ai-edit-input'),status=get('ai-status'),apply=get('ai-apply'),busy=false;
+        function done(){busy=false;apply.disabled=false;}
+        function run(){
+            if(busy||!window.DayBuilder||!input.isConnected)return;
+            var text=input.value.trim();if(!text){status.textContent='Try “Move the hike to the morning”';input.focus();return;}
+            busy=true;apply.disabled=true;status.textContent='Working on it…';
+            var items=DayBuilder.editableItems(),dates=state.plan.days.map(function(d){return d.date;});
+            GoNowAI.edit(text,items,dates).then(function(r){
+                if(!r.ops.length){status.textContent=r.say||'Couldn’t match that · name a stop and a time';return;}
+                var out=DayBuilder.applyEdits(r.ops),ok=out.results.filter(function(x){return x.ok;}),bad=out.results.filter(function(x){return !x.ok;});
+                if(!ok.length){status.textContent=aiFailLine(bad[0]);return;}
+                input.value='';
+                var msg=r.by==='ai'&&r.say&&ok.length===r.ops.length?r.say:aiDescribe(ok);
+                status.textContent=msg+(bad.length?' · '+aiFailLine(bad[0]):'');
+                toast(msg+' ·',function(){DayBuilder.restore(out.before);status.textContent='Change undone';});
+                toastEl.setAttribute('data-testid','ai-edit-toast');
+            }).catch(function(){var st=GoNowAI.status();status.textContent=st.state==='ready'?'AI didn’t answer · try a simpler change':st.line;}).then(done,done);
+        }
+        apply.onclick=run;
+        input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();run();}});
+        bar.addEventListener('toggle',function(){if(bar.open&&!get('ai-voice-btn'))setupVoice('ai-edit-input','ai-',{replace:true,onFinal:run});});
+        on('ai-replan',function(){
+            var st=GoNowAI.status();if(st.state!=='ready'){status.textContent=st.line;return;}
+            var prevPlan=cloneData(state.plan),key='gonow:daybuilder:'+prevPlan.id,prevBuilder=localStorage.getItem(key);
+            checkoutPicks({ai:true,undo:function(){if(prevBuilder===null)localStorage.removeItem(key);else localStorage.setItem(key,prevBuilder);showPlan(prevPlan,true);}});
+        });
+    }
+    // ---------- Free daily weather (Open-Meteo, no key) ----------
+    var weatherDays={},weatherFor='';
+    function loadWeather(p){
+        if(!window.GoNowAI||!p||!p.days||!p.days.length)return;
+        var id=p.id+':'+p.days[0].date+':'+p.days.length;if(weatherFor===id){paintWeather(document);return;}
+        weatherFor=id;weatherDays={};
+        var spot=planCoords(p.days.flatMap(function(d){return d.items||[];}));if(!spot)return;
+        GoNowAI.weather(spot.lat,spot.lng,p.days.map(function(d){return d.date;})).then(function(w){if(weatherFor!==id)return;weatherDays=w||{};paintWeather(document);});
+    }
+    function paintWeather(scope){
+        (scope||document).querySelectorAll('[data-weather-date]').forEach(function(node){
+            var date=node.getAttribute('data-weather-date'),w=weatherDays[date];if(!w){node.hidden=true;return;}
+            var stops=GoNowAI.wet(w)&&window.DayBuilder&&DayBuilder.editableItems?DayBuilder.editableItems().filter(function(i){return i.date===date&&i.start!=null;}):[];
+            var outdoor=stops.filter(function(i){return /outdoor|water|beach|hike|park/i.test(i.category||'');}).map(function(i){return i.title;});
+            var tip=GoNowAI.wet(w)&&outdoor.length?'<p data-testid="weather-tip">Rain likely · consider moving '+esc(outdoor.slice(0,2).map(function(t){return GoNowAI.short(t,28);}).join(' or '))+'</p>':'';
+            var open=node.querySelector('details')&&node.querySelector('details').open;
+            node.innerHTML='<details'+(open?' open':'')+'><summary>'+v2i(w.icon,16)+'<span>'+esc(GoNowAI.weatherLine(w))+'</span></summary><p>'+(w.kind==='forecast'?'Forecast':'Last year on this date · not a forecast')+' · <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a></p>'+tip+'</details>';
+            node.hidden=false;
+        });
+    }
+    function planCoords(items){
+        var pts=(items||[]).filter(function(i){return Number.isFinite(+i.lat)&&Number.isFinite(+i.lng)&&(+i.lat||+i.lng);}).map(function(i){return [+i.lat,+i.lng];});
+        if(pts.length){var mid=function(k){var v=pts.map(function(x){return x[k];}).sort(function(a,b){return a-b;});return v[Math.floor(v.length/2)];};return {lat:mid(0),lng:mid(1)};}
+        var id=window.Engine&&Engine.matchDestination?Engine.matchDestination(state.answers.destination||'').id:'',info=window.LocalInfo&&LocalInfo.table[id];
+        return info?{lat:info.latitude,lng:info.longitude}:null;
     }
     function pickScreen(){
         var food=state.screen==='pick-food',catalog=pickCatalog(),key=food?'restaurants':'activities';
@@ -1360,7 +1486,7 @@
 
     function generate(resume,withoutPicks) {
         normalizeAnswers(state.answers);
-        if(resume&&!openingDemo&&state.answers.picks&&state.answers.picks.initialized&&pickCatalog()){checkoutPicks();return;}
+        if(resume&&!openingDemo&&state.answers.picks&&state.answers.picks.initialized&&pickCatalog()){checkoutPicks({resume:true});return;}
         if(!resume&&!withoutPicks&&!openingDemo&&state.answers.mode!=='local'&&(pickCatalog()||window.GoNowPlaceSource)){state.answers.pickBack=['fork'].concat(extra).includes(state.screen)?state.screen:pickBackPage();pickFilter='All';pickQuery='';go('pick-activities');return;}
         normalizeAnswers(state.answers);
         var generation=++activeGeneration;
@@ -1758,7 +1884,7 @@
         var current=days.find(function(day){return day.date===d.date;});
         var next=days[days.findIndex(function(day){return day.date===d.date;})+1];
         var ringItems=schedule&&current?current.items:m.items;
-        return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+(window.GoNowTheme?window.GoNowTheme.dialHTML(d.date):'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+info+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
+        return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+'<div class="day-weather" data-testid="day-weather" data-weather-date="'+esc(d.date)+'" hidden></div>'+(window.GoNowTheme?window.GoNowTheme.dialHTML(d.date):'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+info+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
     }
     function dayFooterHTML(d, i, m) {
         if(!d.relax&&!d.rain)return '';
@@ -1840,7 +1966,7 @@
                 return html;
             },
             photoCredit:function(src){var it=state.plan.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;});return it&&it.photoBy&&it.photoBy.name?'Photo: '+it.photoBy.name+' · Google':'';},
-            afterRender:function(scope){pruneEmptySections(scope);bindItems(scope);bindPace(scope);scope.querySelectorAll('[data-db-source]').forEach(function(row){var src=row.dataset.dbSource,it=p.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;});var host=row.querySelector('.db-activity');if(host){if(it){var safe=window.GoNowDiet.safeMeal(Object.assign({},it,{locked:it.locked||row.classList.contains('db-locked')}),state.answers);host.insertAdjacentHTML('beforeend',dietTag(safe));if(safe.title!==it.title){var title=host.querySelector('.db-expand strong,strong[id^=db-title]');if(title)title.textContent=safe.title;}}(eachPerson()?travelers():[]).forEach(function(t,i){var c=window.GoNowCheckin.get('gonow.checkin.v1',window.DayBuilder.selectedDate(),personId(i)),alt=(c.alternatives||{})[row.dataset.dbId];if(alt&&!row.classList.contains('db-locked'))host.insertAdjacentHTML('beforeend','<small class="traveler-alternative" data-testid="traveler-alternative">'+esc(t.name)+': '+esc(alt.title.toLowerCase())+' instead</small>');});}});}
+            afterRender:function(scope){pruneEmptySections(scope);paintWeather(scope);bindItems(scope);bindPace(scope);scope.querySelectorAll('[data-db-source]').forEach(function(row){var src=row.dataset.dbSource,it=p.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;});var host=row.querySelector('.db-activity');if(host){if(it){var safe=window.GoNowDiet.safeMeal(Object.assign({},it,{locked:it.locked||row.classList.contains('db-locked')}),state.answers);host.insertAdjacentHTML('beforeend',dietTag(safe));if(safe.title!==it.title){var title=host.querySelector('.db-expand strong,strong[id^=db-title]');if(title)title.textContent=safe.title;}}(eachPerson()?travelers():[]).forEach(function(t,i){var c=window.GoNowCheckin.get('gonow.checkin.v1',window.DayBuilder.selectedDate(),personId(i)),alt=(c.alternatives||{})[row.dataset.dbId];if(alt&&!row.classList.contains('db-locked'))host.insertAdjacentHTML('beforeend','<small class="traveler-alternative" data-testid="traveler-alternative">'+esc(t.name)+': '+esc(alt.title.toLowerCase())+' instead</small>');});}});}
         };
     }
     function planRender(moveFocus) {
@@ -1870,12 +1996,14 @@
         bindPace(view);
         if(mergedPlan()){
             var db=document.createElement('section');db.className='db-root';db.dataset.testid='db-root';db.setAttribute('aria-label','Your days');
+            document.getElementById('tab-content').insertAdjacentHTML('beforeend',aiBarHTML(p));
             document.getElementById('tab-content').append(db);
             var built=builderContext();
             built.plan=p;window.DayBuilder.mount(db,built);
         }
         // Apply the persisted view only after the builder exists. List is the default.
         expeditionUI();
+        bindAiBar();loadWeather(p);
         on('build-template', function() {
             state.answers.templateOahu=true;
             save();

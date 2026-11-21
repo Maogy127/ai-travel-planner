@@ -2185,3 +2185,30 @@ html.reduce-motion button:active{transform:none!important}
 /* v2: pick cards keep the spring but no colour transition, so hover never shows a half-tinted card */
 .pick-card button.pick-toggle.pick-toggle:not(:disabled){transition:transform 900ms var(--spring)}
 .pick-card button.pick-toggle.pick-toggle:not(:disabled):active{transition:transform 90ms cubic-bezier(.3,.7,.4,1)}
+
+/* ---------- Free AI bar + daily weather (Nov 20, 2026) ---------- */
+.ai-bar{margin:16px 0 8px;background:var(--surface);border:1px solid var(--line);border-radius:24px;box-shadow:0 1px 2px rgba(31,42,32,.04),0 8px 24px -16px rgba(31,42,32,.18)}
+.ai-bar>summary{display:flex;align-items:center;gap:10px;min-height:56px;padding:6px 18px;list-style:none;cursor:pointer;color:var(--ink);font-weight:600}
+.ai-bar>summary::-webkit-details-marker{display:none}
+.ai-bar>summary>.v2-icon:first-child{color:var(--accent-text);flex-shrink:0}
+.ai-bar>summary>span{flex:1}
+.ai-bar>summary small{color:var(--ink-2);font-weight:400;font-size:13px;white-space:nowrap}
+.ai-bar .ai-chevron{color:var(--ink-2);flex-shrink:0;transition:transform .2s}
+.ai-bar[open] .ai-chevron{transform:rotate(90deg)}
+.ai-body{padding:0 18px 16px;display:grid;gap:10px}
+.ai-ask{display:grid;gap:6px;font-size:13px;color:var(--ink-2)}
+.ai-ask input{min-height:48px;font-size:16px}
+.ai-actions{display:flex;flex-wrap:wrap;gap:8px}
+.ai-actions button{min-height:48px;display:inline-flex;align-items:center;gap:6px}
+.ai-body .voice-controls{margin:0}
+.ai-status{margin:0;font-size:13px;color:var(--ink-2);min-height:20px}
+.ai-loading .spinner{margin:24px auto}
+.ai-loading [data-testid=ai-skip]{display:block;margin:8px auto 0;min-height:48px}
+.day-weather{margin:4px 0 2px}
+.day-weather>details>summary{display:inline-flex;align-items:center;gap:6px;min-height:44px;list-style:none;cursor:pointer;color:var(--ink-2);font-size:14px;font-variant-numeric:tabular-nums}
+.day-weather>details>summary::-webkit-details-marker{display:none}
+.day-weather>details>summary .v2-icon{color:var(--ink-2)}
+.day-weather>details>p{margin:0 0 6px;font-size:13px;color:var(--ink-2)}
+.day-weather a{color:var(--accent-text)}
+@media (max-width:420px){.ai-bar>summary small{display:none}}
+@media print{.ai-bar{display:none}}

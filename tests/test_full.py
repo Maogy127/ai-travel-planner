@@ -634,7 +634,9 @@ async def local_info_checks(b,base,label):
   body=await pg.locator('main').inner_text()
   ok(f'{label} no Good to know in prep',await pg.get_by_test_id('good-to-know').count()==0 and await pg.get_by_test_id('local-info').count()==0 and 'Good to know' not in body)
   ok(f'{label} Oahu has no plug adapter','adapter' not in body.lower())
-  ok(f'{label} no weather or FX requests',not any('open-meteo.com' in u or 'frankfurter.dev' in u for u in calls))
+  # Daily weather (Open-Meteo forecast/archive, keyless) is back as a one-line day header; FX and other weather calls stay out.
+  wx=[u for u in calls if 'open-meteo.com' in u]
+  ok(f'{label} no FX requests; weather only daily Open-Meteo',not any('frankfurter.dev' in u for u in calls) and all(('api.open-meteo.com/v1/forecast' in u or 'archive-api.open-meteo.com/v1/archive' in u) and 'daily=' in u and 'hourly' not in u for u in wx),str(wx[:3]))
   await ctx.close()
   ctx,pg=await new(b,base)
   await answer(pg,'Lisbon')
