@@ -246,12 +246,55 @@ function labelOf(k){
   return {park:'Park',beach:'Beach',museum:'Museum',viewpoint:'Viewpoint',attraction:'Attraction',zoo:'Zoo',aquarium:'Aquarium',gallery:'Gallery',restaurant:'Restaurant',cafe:'Cafe',spa:'Spa',sauna:'Sauna',hotspring:'Hot spring',fitness:'Fitness',massage:'Massage'}[k] || 'Attraction';
 }
 
+const GENERIC_NAME = /^(the\s+)?((heritage\s+|history\s+|science\s+)?(museum|gallery|park|garden|attraction|cafe|restaurant|spa|sauna|gym|beach|zoo|aquarium|viewpoint|fitness(\s+cent(?:re|er))?)s?)$/i;
+const GENERIC_INSTITUTION = /\b(resources?\s+cent(?:re|er)s?|exhibition\s+cent(?:re|er)s?|conservation\s+(?:resources?\s+)?cent(?:re|er)s?|interpretation\s+cent(?:re|er)s?|housing authority(?:\s+exhibition\s+cent(?:re|er))?)\b/i;
+function foldName(s){return String(s||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase();}
+const WELLNESS_KEEP = /yoga|pilates|medita|onsen|sento|hammam|hamam|ayurved|hot\s*spring|bathhouse|bath\s*house|thermal|therme|public\s+bath|wellness\s+spa|qigong|tai\s*chi|mindful/i;
+const GYMISH = /fitness|gym|equinox|anytime\s+fitness|planet\s+fitness|gold'?s\s+gym|virgin\s+active|john\s+reed|snap\s+fit|smart\s+fit|puregym|f45|crossfit|nuffield|david\s+lloyd|les\s+mills|lifetime\s+fitness|soulcycle|solidcore|pure\s+barre|mcfit|holmes\s+place/i;
+const DEFUNCT = /leverian\s+collection|museum of practical geology|amora london|royal united services (institute|museum)|victoria and albert museum spiral|london museum and institute of natural history|^health exhibition cent/i;
+
+function isBareOrGenericName(p){
+  const n = String(p.name || '').trim();
+  if (!n || /^Q\d+$/i.test(n)) return true;
+  if (GENERIC_NAME.test(n)) return true;
+  if (GENERIC_INSTITUTION.test(n) && !p.wikipedia) return true;
+  return false;
+}
+
+function keepWellness(p){
+  const n = foldName(p.name);
+  const typ = p.type;
+  if (['spa','sauna','hotspring'].includes(typ)) return !GENERIC_NAME.test(n);
+  if (typ === 'massage') return true;
+  if (typ === 'fitness' || GYMISH.test(n)) return WELLNESS_KEEP.test(n);
+  return true;
+}
+
+function isDefunct(p){
+  return DEFUNCT.test(String(p.name || ''));
+}
+
+function qualityFilter(list, kind){
+  return list.filter(p => {
+    if (isBareOrGenericName(p) || isDefunct(p)) return false;
+    if (kind === 'wellness' && !keepWellness(p)) return false;
+    return true;
+  });
+}
+
+function isIconic(p){
+  return (p.sitelinks || 0) >= 12;
+}
+
 function capList(list, n, caps){
   if(!caps)return list.slice(0,n);
   const used={}, picked=[];
-  const take=p=>{picked.push(p);used[p.type]=(used[p.type]||0)+1;};
-  for(const p of list){if(picked.length>=n)break;if(caps[p.type]&&(used[p.type]||0)>=caps[p.type])continue;take(p);}
-  if(picked.length<n){const have=new Set(picked.map(p=>p.id));for(const p of list){if(picked.length>=n)break;if(!have.has(p.id))take(p);}}
+  const have=new Set();
+  const take=p=>{picked.push(p);have.add(p.id||p.name);used[p.type]=(used[p.type]||0)+1;};
+  // Highly notable places are taken first and are not dropped by type caps.
+  for(const p of list){if(picked.length>=n)break;if(isIconic(p))take(p);}
+  for(const p of list){if(picked.length>=n)break;if(have.has(p.id||p.name))continue;if(caps[p.type]&&(used[p.type]||0)>=caps[p.type])continue;take(p);}
+  if(picked.length<n){for(const p of list){if(picked.length>=n)break;if(!have.has(p.id||p.name))take(p);}}
   return picked;
 }
 
@@ -274,27 +317,47 @@ function lean(p){
   return out;
 }
 
+function nameKey(n){
+  return S.normalize(n)
+    .normalize('NFD').replace(/[\u0300-\u036f]/g,'')
+    .replace(/\s*\([^)]*\)\s*/g,' ')
+    .replace(/^(the|el|la|le|les|los|las)\s+/,'')
+    .replace(/[^a-z0-9]+/g,' ')
+    .trim();
+}
+
 function mergeCatalog(osmCat, extra, city){
-  const seen = new Set();
-  const take = list => list.filter(p => {
-    const n = S.normalize(p.name);
-    if (!p.name || !Number.isFinite(p.lat) || !Number.isFinite(p.lng) || seen.has(n)) return false;
-    seen.add(n);
-    if (!p.category) p.category = labelOf(p.type);
-    return true;
-  });
-  const activities = take([...(osmCat.activities||[]), ...extra.filter(p => !p.meals && !p.wellness)]);
-  const restaurants = take([...(osmCat.restaurants||[]), ...extra.filter(p => p.meals)]);
-  const wellness = take([...(osmCat.wellness||[]), ...extra.filter(p => p.wellness)]);
-  // Prefer notable / closer to the official city center.
+  const take = list => {
+    const out=[], byId=new Map(), byKey=new Map();
+    for (const p of list) {
+      if (!p.name || !Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
+      if (!p.category) p.category = labelOf(p.type);
+      const k = nameKey(p.name);
+      const prev = (p.wikidata && byId.get(p.wikidata)) || (k && byKey.get(k));
+      if (prev) {
+        const better = ((p.name.includes('(') && !prev.name.includes('(')) || (p.sitelinks||0) > (prev.sitelinks||0));
+        if (better) Object.assign(prev, p);
+        continue;
+      }
+      out.push(p);
+      if (p.wikidata) byId.set(p.wikidata, p);
+      if (k) byKey.set(k, p);
+    }
+    return out;
+  };
+  const activities = qualityFilter(take([...(osmCat.activities||[]), ...extra.filter(p => !p.meals && !p.wellness)]), 'activities');
+  const restaurants = qualityFilter(take([...(osmCat.restaurants||[]), ...extra.filter(p => p.meals)]), 'restaurants');
+  const wellness = qualityFilter(take([...(osmCat.wellness||[]), ...extra.filter(p => p.wellness)]), 'wellness');
+  // Prefer Wikipedia/Wikidata sitelinks, then type, then distance to the city center.
   const dist = p => Math.hypot(p.lat - city.lat, (p.lng - city.lng) * Math.cos(city.lat * Math.PI / 180));
   const TYPE_RANK={museum:6,gallery:6,attraction:5,viewpoint:5,zoo:5,aquarium:5,beach:5,spa:4,hotspring:4,sauna:4,restaurant:3,cafe:3,park:2,fitness:1,massage:3};
-  const rank = (a,b) => (b.notability||0) - (a.notability||0) || (TYPE_RANK[b.type]||2) - (TYPE_RANK[a.type]||2) || dist(a) - dist(b);
+  const score = p => (p.sitelinks||0)*10 + (p.notability||0);
+  const rank = (a,b) => score(b) - score(a) || (TYPE_RANK[b.type]||2) - (TYPE_RANK[a.type]||2) || dist(a) - dist(b);
   activities.sort(rank); restaurants.sort(rank); wellness.sort(rank);
   return {
     activities: capList(activities, 50, {museum:16,park:8,gallery:8}).map(lean),
     restaurants: capList(restaurants, 40, {cafe:16}).map(lean),
-    wellness: capList(wellness, 20, {fitness:8}).map(lean)
+    wellness: capList(wellness, 20, {fitness:2}).map(lean)
   };
 }
 
@@ -340,6 +403,50 @@ function metaFor(city, data, bytes){
   };
 }
 
+async function sitelinksFor(slug, ids){
+  const unique = [...new Set((ids||[]).filter(id => id && /^Q\d+$/.test(id)))];
+  const rawFile = path.join(RAW, slug + '-sitelinks.json');
+  let map = {};
+  if (fs.existsSync(rawFile)) {
+    try { map = JSON.parse(fs.readFileSync(rawFile, 'utf8')) || {}; } catch (e) { map = {}; }
+  }
+  const missing = unique.filter(id => map[id] == null);
+  for (let i = 0; i < missing.length; i += 80) {
+    const batch = missing.slice(i, i + 80);
+    const query = 'SELECT ?item ?sitelinks WHERE { VALUES ?item { ' + batch.map(id => 'wd:'+id).join(' ') + ' } ?item wikibase:sitelinks ?sitelinks. }';
+    const url = 'https://query.wikidata.org/sparql?format=json&query=' + encodeURIComponent(query);
+    let ok = false;
+    for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+      try {
+        if (attempt) await sleep(4000 * (attempt + 1));
+        const r = await fetchText(url, {headers:{'User-Agent': UA, 'Accept':'application/sparql-results+json'}}, 45000);
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = JSON.parse(r.body);
+        for (const b of (data.results && data.results.bindings) || []) {
+          const id = (b.item && b.item.value || '').split('/').pop();
+          const n = b.sitelinks && Number(b.sitelinks.value);
+          if (id && Number.isFinite(n)) map[id] = n;
+        }
+        for (const id of batch) if (map[id] == null) map[id] = 0;
+        ok = true;
+      } catch (e) {
+        console.warn('  sitelinks fail', slug, e.message || e);
+      }
+    }
+  }
+  fs.mkdirSync(RAW, {recursive:true});
+  fs.writeFileSync(rawFile, JSON.stringify(map));
+  return map;
+}
+
+function applySitelinks(lists, map){
+  for (const list of lists) {
+    for (const p of list || []) {
+      if (p.wikidata && map[p.wikidata] != null) p.sitelinks = map[p.wikidata];
+    }
+  }
+}
+
 async function buildCity(city, force){
   const dest = path.join(OUT, city.slug + '.json');
   if (!force && fs.existsSync(dest)) {
@@ -361,7 +468,13 @@ async function buildCity(city, force){
   const osmCat = (osmData.elements && osmData.elements.length)
     ? source.catalog(osmData, center, city.name)
     : {activities:[], restaurants:[], wellness:[]};
-  const merged = mergeCatalog(osmCat, wdPlaces(city, wd), city);
+  const extra = wdPlaces(city, wd);
+  const ids = []
+    .concat(osmCat.activities||[], osmCat.restaurants||[], osmCat.wellness||[], extra)
+    .map(p => p.wikidata).filter(Boolean);
+  const sl = await sitelinksFor(city.slug, ids);
+  applySitelinks([osmCat.activities, osmCat.restaurants, osmCat.wellness, extra], sl);
+  const merged = mergeCatalog(osmCat, extra, city);
   const total = merged.activities.length + merged.restaurants.length + merged.wellness.length;
   if (total < 5) throw new Error('too few places (' + total + ')' + (osmErr ? '; OSM: ' + osmErr.message : ''));
   const out = {
@@ -417,5 +530,5 @@ async function main(){
   if (failures.length && metas.length < 30) process.exitCode = 1;
 }
 
-module.exports = {CITIES, VERSION};
+module.exports = {CITIES, VERSION, isBareOrGenericName, keepWellness, isDefunct, qualityFilter, isIconic, capList, placeQuality:{GENERIC_NAME,GENERIC_INSTITUTION,WELLNESS_KEEP}};
 if (require.main === module) main().catch(e => { console.error(e); process.exit(1); });

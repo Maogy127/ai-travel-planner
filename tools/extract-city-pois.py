@@ -189,8 +189,9 @@ def crop(src: Path, dest: Path, bb) -> Path:
         return dest
     box = f'{bb[0]:.5f},{bb[1]:.5f},{bb[2]:.5f},{bb[3]:.5f}'
     print(f'  osmium extract {src.name} bbox={box}')
+    # smart keeps multipolygon relations (British Museum, palaces) complete; complete_ways dropped them.
     subprocess.check_call([
-        'osmium', 'extract', '--overwrite', '--strategy', 'complete_ways',
+        'osmium', 'extract', '--overwrite', '--strategy', 'smart',
         '--bbox', box, '-o', str(dest), str(src),
     ])
     return dest
@@ -248,9 +249,24 @@ class PoiHandler(osmium.SimpleHandler):
         lon = sum(c[1] for c in coords) / len(coords)
         self._add('way', w.id, lat, lon, tags)
 
-    def relation(self, r):
-        # Relations rarely have a ready centroid here; skip unless a tagged member center exists.
-        return
+    def area(self, a):
+        # Closed ways are already recorded in way(); this path keeps tagged multipolygon relations.
+        if a.from_way():
+            return
+        tags = self._tags(a)
+        if not interesting(tags):
+            return
+        lats, lons = [], []
+        try:
+            for ring in a.outer_rings():
+                for node in ring:
+                    lats.append(node.lat)
+                    lons.append(node.lon)
+        except osmium.InvalidLocationError:
+            return
+        if not lats:
+            return
+        self._add('relation', a.orig_id(), sum(lats) / len(lats), sum(lons) / len(lons), tags)
 
 
 def scan(pbf: Path, bb) -> dict:
@@ -274,8 +290,14 @@ def process_city(row, force=False):
     src = extract_source(kind, key)
     bb = bbox(lat, lng, radius)
     cropped = PBF / f'crop-{slug}.osm.pbf'
-    crop(src, cropped, bb)
     poi = PBF / f'poi-{slug}.osm.pbf'
+    if force:
+        for stale in (cropped, poi):
+            try:
+                stale.unlink()
+            except FileNotFoundError:
+                pass
+    crop(src, cropped, bb)
     if not poi.exists() or poi.stat().st_size < 500:
         print(f'  osmium tags-filter {cropped.name}')
         subprocess.check_call([

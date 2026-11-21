@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-21T02:34:52.742Z",
+  "generatedAt": "2026-11-21T03:23:22.839Z",
   "source": "OpenStreetMap (ODbL) and Wikidata (CC0)",
   "base": "data/cities/",
   "cities": [
@@ -23,7 +23,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 48901
+      "bytes": 50633
     },
     {
       "slug": "new-york",
@@ -45,7 +45,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 51619
+      "bytes": 51982
     },
     {
       "slug": "san-francisco",
@@ -65,7 +65,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 50090
+      "bytes": 51423
     },
     {
       "slug": "honolulu",
@@ -86,8 +86,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 45830
+      "wellness": 3,
+      "bytes": 39666
     },
     {
       "slug": "las-vegas",
@@ -104,8 +104,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 44236
+      "wellness": 3,
+      "bytes": 37390
     },
     {
       "slug": "seattle",
@@ -124,7 +124,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 54163
+      "bytes": 54735
     },
     {
       "slug": "chicago",
@@ -143,7 +143,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 47946
+      "bytes": 48694
     },
     {
       "slug": "miami",
@@ -159,8 +159,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 46372
+      "wellness": 9,
+      "bytes": 42484
     },
     {
       "slug": "san-diego",
@@ -177,7 +177,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 43755
+      "bytes": 43735
     },
     {
       "slug": "washington-dc",
@@ -199,7 +199,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 51317
+      "bytes": 53595
     },
     {
       "slug": "boston",
@@ -216,7 +216,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 47865
+      "bytes": 47700
     },
     {
       "slug": "austin",
@@ -232,8 +232,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 44405
+      "wellness": 17,
+      "bytes": 44177
     },
     {
       "slug": "denver",
@@ -250,7 +250,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 45960
+      "bytes": 46829
     },
     {
       "slug": "portland",
@@ -268,7 +268,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 53032
+      "bytes": 53124
     },
     {
       "slug": "new-orleans",
@@ -285,8 +285,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 46594
+      "wellness": 3,
+      "bytes": 40047
     },
     {
       "slug": "nashville",
@@ -302,8 +302,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 42678
+      "wellness": 3,
+      "bytes": 36501
     },
     {
       "slug": "phoenix",
@@ -320,7 +320,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 42393
+      "bytes": 44053
     },
     {
       "slug": "philadelphia",
@@ -337,8 +337,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 49770
+      "wellness": 14,
+      "bytes": 48049
     },
     {
       "slug": "tokyo",
@@ -360,7 +360,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 49271
+      "bytes": 49038
     },
     {
       "slug": "kyoto",
@@ -378,7 +378,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 43276
+      "bytes": 43454
     },
     {
       "slug": "osaka",
@@ -395,7 +395,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 45037
+      "bytes": 44869
     },
     {
       "slug": "seoul",
@@ -412,7 +412,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 43086
+      "bytes": 43290
     },
     {
       "slug": "shanghai",
@@ -430,8 +430,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 43668
+      "wellness": 13,
+      "bytes": 42136
     },
     {
       "slug": "beijing",
@@ -449,8 +449,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 43029
+      "wellness": 10,
+      "bytes": 41428
     },
     {
       "slug": "hong-kong",
@@ -469,8 +469,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 47170
+      "wellness": 8,
+      "bytes": 43985
     },
     {
       "slug": "taipei",
@@ -486,8 +486,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 43542
+      "wellness": 14,
+      "bytes": 42866
     },
     {
       "slug": "singapore",
@@ -504,7 +504,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 44540
+      "bytes": 46634
     },
     {
       "slug": "bangkok",
@@ -521,7 +521,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 46747
+      "bytes": 47167
     },
     {
       "slug": "bali",
@@ -543,7 +543,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 40680
+      "bytes": 41954
     },
     {
       "slug": "london",
@@ -563,7 +563,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 49339
+      "bytes": 49335
     },
     {
       "slug": "paris",
@@ -581,7 +581,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 51242
+      "bytes": 51742
     },
     {
       "slug": "barcelona",
@@ -599,7 +599,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 46416
+      "bytes": 49834
     },
     {
       "slug": "rome",
@@ -616,8 +616,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 45827
+      "wellness": 10,
+      "bytes": 44067
     },
     {
       "slug": "lisbon",
@@ -636,7 +636,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 46072
+      "bytes": 48552
     },
     {
       "slug": "amsterdam",
@@ -653,7 +653,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 48990
+      "bytes": 51553
     },
     {
       "slug": "berlin",
@@ -670,7 +670,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 51495
+      "bytes": 52784
     },
     {
       "slug": "madrid",
@@ -687,7 +687,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 46257
+      "bytes": 49034
     },
     {
       "slug": "prague",
@@ -705,7 +705,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 50509
+      "bytes": 52357
     },
     {
       "slug": "vienna",
@@ -723,7 +723,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 50642
+      "bytes": 53008
     },
     {
       "slug": "florence",
@@ -740,8 +740,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 43765
+      "wellness": 3,
+      "bytes": 39434
     },
     {
       "slug": "venice",
@@ -758,8 +758,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 6,
-      "bytes": 40611
+      "wellness": 0,
+      "bytes": 39293
     },
     {
       "slug": "athens",
@@ -776,7 +776,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 41574
+      "bytes": 44994
     },
     {
       "slug": "istanbul",
@@ -793,7 +793,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 45909
+      "bytes": 48080
     },
     {
       "slug": "dubai",
@@ -810,7 +810,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 41178
+      "bytes": 42667
     },
     {
       "slug": "sydney",
@@ -827,7 +827,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 44035
+      "bytes": 43933
     },
     {
       "slug": "melbourne",
@@ -844,7 +844,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 45871
+      "bytes": 46643
     },
     {
       "slug": "auckland",
@@ -860,8 +860,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 42748
+      "wellness": 18,
+      "bytes": 42685
     },
     {
       "slug": "vancouver",
@@ -878,7 +878,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 49348
+      "bytes": 49417
     },
     {
       "slug": "toronto",
@@ -895,7 +895,7 @@
       "activities": 50,
       "restaurants": 40,
       "wellness": 20,
-      "bytes": 45091
+      "bytes": 45535
     },
     {
       "slug": "mexico-city",
@@ -913,8 +913,8 @@
       },
       "activities": 50,
       "restaurants": 40,
-      "wellness": 20,
-      "bytes": 45112
+      "wellness": 12,
+      "bytes": 44524
     }
   ]
 }
