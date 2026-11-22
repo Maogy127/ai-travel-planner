@@ -79,7 +79,7 @@
         var first=style&&!a.styleSkipped?strengths[style]+' suit '+(group||'the way you want to travel')+'.':d.tagline.replace(/\.+$/,'')+'.';
         return[first, w.note+' in '+new Date(2027, m-1, 1).toLocaleString('en-US',  {
             month:'long'
-        })+'.', a.budget?'About $'+cost(a, d).total.toLocaleString('en-US')+' for your '+tripDays(a)+' days'+(cost(a, d).total<=a.budget?' fits your budget.':'; compare this with your budget.'):'Base yourself around '+d.areas+' for '+tripDays(a)+' days of exploring.'];
+        })+'.', a.budget?'About $'+cost(a, d).total.toLocaleString('en-US')+' for your '+tripDays(a)+' days'+(cost(a, d).total<=a.budget?' fits your budget.':' — over your $'+Number(a.budget).toLocaleString('en-US')+' budget.'):'Base yourself around '+d.areas+' for '+tripDays(a)+' days of exploring.'];
     }
     // Neutral interests when skipped; pace alone controls the number of activities.
     function selectedStyles(a) {
@@ -97,8 +97,29 @@
                 score:score, weather:w, whyFits:whyFits(a, d, m, w)
             });
         }).sort(function(x, y) {
-            return y.score-x.score;
+            // Places far past the stated budget sink, on top of the smaller penalty already in the score.
+            function over(d){return a.budget&&d.total>a.budget?Math.min(50,(d.total-a.budget)/200):0;}
+            return (y.score-over(y))-(x.score-over(x));
         });
+    }
+    function clockKey(item) {
+        var m=String(item.time||'').match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if(m){var h=Number(m[1])%12;if(/pm/i.test(m[3]))h+=12;return h*60+Number(m[2]);}
+        var w=String(item.time||'').toLowerCase();
+        if(/arriv|morning/.test(w))return 60;
+        if(/afternoon/.test(w))return 840;
+        if(/evening/.test(w))return 1140;
+        if(/depart/.test(w))return 1320;
+        return null;
+    }
+    // Timed stops stay in clock order. Untimed notes keep the slot they were given.
+    function arrangeTimes(items) {
+        var loose=[], timed=[];
+        items.forEach(function(item, index){var k=clockKey(item);if(k==null)loose.push({item:item, index:index});else timed.push({item:item, index:index, k:k});});
+        timed.sort(function(a, b){return a.k-b.k||a.index-b.index;});
+        var out=timed.map(function(x){return x.item;});
+        loose.forEach(function(x){out.splice(Math.min(x.index, out.length), 0, x.item);});
+        return out;
     }
     function buildTemplatePlan(a, d) {
         a=Object.assign({},a,{styles:selectedStyles(a)});
@@ -157,7 +178,7 @@
                 var count=a.pace==='Easy'?2:a.pace==='Full-on'?4:3;
                 var styles=selectedStyles(a);
                 for(var j=0; j<count; j++) {
-                    var style=styles[(i+j)%styles.length], choices=(d.activities[style]||[]).filter(function(title){return !/breakfast/i.test(title);});choices=choices.length?choices:styles.map(function(key){return d.activities[key];}).find(function(list){return list&&list.length;})||d.activities.scenic;
+                    var style=styles[(i+j)%styles.length], choices=(d.activities[style]||[]).filter(function(title){return !/breakfast|lunch|dinner/i.test(title);});choices=choices.length?choices:styles.map(function(key){return d.activities[key];}).find(function(list){return list&&list.length;})||d.activities.scenic;
                     arr.push( {
                         time:['10:00 AM', '1:00 PM', '3:30 PM', '5:00 PM'][j], kind:style==='hotel'?'rest':'activity', title:choices[(i+j)%choices.length], desc:'Template suggestion. Choose an operator or location at booking; confirm accessibility and suitability.', bookable:style==='nature', bring:['water', 'sun', 'shoes'].concat(style==='nature'?['swim']:[]), prep:[ {
                             type:'book', text:'Book popular tours 1–2 weeks ahead.', sources:[]
@@ -170,7 +191,8 @@
                 }
                 arr.push(meal('7:00 PM', 'Dinner'));
             }
-            var seenTitles=new Set();arr=arr.filter(function(x){var key=x.title.toLowerCase();if(seenTitles.has(key))return false;seenTitles.add(key);return true;});
+            var seenTitles=new Set(), seenMeals={};arr=arr.filter(function(x){var key=x.title.toLowerCase();if(seenTitles.has(key))return false;seenTitles.add(key);var slot=/breakfast/i.test(x.title)?'breakfast':/lunch/i.test(x.title)?'lunch':/dinner|evening meal/i.test(x.title)?'dinner':'';if(slot){if(seenMeals[slot])return false;seenMeals[slot]=true;}return true;});
+            arr=arrangeTimes(arr);
             arr.forEach(function(x, j) {
                 x.id='d'+i+'i'+j;
                 x.bring=x.bring||[];
@@ -192,6 +214,7 @@
             day.items.splice(day.items.length-1, 0,  {
                 id:'request'+i, time:'Confirm time', kind:'activity', title:'📌 '+t, requested:true, desc:'Requested item — confirm availability, timing and location before booking.', bring:['qr'], prep:[], sources:[], travelToNext:'approx. 15–30 min by rideshare/transit — depends on where you stay'
             });
+            day.items=arrangeTimes(day.items);
         });
         var grouped=[['Documents & money', ['id', 'card', 'qr']], ['Clothing', ['clothes', 'layer', 'shoes']], ['Beach & water', ['swim', 'sun']], ['Activity gear', ['water']], ['Health & toiletries', ['meds']], ['Tech', ['phone']], ['Misc', []]].map(function(g) {
             return {
@@ -260,6 +283,55 @@
         if(youngest<18)plan.ageRules.push('Traveling with kids: check activity minimum ages, heights and weights.');
         return plan;
     }
+    function partySize(a) {
+        a=a||{};
+        var ages=(Array.isArray(a.ages)?a.ages:[]).filter(function(x){return String(x).trim()!==''&&Number.isFinite(Number(x));});
+        if(ages.length)return ages.length;
+        if(a.who==='solo')return 1;
+        if(a.who==='couple')return 2;
+        var n=Number(a.adults||0)+Number(a.kids||0);
+        return n>0?n:2;
+    }
+    // Dollar signs win when the price is only a level ("$$", "$$$$"). A number like "$150 pp" is ranked by the amount.
+    function priceRank(price) {
+        var s=String(price||'').trim();
+        if(/^\$+$/.test(s))return Math.min(4, s.length);
+        var n=Number((s.replace(/,/g,'').match(/\d+(?:\.\d+)?/)||[])[0]);
+        if(!Number.isFinite(n))return 0;
+        if(n<=25)return 1;
+        if(n<=60)return 2;
+        if(n<=120)return 3;
+        return 4;
+    }
+    function perPersonPerDay(a) {
+        if(!a||!(Number(a.budget)>0)||a.budgetChoice==='flexible')return null;
+        return Number(a.budget)/partySize(a)/tripDays(a);
+    }
+    // Rough ceiling for one meal or ticket. Unknown budgets are not filtered.
+    function maxRank(a) {
+        var ppd=perPersonPerDay(a);
+        if(ppd==null)return 4;
+        if(ppd<45)return 1;
+        if(ppd<100)return 2;
+        if(ppd<200)return 3;
+        return 4;
+    }
+    function wishText(a){return ((a&&a.mustdos)||'')+' '+((a&&a.foodLoves)||[]).join(' ');}
+    function wantsFineDining(a){return /\bfine dining\b|\btasting menu\b|\bomakase\b|\bla mer\b/i.test(wishText(a));}
+    function explicitChoice(a, item) {
+        var text=wishText(a).toLowerCase();
+        if(/\bfine dining\b|\btasting menu\b|\bomakase\b/.test(text)&&priceRank(item&&item.price)>=4)return true;
+        var name=String((item&&(item.name||item.title))||'').toLowerCase();
+        return name.split(/[^a-z0-9]+/).filter(function(w){return w.length>3;}).some(function(w){return text.includes(w);});
+    }
+    function fitsPrice(item, a) {
+        if(explicitChoice(a, item))return true;
+        if(wantsFineDining(a)&&priceRank(item&&item.price)>=4&&(item.meals||item.kind==='meal'))return true;
+        var rank=priceRank(item&&item.price);
+        if(!rank)return true;
+        return rank<=maxRank(a);
+    }
+    window.GoNowBudget={partySize:partySize, priceRank:priceRank, perPersonPerDay:perPersonPerDay, maxRank:maxRank, wantsFineDining:wantsFineDining, explicit:explicitChoice, fits:fitsPrice};
     window.Engine= {
         estimateCost:cost, dateRange:dateRange, matchDestination:matchDestination, recommend:recommend, buildTemplatePlan:buildTemplatePlan, applyAgeRules:applyAgeRules, tripDays:tripDays, originRegion:origin
     };

@@ -18,7 +18,7 @@ Leave it empty (`''`) to use OpenStreetMap only. This is a **browser key**, so e
 ## 2. Create and restrict the key
 APIs & Services → Credentials → Create credentials → API key, then Edit:
 - **Application restrictions → Websites (HTTP referrers):**
-  - `https://maogy127.github.io/*`
+  - `https://ameliamiaomiao.github.io/*`
   - `https://raw.githack.com/*`
   - Optional, for local testing: `http://localhost/*` and `http://127.0.0.1/*`. Remove these for production.
 - **API restrictions → Restrict key → Places API (New) only.**
