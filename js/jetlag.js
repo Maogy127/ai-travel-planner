@@ -6,10 +6,28 @@ const more=[[/paris/i,'Europe/Paris','Paris'],[/rome|\bfco\b/i,'Europe/Rome','Ro
 function home(origin){const c=cities.find(c=>c[0].test(origin||''));return {tz:c?c[1]:'America/Los_Angeles',name:c?c[2]:'LA'};}
 // A destination's zone, or null when unknown (never guess Los Angeles for a destination).
 function zone(text){const c=cities.concat(more).find(c=>c[0].test(text||''));return c?c[1]:null;}
+// Airport-area points for flight length. City-hall coordinates are close enough for a labeled estimate.
+const COORDS={'Hong Kong':[22.31,114.17],'Kuala Lumpur':[3.14,101.69],'Washington DC':[38.85,-77.04],'LA':[33.94,-118.41],'San Francisco':[37.62,-122.38],'Seattle':[47.45,-122.31],'New York':[40.64,-73.78],'Honolulu':[21.32,-157.92],'Chicago':[41.97,-87.91],'London':[51.47,-0.45],'Tokyo':[35.77,140.39],'Shanghai':[31.14,121.81],'Beijing':[40.08,116.58],'Paris':[49.01,2.55],'Rome':[41.8,12.25],'Berlin':[52.37,13.5],'Amsterdam':[52.31,4.76],'Madrid':[40.47,-3.56],'Barcelona':[41.3,2.08],'Lisbon':[38.77,-9.13],'Dublin':[53.42,-6.27],'Athens':[37.94,23.94],'Istanbul':[41.26,28.74],'Dubai':[25.25,55.36],'Singapore':[1.36,103.99],'Bangkok':[13.69,100.75],'Seoul':[37.46,126.44],'Osaka':[34.43,135.24],'Taipei':[25.08,121.23],'Sydney':[-33.94,151.18],'Melbourne':[-37.67,144.84],'Auckland':[-37.01,174.79],'Mexico City':[19.44,-99.07],'Toronto':[43.68,-79.63],'Vancouver':[49.19,-123.18],'Montreal':[45.47,-73.74],'Boston':[42.36,-71.01],'Miami':[25.8,-80.29],'Orlando':[28.43,-81.31],'Atlanta':[33.64,-84.43],'Central':[32.9,-97.04],'Denver':[39.86,-104.67],'Phoenix':[33.44,-112.01],'Anchorage':[61.17,-150]};
+function locate(text){const c=cities.concat(more).find(c=>c[0].test(text||''));if(!c||!COORDS[c[2]])return null;return {tz:c[1],name:c[2],lat:COORDS[c[2]][0],lng:COORDS[c[2]][1]};}
+function km(a,b){const R=6371,d=x=>x*Math.PI/180,dl=d(b.lat-a.lat),dg=d(b.lng-a.lng),h=Math.sin(dl/2)**2+Math.cos(d(a.lat))*Math.cos(d(b.lat))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
+// Air time is wheels-up to wheels-down. Door to door adds the airport and the ride.
+function flightEstimate(originText,destText,date){
+ const o=locate(originText),d=locate(destText);if(!o||!d)return null;
+ const distance=km(o,d);
+ let air=distance<500?Math.max(1,distance/650+0.6):distance/830+0.75;
+ air=Math.round(air*2)/2;
+ const same=o.tz===d.tz||(/America\//.test(o.tz)&&/America\//.test(d.tz)&&distance<2500);
+ const longHaul=air>=8;
+ const before=longHaul?3:same?1.75:2.5, after=longHaul?2.5:same?1:1.5;
+ const door=Math.round((air+before+after)*2)/2;
+ const when=(date||'2026-11-25').slice(0,10);
+ return {air,door,km:Math.round(distance),same:!longHaul&&same,clockHours:(offset(when,d.tz)-offset(when,o.tz))/60,origin:o,destination:d};
+}
 const mins=s=>Number(s.slice(0,2))*60+Number(s.slice(3));
 const clock=n=>{n=(n%1440+1440)%1440;return String(Math.floor(n/60)).padStart(2,'0')+':'+String(n%60).padStart(2,'0');};
 function offset(date,tz){const d=new Date(date.slice(0,10)+'T12:00:00Z');const p=Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hourCycle:'h23'}).formatToParts(d).map(x=>[x.type,x.value]));return (Date.UTC(+p.year,+p.month-1,+p.day,+p.hour,+p.minute)-d.getTime())/60000;}
-function adjustment(options){const {date,day=1,origin,destinationZone='Pacific/Honolulu',bedtime='22:30',wake='06:30',local=false}=options;const h=home(origin);let delta=local?0:offset(date,destinationZone)-offset(date,h.tz);delta=((delta+720)%1440+1440)%1440-720;const remaining=Math.sign(delta)*Math.max(0,Math.abs(delta)-Math.max(0,day-1)*60);const aligned=remaining===0;return {homeZone:h.tz,homeName:h.name,offsetMinutes:delta,bedtime:clock(mins(bedtime||'22:30')+remaining),wake:clock(mins(wake||'06:30')+remaining),suggestedStart:clock(mins(wake||'06:30')+remaining+60),lighter:!local&&day===1&&(delta>0||Math.abs(delta)>=180),aligned,note:local||aligned?'':day===1?'Your body is still on '+h.name+' time, so today starts easy — an early wake is a great excuse for sunrise.':'Ease into local time today; leave room for rest.'};}
+function adjustment(options){const {date,day=1,origin,destinationZone='Pacific/Honolulu',bedtime='22:30',wake='06:30',local=false}=options;const h=home(origin);const delta=local?0:offset(date,destinationZone)-offset(date,h.tz);// A 16-hour flight is not an 8-hour bedtime. Ease at most 3 hours, one hour less each day.
+ const ease=Math.sign(delta)*Math.min(180,Math.abs(delta));const remaining=Math.sign(ease)*Math.max(0,Math.abs(ease)-Math.max(0,day-1)*60);const aligned=remaining===0;return {homeZone:h.tz,homeName:h.name,offsetMinutes:delta,bedtime:clock(mins(bedtime||'22:30')+remaining),wake:clock(mins(wake||'06:30')+remaining),suggestedStart:clock(mins(wake||'06:30')+remaining+60),lighter:!local&&day===1&&(delta>0||Math.abs(delta)>=180),aligned,note:local||aligned?'':day===1?'Your body is still on '+h.name+' time, so today starts easy — an early wake is a great excuse for sunrise.':'Ease into local time today; leave room for rest.'};}
 function center(destination){return destination&&destination.center||'city center';}
-const api={home,zone,offset,adjustment,center};root.GoNowJetlag=api;if(typeof module!=='undefined')module.exports=api;
+const api={home,zone,offset,adjustment,center,locate,flightEstimate};root.GoNowJetlag=api;if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

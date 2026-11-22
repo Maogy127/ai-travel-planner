@@ -1492,8 +1492,73 @@ for(const item of [...catalog.activities,...catalog.restaurants]){
 }
 function eligible(item,a){return !item.minAge||!(a.ages||[]).some(age=>String(age).trim()!==''&&Number(age)<item.minAge);}
 function must(item,a){const text=(a.mustdos||'').toLowerCase();return !!text&&(item.musts||[]).some(k=>k.length>3&&text.includes(k));}
-function score(i,a){let n=must(i,a)?100:0;const prefs=JSON.stringify([a.styles,a.activities,a.interests]).toLowerCase();if((i.category==='Outdoors'&&/nature|scenic|hike/.test(prefs))||(i.category==='Culture'&&/culture/.test(prefs))||(i.category==='Water'&&/water|swim|surf/.test(prefs))||(i.category==='Chill'&&/hotel|relax/.test(prefs)))n+=10;if((a.level==='gentle'&&i.effort==='Easy')||(a.level==='athlete'&&i.effort==='Active')||(a.level==='active'&&i.effort==='Moderate'))n+=5;const budget=window.GoNowBudget;if(budget){const rank=budget.priceRank(i.price),max=budget.maxRank(a||{});if(rank&&rank<=max)n+=4-rank;else if(rank>max)n-=30*(rank-max);}return n;}
+const LOVE={'Seafood':/seafood|sushi|oyster|fish|poke|sashimi/,'Street food / casual':/street|pizza|deli|diner|taco|noodle|ramen|casual|market|bagel/,'Fine dining':/fine dining|tasting|omakase|steak house|steakhouse/,'Healthy cafés & bowls':/cafe|café|salad|bowl|healthy|juice|vegetarian|coffee/,'Local classics':/classic|tavern|deli|diner|regional|historic|local/,'High protein':/steak|sushi|seafood|grill|chicken/,'Low carb':/steak|seafood|grill|salad/};
+function hay(i){return [i.name,i.cuisine,i.category,i.area,(i.tags||[]).join(' ')].join(' ').toLowerCase();}
+function dietBlock(i,a){
+ if(!i.meals&&i.kind!=='meal')return '';
+ const needs=[...(a&&a.dietNeeds||[]),...(a&&a.allergens||[])];
+ const text=hay(i);
+ if(needs.includes('Shellfish')&&/shellfish|shrimp|crab|lobster|oyster/.test(text))return 'Shellfish';
+ if(needs.includes('Nuts')&&/\b(peanut|walnut|almond|nuts)\b/.test(text))return 'Nuts';
+ if(needs.some(n=>n==='Vegetarian'||n==='Vegan')&&/steak|bbq|barbecue|burger|deli|pastrami|fried chicken|kebab|yakiniku|tonkatsu|seafood|sushi|oyster|sashimi|poke|shellfish|shrimp|crab|lobster|\bfish\b/.test(text)&&!/vegetarian|vegan/.test(text))return needs.includes('Vegan')?'Vegan':'Vegetarian';
+ if(window.GoNowDiet){const m=window.GoNowDiet.match({kind:'meal',title:i.name||i.title,desc:(i.intro||i.desc||'')+' '+(i.cuisine||''),tags:i.tags||[]},a);if(m.status==='conflict')return (m.needs&&m.needs[0])||'your diet';}
+ return '';
+}
+function priceOf(i){if(i.price)return i.price;if(!i.meals&&i.kind!=='meal')return '';const c=hay(i);if(/steak house|steakhouse|fine dining|tasting|omakase/.test(c))return '$$$$';if(/cafe|pizza|deli|diner|noodle|ramen|street|bagel|coffee/.test(c))return '$';return '$$';}
+function activityFit(i,a){
+ const acts=((a&&a.activities)||[]).map(s=>String(s).toLowerCase()), text=hay(i);
+ if(!acts.length)return '';
+ if(acts.includes('swimming')&&/beach|aquarium|pool|swim/.test(text))return 'Swimming';
+ if(acts.some(x=>x==='hiking'||x==='walking')&&/park|viewpoint|trail|garden|walk|temple|shrine/.test(text))return acts.includes('hiking')?'Hiking':'Walking';
+ if(acts.some(x=>/yoga|pilates|meditation/.test(x))&&/spa|fitness|garden|park|temple|shrine/.test(text))return 'A calm stop';
+ if(acts.some(x=>/running|cycling|strength/.test(x))&&/park|fitness|trail|beach/.test(text))return 'Room to move';
+ return '';
+}
+function loveFit(i,a){return ((a&&a.foodLoves)||[]).find(love=>LOVE[love]&&LOVE[love].test(hay(i)))||'';}
+function score(i,a){
+ a=a||{};
+ let n=must(i,a)?100:0;
+ const prefs=JSON.stringify([a.styles,a.activities,a.interests]).toLowerCase();
+ if((i.category==='Outdoors'&&/nature|scenic|hike/.test(prefs))||(i.category==='Culture'&&/culture/.test(prefs))||(i.category==='Water'&&/water|swim|surf/.test(prefs))||(i.category==='Chill'&&/hotel|relax/.test(prefs)))n+=10;
+ if(activityFit(i,a))n+=12;
+ if(loveFit(i,a))n+=14;else if((i.meals||i.kind==='meal')&&(a.foodLoves||[]).length)n-=6;
+ if(dietBlock(i,a))n-=80;
+ if((a.level==='gentle'&&(/easy/.test(String(i.effort||'').toLowerCase())||/museum|park|garden|cafe/.test(hay(i))))||(a.level==='athlete'&&(/active/.test(String(i.effort||'').toLowerCase())||/park|viewpoint|fitness|trail|hike/.test(hay(i))))||(a.level==='active'&&/moderate|easy/.test(String(i.effort||'').toLowerCase())))n+=5;
+ if(a.level==='gentle'&&/steep|summit|hike/.test(hay(i)))n-=8;
+ const budget=window.GoNowBudget,price=priceOf(i);
+ if(budget&&price){const rank=budget.priceRank(price),max=budget.maxRank(a);if(rank&&rank<=max)n+=4-rank;else if(rank>max)n-=30*(rank-max);}
+ return n;
+}
+function why(i,a){
+ a=a||{};
+ const bits=[];
+ const block=dietBlock(i,a);if(block)return 'Doesn’t fit '+block;
+ const love=loveFit(i,a);if(love)bits.push(love.toLowerCase());
+ const fit=activityFit(i,a);if(fit)bits.push(fit.toLowerCase());
+ const budget=window.GoNowBudget,price=priceOf(i);
+ if(budget&&price){const rank=budget.priceRank(price),max=budget.maxRank(a);if(rank>max)bits.push('usually pricier than this budget');else if(rank&&(a.budget||a.budgetChoice))bits.push('within this budget');}
+ if(a.level==='gentle'&&/museum|park|garden/.test(hay(i)))bits.push('an easy pace');
+ if(!bits.length)return '';
+ return bits[0].replace(/^./,c=>c.toUpperCase())+(bits.length>1?' · '+bits.slice(1).join(' · '):'');
+}
+function choose(items,a,limit){
+ a=a||{};
+ const open=(items||[]).filter(i=>eligible(i,a)&&!dietBlock(i,a));
+ const budget=window.GoNowBudget;
+ const affordable=open.filter(i=>{const price=priceOf(i);return !budget||!price||budget.fits(Object.assign({},i,{price:price}),a);});
+ const pool=(affordable.length?affordable:open).slice().sort((x,y)=>score(y,a)-score(x,a));
+ const picked=[],seen={};
+ for(const item of pool){
+  if(picked.length>=limit)break;
+  const text=hay(item);
+  const bucket=!item.meals?'activity':/steak/.test(text)?'steak':/seafood|sushi|fish|poke/.test(text)?'seafood':/cafe|coffee|bagel|diner/.test(text)?'cafe':'table';
+  if((seen[bucket]||0)>=(bucket==='activity'?limit:2))continue;
+  seen[bucket]=(seen[bucket]||0)+1;
+  picked.push(item.id);
+ }
+ return picked;
+}
 function searchText(value){return String(value||'').normalize('NFD').replace(/[\u0300-\u036f]/g,'').replace(/[ʻʼ’']/g,'').toLowerCase();}
-function filter(items,query,chip,a){a=a||{};const budget=window.GoNowBudget,q=searchText(query);return items.filter(i=>eligible(i,a)&&(!chip||chip==='All'||i.category===chip||(i.meals||[]).includes(chip.toLowerCase().replace('snacks','snack')))&&[i.name,i.cuisine,i.area,i.category,...(i.tags||[])].some(value=>searchText(value).includes(q))&&(q||!budget||budget.fits(i,a))).sort((x,y)=>score(y,a)-score(x,a));}
-window.GONOW_PICKS={oahu:catalog};window.PickCatalog={eligible,must,filter,duration:minutes=>minutes<60?minutes+' min':Number((minutes/60).toFixed(2))+' h',count:(count,total,capacity)=>'Picked '+count+(count?' · about '+Math.max(1,Math.ceil(total/capacity))+' '+(Math.ceil(total/capacity)<=1?'day':'days'):'')};
+function filter(items,query,chip,a){a=a||{};const budget=window.GoNowBudget,q=searchText(query);return items.filter(i=>{const price=priceOf(i);return eligible(i,a)&&(q||!dietBlock(i,a))&&(!chip||chip==='All'||i.category===chip||(i.meals||[]).includes(chip.toLowerCase().replace('snacks','snack')))&&[i.name,i.cuisine,i.area,i.category,...(i.tags||[])].some(value=>searchText(value).includes(q))&&(q||!budget||!price||budget.fits(Object.assign({},i,{price:price}),a));}).sort((x,y)=>score(y,a)-score(x,a));}
+window.GONOW_PICKS={oahu:catalog};window.PickCatalog={eligible,must,filter,why,choose,score,duration:minutes=>minutes<60?minutes+' min':Number((minutes/60).toFixed(2))+' h',count:(count,total,capacity)=>'Picked '+count+(count?' · about '+Math.max(1,Math.ceil(total/capacity))+' '+(Math.ceil(total/capacity)<=1?'day':'days'):'')};
 })();

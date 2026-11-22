@@ -48,6 +48,31 @@ function placeholder(p){return '<div class="place-placeholder" data-testid="plac
 const root=typeof window==='undefined'?globalThis:window;
 // Drops expired place-cache entries and keeps at most `max` (oldest first). `all` clears the cache to free space.
 function prune(storage,all=false,max=40,now=Date.now()){try{const rows=[];for(let i=0;i<storage.length;i++){const k=storage.key(i);if(!k||!k.startsWith('gonow:places:')||k==='gonow:places:last-geocode')continue;let until=0;try{until=JSON.parse(storage.getItem(k)).until||0;}catch(e){}rows.push([k,until]);}rows.filter(r=>all||r[1]<=now).forEach(r=>storage.removeItem(r[0]));const live=rows.filter(r=>!all&&r[1]>now).sort((a,b)=>a[1]-b[1]);live.slice(0,Math.max(0,live.length-max)).forEach(r=>storage.removeItem(r[0]));}catch(e){}}
+const WARDS={'右京区':'Ukyo','中京区':'Nakagyo','下京区':'Shimogyo','北区':'Kita','東山区':'Higashiyama','浪速区':'Naniwa','生野区':'Ikuno','阿倍野区':'Abeno','中央区':'Chuo','台東区':'Taito','新宿区':'Shinjuku','港区':'Minato','江東区':'Koto'};
+const NEIGHBORHOODS={
+ honolulu:[['Waikiki',21.276,-157.826,2.2],['Diamond Head',21.262,-157.805,1.5],['Lanikai',21.392,-157.715,1.8],['Kailua',21.402,-157.74,3],['Waimanalo',21.34,-157.7,3.5],['Manoa',21.32,-157.8,4],['Pearl Harbor',21.362,-157.95,3.5],['Kualoa',21.521,-157.837,4],['Downtown Honolulu',21.307,-157.858,1.6]],
+ barcelona:[['Barceloneta',41.379,2.192,1.3],['El Born',41.387,2.183,0.7],['Ciutat Vella',41.382,2.176,1.1],['Eixample',41.395,2.165,1.8],['Gràcia',41.406,2.156,1.4],['Les Corts',41.383,2.128,1.6],['Montjuïc',41.366,2.156,1.8],['Horta',41.436,2.148,1.6],['Tibidabo',41.422,2.119,1.4],['Sant Cugat',41.474,2.085,3],['Sant Adrià de Besòs',41.47,2.27,5]]
+};
+function placeKm(a,b){const R=6371,d=x=>x*Math.PI/180,dl=d(b.lat-a.lat),dg=d(b.lng-a.lng),h=Math.sin(dl/2)**2+Math.cos(d(a.lat))*Math.cos(d(b.lat))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
+function nearestHood(city,lat,lng){
+ const key=/honolulu|oahu|waikiki|hawaii/i.test(city||'')?'honolulu':/barcelona/i.test(city||'')?'barcelona':'';
+ const boxes=NEIGHBORHOODS[key];if(!boxes||!Number.isFinite(lat))return '';
+ let best=null;for(const box of boxes){const d=placeKm({lat:lat,lng:lng},{lat:box[1],lng:box[2]});if(d<=box[3]&&(!best||d<best.d))best={name:box[0],d:d};}
+ return best?best.name:'';
+}
+function labelPlace(p,city){
+ if(!p)return p;
+ p.name=String(p.name||'').replace(/\s*\([^A-Za-z0-9]*\)\s*$/,'').trim();
+ let area=String(p.area||'');
+ const latin=area.replace(/[\u3000-\u9fff\uac00-\ud7af\u3040-\u30ff]+/g,' ').replace(/\s+/g,' ').trim();
+ if(latin&&/[A-Za-z]/.test(latin)&&latin!==area)area=latin;else if(WARDS[area])area=WARDS[area];
+ const hood=nearestHood(city||area,p.lat,p.lng);if(hood)area=hood;
+ p.area=area||city||p.area||'';
+ const n=p.name;
+ if(/museum|museu/i.test(n)&&/cafe|restaurant/i.test(p.category||'')){p.category='Museum';p.type='museum';}
+ if(/\b(plaça|plaza|square|piazza)\b/i.test(n)&&p.category==='Park'){p.category='Attraction';p.type='attraction';}
+ return p;
+}
 function create(options={}){
  const request=options.fetch||((...args)=>window.fetch(...args)),now=options.now||Date.now,sleep=options.sleep||(ms=>new Promise(r=>setTimeout(r,ms))),storage=options.storage||window.localStorage;
  let geoTail=Promise.resolve(),lastGeo=-Infinity,overTail=Promise.resolve();
@@ -78,7 +103,7 @@ function create(options={}){
   const seen=new Set(),distance=p=>Math.hypot(p.lat-center.lat,(p.lng-center.lng)*Math.cos(center.lat*Math.PI/180));
   const rows=(data.elements||[]).filter(e=>e.tags&&e.tags.name).map(e=>{const t=e.tags,k=category(t),point=e.center||e,dining=['restaurant','cafe'].includes(k),well=!!wellnessKind(t);return {id:'osm-'+e.type+'-'+e.id,name:placeName(t),type:k,category:labels[k]||'Attraction',lat:+point.lat,lng:+point.lon,area:t['addr:suburb']||city,address:[t['addr:housenumber'],t['addr:street'],t['addr:city']].filter(Boolean).join(' '),...estimates(k),needsTicket:t.fee==='yes'||!!t.charge,price:'',intro:'',photo:'',generic:true,section:'popular',cuisine:t.cuisine?t.cuisine.replace(/[_;]/g,' '):k==='cafe'?'Coffee':'',...(dining?{meals:k==='cafe'?['breakfast','lunch','snack']:['lunch','dinner']}:{}),...(well?{wellness:true}:{}),openingHours:t.opening_hours||'',parsedHours:parseHours(t.opening_hours),hours:parseHours(t.opening_hours)||{},closed:[],closedDates:[],tags:[],wikipedia:t.wikipedia,wikidata:t.wikidata,mapUrl:'https://www.openstreetmap.org/'+e.type+'/'+e.id,notability:Number(!!t.wikipedia)+Number(!!t.wikidata),richness:e.n||Object.keys(t).length};}).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
   rows.sort((a,b)=>b.notability-a.notability||b.richness-a.richness||distance(a)-distance(b));
-  const unique=rows.filter(p=>{const n=normalize(p.name);if(seen.has(n))return false;seen.add(n);return true;});
+  const unique=rows.filter(p=>{const n=normalize(p.name);if(seen.has(n))return false;seen.add(n);labelPlace(p,city);return true;});
   const well=p=>!!p.wellness;return {generic:true,source:'osm',city,center,activities:unique.filter(p=>!p.meals&&!well(p)),restaurants:unique.filter(p=>p.meals),wellness:unique.filter(well)};
  }
  // Speed: Google first (3 s per request); OpenStreetMap starts only if Google fails or is still loading after 1.2 s, hard 4.5 s cap,
@@ -112,9 +137,9 @@ function create(options={}){
   const index=snapshotIndex()||{},base=options.snapshotBase!=null?options.snapshotBase:(index.base||'data/cities/');
   return String(base).replace(/\/?$/,'/')+meta.slug+'.json';
  }
- function revivePlace(p){
+ function revivePlace(p,city){
   const parsed=p.parsedHours||parseHours(p.openingHours)||null;
-  return Object.assign({},p,{parsedHours:parsed,hours:p.hours&&Number.isFinite(p.hours.open)?p.hours:(parsed||{}),generic:true,section:p.section||'popular',photo:p.photo||'',intro:p.intro||'',price:p.price||'',closed:p.closed||[],closedDates:p.closedDates||[],tags:p.tags||[]});
+  return labelPlace(Object.assign({},p,{parsedHours:parsed,hours:p.hours&&Number.isFinite(p.hours.open)?p.hours:(parsed||{}),generic:true,section:p.section||'popular',photo:p.photo||'',intro:p.intro||'',price:p.price||'',closed:p.closed||[],closedDates:p.closedDates||[],tags:p.tags||[]}),city);
  }
  function snapshotFromFile(url){
   try{
@@ -131,10 +156,11 @@ function create(options={}){
   return cached(key,30*DAY,async()=>{
    const data=await json(snapshotUrl(meta),{timeout:4000});
    if(!data||data.version!==SNAPSHOT_VERSION||!Array.isArray(data.activities)||!Array.isArray(data.restaurants))throw Error('bad snapshot');
-   const wellness=(data.wellness||[]).map(revivePlace);
-   const acts=data.activities.map(revivePlace),seen=new Set(acts.map(p=>normalize(p.name)));
+   const cityName=data.city||meta.name;
+   const wellness=(data.wellness||[]).map(p=>revivePlace(p,cityName));
+   const acts=data.activities.map(p=>revivePlace(p,cityName)),seen=new Set(acts.map(p=>normalize(p.name)));
    const merged=acts.concat(wellness.filter(p=>{const n=normalize(p.name);if(p.meals||seen.has(n))return false;seen.add(n);return true;}));
-   return {generic:true,source:'snapshot',city:data.city||meta.name,center:data.center||null,activities:merged,restaurants:data.restaurants.map(revivePlace),wellness};
+   return {generic:true,source:'snapshot',city:cityName,center:data.center||null,activities:merged,restaurants:data.restaurants.map(p=>revivePlace(p,cityName)),wellness};
   }).catch(()=>null);
  }
  function googleKey(){return String(options.googleKey!==undefined?options.googleKey:(root.GONOW_PLACES_CONFIG&&root.GONOW_PLACES_CONFIG.GOOGLE_PLACES_KEY)||'').trim();}
@@ -222,5 +248,5 @@ function google(city,hotel,key,opts={}){const center=hotelCenter(hotel);
 const PHOTO_LIMIT=150;
 function photoAllowed(name){try{const ls=root.localStorage,day=new Date().toISOString().slice(0,10);let b=JSON.parse(ls.getItem('gonow:places-photos')||'null');if(!b||b.day!==day)b={day,seen:[]};if(b.seen.includes(name))return true;if(b.seen.length>=PHOTO_LIMIT)return false;b.seen.push(name);ls.setItem('gonow:places-photos',JSON.stringify(b));return true;}catch(e){return true;}}
 function photoSrc(v){v=String(v||'');const m=/^gplace:(places\/[\w-]+\/photos\/[\w-]+)$/.exec(v);if(!m)return /^gplace:/.test(v)?'':v;if(!photoAllowed(m[1]))return '';const cfg=root.GONOW_PLACES_CONFIG,key=String(cfg&&cfg.GOOGLE_PLACES_KEY||'').trim();return key?'https://places.googleapis.com/v1/'+m[1]+'/media?maxWidthPx=480&key='+encodeURIComponent(key):'';}
-window.GoNowPlaceSource={photoSrc,create,prune,parseHours,allows,estimates,durationLabel,cardLine,ratingLabel,placeholder,slug,normalize,CONTACT,matchSnapshot:function(city){const idx=root.GONOW_CITY_INDEX;if(!idx||idx.version!==1||!Array.isArray(idx.cities))return null;const q=normalize(city),s=slug(city);return idx.cities.find(c=>c.slug===s||normalize(c.name)===q||(c.aliases||[]).some(a=>normalize(a)===q||slug(a)===s))||null;}};
+window.GoNowPlaceSource={photoSrc,create,prune,parseHours,allows,estimates,durationLabel,cardLine,ratingLabel,placeholder,slug,normalize,labelPlace,CONTACT,matchSnapshot:function(city){const idx=root.GONOW_CITY_INDEX;if(!idx||idx.version!==1||!Array.isArray(idx.cities))return null;const q=normalize(city),s=slug(city);return idx.cities.find(c=>c.slug===s||normalize(c.name)===q||(c.aliases||[]).some(a=>normalize(a)===q||slug(a)===s))||null;}};
 })();

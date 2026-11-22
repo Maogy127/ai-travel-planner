@@ -137,7 +137,7 @@
         var image=dest.id==='custom'?'images/hero.jpg':'images/'+dest.id+'.jpg';
         var visual=state.answers.templateOahu&&dest.id==='oahu'?'':photo(image, p.title, 'banner-photo');
         if(visual){ var bid=image.split('/').pop().replace('.jpg',''); var bc=window.PHOTO_CREDITS.find(function(c){return c.id===bid;}); visual+='<div class="banner-credit">'+creditHTML(bc)+'</div>'; }
-        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted plan-meta" data-testid="plan-meta">'+esc(p.meta)+'</p>'+stayLine(p)+'<small class="local-times" data-testid="time-diff">'+esc(timeDiffLine())+'</small>'+originAsk()+hotelForm()+'<div class="draft-confirm-row plan-actions">'+planPrimaryHTML()+planMoreHTML()+'</div></div></header>';
+        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted plan-meta" data-testid="plan-meta">'+esc(p.meta)+'</p>'+stayLine(p)+'<small class="local-times" data-testid="time-diff">'+esc(timeDiffLine())+'</small>'+(flightEstimateLine()?'<small class="local-times" data-testid="flight-estimate">'+esc(flightEstimateLine())+'</small>':'')+originAsk()+hotelForm()+'<div class="draft-confirm-row plan-actions">'+planPrimaryHTML()+planMoreHTML()+'</div></div></header>';
     }
     function shareMenuHTML() {
         return '<div class="share-controls"><button type="button" data-testid="share-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="plan-share-menu"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m-5 5 5-5 5 5M5 13v7h14v-7"/></svg>Share</button><div id="plan-share-menu" data-testid="share-menu" role="menu" aria-label="Share" hidden>'+[['Print / Save as PDF','print-plan'],['Copy as text','copy'],['Share link','share-link'],['Download calendar','download-ics'],['Invite friends','invite-friends']].map(function(item){var wrapper=item[1]==='print-plan'?'print':item[1]==='share-link'?'share':'';return (wrapper?'<span data-testid="'+wrapper+'">':'')+btn(item[0],item[1],'','role="menuitem" tabindex="-1"')+(wrapper?'</span>':'');}).join('')+'</div></div>';
@@ -374,10 +374,17 @@
     function timeDiffLine(){
         var tz=destinationZone(),j=window.GoNowJetlag;if(!tz||!j||state.answers.mode==='local')return 'Times shown are local';
         var h=homeBase(j);if(!h)return 'Times shown are local';var date=(state.plan&&state.plan.start)||state.answers.start||new Date().toISOString().slice(0,10),d=j.offset(date,tz)-j.offset(date,h.tz);
-        d=((d+720)%1440+1440)%1440-720;if(!d)return 'Same time as '+h.name;
+        if(!d)return 'Same time as '+h.name;
         var known=Engine.matchDestination(state.answers.destination),name=known.id==='oahu'?'Honolulu':known.id!=='custom'?known.name:String(state.answers.destination||'Your destination').split(',')[0].trim();
         var hrs=Math.abs(d)/60,text=(hrs%1?String(Math.round(hrs*10)/10):String(hrs))+(hrs===1?' hr':' hrs');
         return name+' is '+text+(d<0?' behind ':' ahead of ')+h.name;
+    }
+    function flightEstimateLine(){
+        var j=window.GoNowJetlag,a=state.answers;if(!j||!j.flightEstimate||a.mode==='local'||!knownHome())return '';
+        var date=(state.plan&&state.plan.start)||a.start||'2026-11-25',est=j.flightEstimate(a.origin||'',a.destination||'',date);
+        if(!est)return '';
+        var pretty=function(n){return (n%1?String(n):String(n))+(n===1?' hr':' hrs');};
+        return 'Flight estimate · '+pretty(est.air)+' in the air · '+pretty(est.door)+' door to door';
     }
     function readTrips(){try{var list=JSON.parse(localStorage.getItem(TRIPS));return Array.isArray(list)?list.filter(function(t){return t&&typeof t==='object'&&typeof t.id==='string';}):[];}catch(e){return [];}}
     function writeTrips(list){var previous=readTrips();list.forEach(function(t){var old=previous.find(function(p){return p.id===t.id;});if(JSON.stringify(old)!==JSON.stringify(t))t.updatedAt=Date.now();});var data=JSON.stringify(list);try{localStorage.setItem(TRIPS,data);}catch(e){
@@ -1520,7 +1527,7 @@
             }).catch(failure);return;
         }
         var a=normalizeAnswers(state.answers);
-        if(a.picks.city!==identity){a.picks={activities:[],restaurants:[],initialized:true,city:identity};}
+        if(a.picks.city!==identity){a.picks={activities:[],restaurants:[],initialized:true,city:identity};var paceCount=a.level==='athlete'?4:a.level==='gentle'?2:3;a.picks.activities=PickCatalog.choose(catalog.activities,a,paceCount);a.picks.restaurants=PickCatalog.choose(catalog.restaurants,a,3);}
         save();
         var chips=food?['All','Breakfast','Lunch','Dinner','Snacks']:['All'].concat(Array.from(new Set(catalog.activities.map(function(p){return p.category;}))));
         view.innerHTML='<section class="shell pick-screen nearby-picks" data-testid="'+screen+'"><h1>Pick '+(food?'restaurants':'activities')+'</h1><div class="pick-chips">'+chips.map(function(c){return '<button data-pick-filter="'+esc(c)+'" aria-pressed="'+(pickFilter===c)+'">'+esc(c)+'</button>';}).join('')+'</div><label class="pick-search">Search<input type="search" data-testid="pick-search" value="'+esc(pickQuery)+'"></label><div id="pick-results"></div>'+credit+'<div class="pick-footer"><button data-testid="pick-back">Back</button><span id="pick-count" aria-live="polite"></span>'+btn(food?(editingPicks?'Update plan':'Check out'):'Next: restaurants','pick-next','primary')+'</div></section>';
@@ -1539,7 +1546,7 @@
         function results(){
             if(observer)observer.disconnect();
             var items=PickCatalog.filter(catalog[key],pickQuery,pickFilter,a);
-            document.getElementById('pick-results').innerHTML=(items.length?'<h2>Popular nearby</h2>':'')+(!items.length?'<p>'+(catalog[key].length?'No matches · try another word':'No places found nearby')+'</p>':'<div class="pick-grid">'+items.map(function(p){var selected=a.picks[key].includes(p.id);return '<article class="pick-card '+(selected?'picked':'')+'" data-testid="pick-card" data-pick-id="'+p.id+'"><button class="pick-toggle" data-pick-toggle="'+p.id+'" aria-label="'+esc(p.name)+'" aria-pressed="'+selected+'" '+(pickLocked(p.id)?'aria-disabled="true"':'')+'><div class="place-media">'+media(p,false)+'</div><span><strong>'+esc(p.name)+'</strong><small>'+esc(GoNowPlaceSource.cardLine(p))+'</small>'+(pickLocked(p.id)?'<small>Locked</small>':'')+'</span><b aria-hidden="true">'+(selected?'✓':'')+'</b></button><button class="pick-info" data-pick-info="'+p.id+'" aria-label="Details: '+esc(p.name)+'">ⓘ</button>'+photoCreditHtml(p,false)+'</article>';}).join('')+'</div>');
+            document.getElementById('pick-results').innerHTML=(items.length?'<h2>Popular nearby</h2>':'')+(!items.length?'<p>'+(catalog[key].length?'No matches · try another word':'No places found nearby')+'</p>':'<div class="pick-grid">'+items.map(function(p){var selected=a.picks[key].includes(p.id);var line=GoNowPlaceSource.cardLine(p);if(p.area&&line.indexOf(p.area)<0)line=p.area+' · '+line;var because=PickCatalog.why(p,a);return '<article class="pick-card '+(selected?'picked':'')+'" data-testid="pick-card" data-pick-id="'+p.id+'"><button class="pick-toggle" data-pick-toggle="'+p.id+'" aria-label="'+esc(p.name)+'" aria-pressed="'+selected+'" '+(pickLocked(p.id)?'aria-disabled="true"':'')+'><div class="place-media">'+media(p,false)+'</div><span><strong>'+esc(p.name)+'</strong><small>'+esc(line)+'</small>'+(because?'<small data-testid="pick-why">'+esc(because)+'</small>':'')+(pickLocked(p.id)?'<small>Locked</small>':'')+'</span><b aria-hidden="true">'+(selected?'✓':'')+'</b></button><button class="pick-info" data-pick-info="'+p.id+'" aria-label="Details: '+esc(p.name)+'">ⓘ</button>'+photoCreditHtml(p,false)+'</article>';}).join('')+'</div>');
             document.getElementById('pick-count').textContent=food?'Picked '+a.picks.restaurants.length:PickCatalog.count(a.picks.activities.length,catalog.activities.filter(function(p){return a.picks.activities.includes(p.id);}).reduce(function(n,p){return n+p.duration;},0),PickScheduler.capacity(a));
             view.querySelectorAll('[data-pick-toggle]').forEach(function(b){b.onclick=function(){toggle(b.dataset.pickToggle);};});
             view.querySelectorAll('[data-pick-info]').forEach(function(b){b.onclick=function(){details(catalog[key].find(function(p){return p.id===b.dataset.pickInfo;}));};});
