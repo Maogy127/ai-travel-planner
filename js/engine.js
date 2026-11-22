@@ -46,7 +46,7 @@
         return a.flexible?Number(a.month)||11:Number((a.start||'2026-11-25').split('-')[1]);
     }
     function cost(a, d) {
-        var n=(a.ages||[25, 25]).length, days=tripDays(a), f=d.flights[origin(a)], daily=d.dailyCosts.mid;
+        var n=partyCount(a), days=tripDays(a), f=d.flights[origin(a)], daily=d.dailyCosts.mid;
         var avg=(daily[0]+daily[1])/2, flights=a.includeFlights===false?0:Math.round((f[0]+f[1])/2*n);
         var ground=Math.round(avg*days*n);
         var b= {
@@ -69,7 +69,7 @@
         return month(a)+' '+a.getDate()+'–'+(a.getMonth()===b.getMonth()?'':month(b)+' ')+b.getDate()+', '+b.getFullYear();
     }
     function whyFits(a, d, m, w) {
-        var styles=a.styles||[], strengths= {
+        var styles=(a.styleSkipped?[]:window.GoNowStyles.normalize(a.styles||[])), strengths= {
             hotel:'Comfortable hotel stays and pool time', wandering:'Neighborhood walks and local discoveries', scenic:'Scenic viewpoints and photo stops', food:'Local food and neighborhood cafés', culture:'Museums, history and local stories', nature:'Parks, gardens and shorelines'
         };
         var style=styles[0], group= {
@@ -79,7 +79,7 @@
         var first=style&&!a.styleSkipped?strengths[style]+' suit '+(group||'the way you want to travel')+'.':d.tagline.replace(/\.+$/,'')+'.';
         return[first, w.note+' in '+new Date(2027, m-1, 1).toLocaleString('en-US',  {
             month:'long'
-        })+'.', a.budget?'About $'+cost(a, d).total.toLocaleString('en-US')+' for your '+tripDays(a)+' days'+(cost(a, d).total<=a.budget?' fits your budget.':'; compare this with your budget.'):'Base yourself around '+d.areas+' for '+tripDays(a)+' days of exploring.'];
+        })+'.', a.budget?'About $'+cost(a, d).total.toLocaleString('en-US')+' for your '+tripDays(a)+' days'+(cost(a, d).total<=a.budget?' fits your budget.':' — over your $'+Number(a.budget).toLocaleString('en-US')+' budget.'):'Base yourself around '+d.areas+' for '+tripDays(a)+' days of exploring.'];
     }
     // Neutral interests when skipped; pace alone controls the number of activities.
     function selectedStyles(a) {
@@ -87,22 +87,42 @@
         return styles.length?styles:['scenic','wandering'];
     }
     function recommend(a) {
-        a=Object.assign({},a,{styles:selectedStyles(a)});
         return window.CATALOG.map(function(d) {
             var c=cost(a, d), m=month(a), w=d.climate[m-1], styles=selectedStyles(a);
             var score=styles.reduce(function(n, s) {
                 return n+(d.styles[s]||0)*10;
-            }, 0)+(d.bestMonths.indexOf(m)>=0?12:0)+(d.goodFor.indexOf(a.who)>=0?6:0)-(a.budget&&c.total>a.budget?Math.min(25, (c.total-a.budget)/200):0);
+            }, 0)+(d.bestMonths.indexOf(m)>=0?12:0)+(d.goodFor.indexOf(knownWho(a))>=0?6:0)-(a.budget&&c.total>a.budget?Math.min(25, (c.total-a.budget)/200):0);
             return Object.assign(clone(d), c,  {
                 score:score, weather:w, whyFits:whyFits(a, d, m, w)
             });
         }).sort(function(x, y) {
-            return y.score-x.score;
+            // Places far past the stated budget sink, on top of the smaller penalty already in the score.
+            function over(d){return a.budget&&d.total>a.budget?Math.min(50,(d.total-a.budget)/200):0;}
+            return (y.score-over(y))-(x.score-over(x));
         });
+    }
+    function clockKey(item) {
+        var m=String(item.time||'').match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+        if(m){var h=Number(m[1])%12;if(/pm/i.test(m[3]))h+=12;return h*60+Number(m[2]);}
+        var w=String(item.time||'').toLowerCase();
+        if(/arriv|morning/.test(w))return 60;
+        if(/afternoon/.test(w))return 840;
+        if(/evening/.test(w))return 1140;
+        if(/depart/.test(w))return 1320;
+        return null;
+    }
+    // Timed stops stay in clock order. Untimed notes keep the slot they were given.
+    function arrangeTimes(items) {
+        var loose=[], timed=[];
+        items.forEach(function(item, index){var k=clockKey(item);if(k==null)loose.push({item:item, index:index});else timed.push({item:item, index:index, k:k});});
+        timed.sort(function(a, b){return a.k-b.k||a.index-b.index;});
+        var out=timed.map(function(x){return x.item;});
+        loose.forEach(function(x){out.splice(Math.min(x.index, out.length), 0, x.item);});
+        return out;
     }
     function buildTemplatePlan(a, d) {
         a=Object.assign({},a,{styles:selectedStyles(a)});
-        var n=tripDays(a), people=(a.ages||[25, 25]).length;
+        var n=tripDays(a), people=partyCount(a);
         var start=a.flexible?'2027-'+String(month(a)).padStart(2, '0')+'-01':a.start||'2026-11-25';
         var itemsBase=[ {
             id:'id', name:'Photo ID / passport as required', qty:people
@@ -157,7 +177,7 @@
                 var count=a.pace==='Easy'?2:a.pace==='Full-on'?4:3;
                 var styles=selectedStyles(a);
                 for(var j=0; j<count; j++) {
-                    var style=styles[(i+j)%styles.length], choices=(d.activities[style]||[]).filter(function(title){return !/breakfast/i.test(title);});choices=choices.length?choices:styles.map(function(key){return d.activities[key];}).find(function(list){return list&&list.length;})||d.activities.scenic;
+                    var style=styles[(i+j)%styles.length], choices=(d.activities[style]||[]).filter(function(title){return !/breakfast|lunch|dinner/i.test(title);});choices=choices.length?choices:styles.map(function(key){return d.activities[key];}).find(function(list){return list&&list.length;})||d.activities.scenic;
                     arr.push( {
                         time:['10:00 AM', '1:00 PM', '3:30 PM', '5:00 PM'][j], kind:style==='hotel'?'rest':'activity', title:choices[(i+j)%choices.length], desc:'Template suggestion. Choose an operator or location at booking; confirm accessibility and suitability.', bookable:style==='nature', bring:['water', 'sun', 'shoes'].concat(style==='nature'?['swim']:[]), prep:[ {
                             type:'book', text:'Book popular tours 1–2 weeks ahead.', sources:[]
@@ -170,7 +190,8 @@
                 }
                 arr.push(meal('7:00 PM', 'Dinner'));
             }
-            var seenTitles=new Set();arr=arr.filter(function(x){var key=x.title.toLowerCase();if(seenTitles.has(key))return false;seenTitles.add(key);return true;});
+            var seenTitles=new Set(), seenMeals={};arr=arr.filter(function(x){var key=x.title.toLowerCase();if(seenTitles.has(key))return false;seenTitles.add(key);var slot=/breakfast/i.test(x.title)?'breakfast':/lunch/i.test(x.title)?'lunch':/dinner|evening meal/i.test(x.title)?'dinner':'';if(slot){if(seenMeals[slot])return false;seenMeals[slot]=true;}return true;});
+            arr=arrangeTimes(arr);
             arr.forEach(function(x, j) {
                 x.id='d'+i+'i'+j;
                 x.bring=x.bring||[];
@@ -192,6 +213,7 @@
             day.items.splice(day.items.length-1, 0,  {
                 id:'request'+i, time:'Confirm time', kind:'activity', title:'📌 '+t, requested:true, desc:'Requested item — confirm availability, timing and location before booking.', bring:['qr'], prep:[], sources:[], travelToNext:'approx. 15–30 min by rideshare/transit — depends on where you stay'
             });
+            day.items=arrangeTimes(day.items);
         });
         var grouped=[['Documents & money', ['id', 'card', 'qr']], ['Clothing', ['clothes', 'layer', 'shoes']], ['Beach & water', ['swim', 'sun']], ['Activity gear', ['water']], ['Health & toiletries', ['meds']], ['Tech', ['phone']], ['Misc', []]].map(function(g) {
             return {
@@ -230,7 +252,7 @@
         }
         var w=d.climate[month(a)-1];
         return {
-            id:'template-'+d.id+'-'+start, title:d.name, image:d.image, start:start, end:days[n-1].date, meta:dateRange(start, days[n-1].date)+' · '+n+' days · '+((a.who||'Couple').replace(/^./,function(c){return c.toUpperCase();}))+' ('+(a.ages||[25, 25]).join(' & ')+')', stay:a.stayUnsure?(d.center||'city center'):a.stay||d.center||'city center', banner:'Sample/template plan — live AI generation coming soon', weather: {
+            id:'template-'+d.id+'-'+start, title:d.name, image:d.image, start:start, end:days[n-1].date, meta:planMeta(start, days[n-1].date, n, a), stay:a.stayUnsure?(d.center||'city center'):a.stay||d.center||'city center', banner:'Sample/template plan — live AI generation coming soon', weather: {
                 text:(w.hiF===null?'Climate not researched. Check typical local conditions before packing.':'Rough climate estimate: typically '+w.loF+'–'+w.hiF+'°F. '+w.note+'.')+' Typical conditions, not a forecast.', sources:[]
             }, flags:[], days:days, packing:grouped, tips:[ {
                 sourceType:'general travel guidance (template)', text:'Confirm local opening hours, entry rules and transport before setting out.'
@@ -240,9 +262,30 @@
             ], estimate:cost(a, d), costs:[], activityTotal:'Rough estimate — approx., verify before booking.'
         };
     }
+    function knownWho(a) {
+        return a&&!a.whoSkipped&&a.who?a.who:'';
+    }
+    function knownAges(a) {
+        return a&&!a.agesSkipped&&Array.isArray(a.ages)?a.ages.filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number):[];
+    }
+    function partyCount(a) {
+        var ages=knownAges(a);
+        if(ages.length)return ages.length;
+        if(knownWho(a)==='solo')return 1;
+        if(knownWho(a)==='couple')return 2;
+        var n=Number(a&&a.adults||0)+Number(a&&a.kids||0);
+        return n>0?n:2;
+    }
+    function planMeta(start, end, n, a) {
+        var parts=[dateRange(start, end), n+' days'], who=knownWho(a), ages=knownAges(a);
+        if(who)parts.push(who.replace(/^./,function(c){return c.toUpperCase();}));
+        if(ages.length)parts.push('Ages '+ages.join(' & '));
+        return parts.join(' · ');
+    }
     function applyAgeRules(plan, a) {
-        var ages=(Array.isArray(a.ages)?a.ages:[]).filter(function(x){return (typeof x==='number'||typeof x==='string')&&String(x).trim()!==''&&Number.isFinite(Number(x))&&Number(x)>=0&&Number(x)<=110;}).map(Number), youngest=Math.min.apply(null, ages), usa=plan.id.indexOf('oahu')>=0||matchDestination(a.destination).country==='USA';
+        var ages=knownAges(a), youngest=ages.length?Math.min.apply(null, ages):Infinity, usa=plan.id.indexOf('oahu')>=0||matchDestination(a.destination).country==='USA';
         plan.ageRules=[];
+        if(!ages.length)return plan;
         if(youngest<21) {
             plan.ageRules.push('Why no rental car: most US rental agencies require drivers to be 21+, and drivers under 25 usually pay a young-driver surcharge. Self-drive UTV/ATV tours usually require a 21+ licensed driver. Check local rules outside the USA.');
             plan.days.forEach(function(day) {
@@ -260,8 +303,57 @@
         if(youngest<18)plan.ageRules.push('Traveling with kids: check activity minimum ages, heights and weights.');
         return plan;
     }
+    function partySize(a) {
+        a=a||{};
+        var ages=(Array.isArray(a.ages)?a.ages:[]).filter(function(x){return String(x).trim()!==''&&Number.isFinite(Number(x));});
+        if(ages.length)return ages.length;
+        if(a.who==='solo')return 1;
+        if(a.who==='couple')return 2;
+        var n=Number(a.adults||0)+Number(a.kids||0);
+        return n>0?n:2;
+    }
+    // Dollar signs win when the price is only a level ("$$", "$$$$"). A number like "$150 pp" is ranked by the amount.
+    function priceRank(price) {
+        var s=String(price||'').trim();
+        if(/^\$+$/.test(s))return Math.min(4, s.length);
+        var n=Number((s.replace(/,/g,'').match(/\d+(?:\.\d+)?/)||[])[0]);
+        if(!Number.isFinite(n))return 0;
+        if(n<=25)return 1;
+        if(n<=60)return 2;
+        if(n<=120)return 3;
+        return 4;
+    }
+    function perPersonPerDay(a) {
+        if(!a||!(Number(a.budget)>0)||a.budgetChoice==='flexible')return null;
+        return Number(a.budget)/partySize(a)/tripDays(a);
+    }
+    // Rough ceiling for one meal or ticket. Unknown budgets are not filtered.
+    function maxRank(a) {
+        var ppd=perPersonPerDay(a);
+        if(ppd==null)return 4;
+        if(ppd<45)return 1;
+        if(ppd<100)return 2;
+        if(ppd<200)return 3;
+        return 4;
+    }
+    function wishText(a){return ((a&&a.mustdos)||'')+' '+((a&&a.foodLoves)||[]).join(' ');}
+    function wantsFineDining(a){return /\bfine dining\b|\btasting menu\b|\bomakase\b|\bla mer\b/i.test(wishText(a));}
+    function explicitChoice(a, item) {
+        var text=wishText(a).toLowerCase();
+        if(/\bfine dining\b|\btasting menu\b|\bomakase\b/.test(text)&&priceRank(item&&item.price)>=4)return true;
+        var name=String((item&&(item.name||item.title))||'').toLowerCase();
+        return name.split(/[^a-z0-9]+/).filter(function(w){return w.length>3;}).some(function(w){return text.includes(w);});
+    }
+    function fitsPrice(item, a) {
+        if(explicitChoice(a, item))return true;
+        if(wantsFineDining(a)&&priceRank(item&&item.price)>=4&&(item.meals||item.kind==='meal'))return true;
+        var rank=priceRank(item&&item.price);
+        if(!rank)return true;
+        return rank<=maxRank(a);
+    }
+    window.GoNowBudget={partySize:partySize, priceRank:priceRank, perPersonPerDay:perPersonPerDay, maxRank:maxRank, wantsFineDining:wantsFineDining, explicit:explicitChoice, fits:fitsPrice};
     window.Engine= {
-        estimateCost:cost, dateRange:dateRange, matchDestination:matchDestination, recommend:recommend, buildTemplatePlan:buildTemplatePlan, applyAgeRules:applyAgeRules, tripDays:tripDays, originRegion:origin
+        estimateCost:cost, dateRange:dateRange, matchDestination:matchDestination, recommend:recommend, buildTemplatePlan:buildTemplatePlan, applyAgeRules:applyAgeRules, tripDays:tripDays, originRegion:origin, planMeta:planMeta, knownWho:knownWho, knownAges:knownAges, partyCount:partyCount
     };
 }
 ());

@@ -10,6 +10,11 @@ from test_full import card_action
 import asyncio
 
 
+async def expand_result(row):
+    if await row.get_by_test_id('activity-day').count():
+        return
+    await row.get_by_test_id('activity-expand').click()
+
 async def verify_draft(browser, url, ok):
     ctx = await browser.new_context(viewport={'width': 1280, 'height': 900})
     pg = await ctx.new_page()
@@ -49,6 +54,7 @@ async def verify_draft(browser, url, ok):
         await select('2026-11-26')
         await pg.get_by_test_id('activity-search').fill('pillbox')
         pillbox = cards.filter(has_text='Lanikai').first
+        await expand_result(pillbox)
         ok('draft pillbox guarded across days', await pillbox.get_by_test_id('activity-add').is_disabled()
            and await pillbox.get_attribute('draggable') == 'false'
            and 'Already in your plan' in await pillbox.inner_text()
@@ -63,7 +69,8 @@ async def verify_draft(browser, url, ok):
         for chest_id, query in (('chest-1', 'parasail'), ('chest-0', 'dive')):
             source = await pg.evaluate('(id)=>DayBuilder.trayItems().find(i=>i.id===id).sourceId', chest_id)
             await tray.get_by_test_id('activity-search').fill(query)
-            card = cards.filter(has=pg.locator('[data-testid=activity-add-again]')).first
+            card = cards.first
+            await expand_result(card)
             originals = await pg.evaluate('(s)=>DayBuilder.draftItems().filter(i=>(i.sourceId||i.id)===s)', source)
             ok('draft library has original scheduled copy ' + chest_id, len(originals) == 1)
             ok('draft library explicit repeat available ' + chest_id, await card.get_by_test_id('activity-add-again').is_enabled())

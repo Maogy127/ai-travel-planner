@@ -1,0 +1,4 @@
+__pycache__/
+*.pyc
+firestore-debug.log
+firebase-debug.log

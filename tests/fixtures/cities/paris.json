@@ -1,0 +1,78 @@
+{
+ "version": 1,
+ "slug": "paris",
+ "city": "Paris",
+ "aliases": [
+  "paris",
+  "paris, france"
+ ],
+ "center": {
+  "lat": 48.8566,
+  "lng": 2.3522
+ },
+ "source": "osm+wikidata",
+ "license": "OpenStreetMap data \u00a9 OpenStreetMap contributors, ODbL.",
+ "fetchedAt": "2026-11-20T00:00:00Z",
+ "activities": [
+  {
+   "id": "osm-node-1",
+   "name": "Louvre Museum",
+   "type": "museum",
+   "category": "Museum",
+   "lat": 48.8606,
+   "lng": 2.3376,
+   "area": "Paris",
+   "address": "Rue de Rivoli",
+   "duration": 120,
+   "effort": "Easy est.",
+   "generic": true,
+   "section": "popular",
+   "openingHours": "We-Mo 09:00-18:00",
+   "wikipedia": "en:Louvre",
+   "wikidata": "Q19675",
+   "mapUrl": "https://www.openstreetmap.org/node/1",
+   "notability": 2
+  }
+ ],
+ "restaurants": [
+  {
+   "id": "osm-node-2",
+   "name": "Caf\u00e9 de Flore",
+   "type": "cafe",
+   "category": "Cafe",
+   "lat": 48.854,
+   "lng": 2.3326,
+   "area": "Paris",
+   "address": "",
+   "duration": 60,
+   "effort": "Easy est.",
+   "generic": true,
+   "section": "popular",
+   "cuisine": "Coffee",
+   "meals": [
+    "breakfast",
+    "lunch",
+    "snack"
+   ],
+   "mapUrl": "https://www.openstreetmap.org/node/2"
+  }
+ ],
+ "wellness": [
+  {
+   "id": "osm-node-3",
+   "name": "Les Bains du Marais",
+   "type": "spa",
+   "category": "Spa",
+   "lat": 48.859,
+   "lng": 2.36,
+   "area": "Paris",
+   "address": "",
+   "duration": 90,
+   "effort": "Easy est.",
+   "generic": true,
+   "section": "popular",
+   "wellness": true,
+   "mapUrl": "https://www.openstreetmap.org/node/3"
+  }
+ ]
+}

@@ -8,7 +8,7 @@ from playwright.async_api import async_playwright
 from pathlib import Path
 ROOT=Path(__file__).resolve().parent.parent
 SITE=ROOT/'site' if (ROOT/'site'/'index.html').exists() else ROOT
-URL='https://maogy127.github.io/ai-travel-planner/?cb=%d'%int(time.time())
+URL='https://ameliamiaomiao.github.io/ai-travel-planner/?cb=%d'%int(time.time())
 OUT=Path('/opt/cursor/artifacts/gonow-live')
 OUT.mkdir(parents=True, exist_ok=True)
 FILES=['index.html','js/daybuilder.js','js/oahu.js','js/app.js','css/styles.css']

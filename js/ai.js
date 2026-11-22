@@ -41,6 +41,19 @@
                         ? JSON.parse(JSON.stringify(OAHU_SAMPLE))
                         : Engine.buildTemplatePlan(answers, destination);
                     if (curated) plan.curatedMismatch = !matchesCuratedDemo(answers);
+                    if (curated && plan.curatedMismatch && window.GoNowBudget && !GoNowBudget.wantsFineDining(answers) && !GoNowBudget.fits({price:'$$$$', name:'La Mer', meals:['dinner']}, answers)) {
+                        plan.days.forEach(function (day) {
+                            day.items.forEach(function (item) {
+                                if (!/la mer|senia/i.test(item.title || '') || GoNowBudget.explicit(answers, item)) return;
+                                item.title = /dinner/i.test(item.title) ? 'Casual dinner near your hotel' : 'Casual meal near your hotel';
+                                item.desc = 'A casual spot picked to fit your budget. Check the menu and the price before you go.';
+                                item.price = '$';
+                                item.locked = false;
+                                item.booked = false;
+                                item.bookable = false;
+                            });
+                        });
+                    }
                     plan.meta = Engine.dateRange(
                         plan.start || plan.days[0].date,
                         plan.end || plan.days[plan.days.length - 1].date

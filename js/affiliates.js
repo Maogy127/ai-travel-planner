@@ -28,3 +28,44 @@ window.gonowPartnerURL = function(key, values) {
     }
     return url.href;
 };
+// One booking target per stop. Official pages win; otherwise a partner search named for that stop.
+window.gonowItemBooking = function(item, ctx) {
+    item = item || {}; ctx = ctx || {};
+    var title = String(item.title || item.name || '').replace(/[\p{Extended_Pictographic}\u200d\ufe0f]/gu, '').trim();
+    var destination = ctx.destination || '';
+    var kind = ctx.kind || '';
+    var sources = (item.sources || []).map(function(s) { return typeof s === 'string' ? s : (s && s.url) || ''; }).filter(function(s) { return /^https:\/\//i.test(s); });
+    function city() { return String(destination).split(',')[0].trim(); }
+    function named(extra) {
+        var name = title.replace(/\([^)]*\)/g, ' ').replace(/\s+[—–-]\s+/g, ' ').replace(/\s+/g, ' ').trim();
+        var place = city();
+        if (place && name.toLowerCase().indexOf(place.toLowerCase()) < 0) name = (name ? name + ' ' : '') + (extra || destination);
+        return name || destination || 'things to do';
+    }
+    function partner(key, extra, label, testid) {
+        var values = Object.assign({}, ctx.values || {}, extra || {});
+        return {href: window.gonowPartnerURL(key, values), partner: key, label: label, testid: testid};
+    }
+    function direct(href, label, testid) { return {href: href, partner: '', label: label, testid: testid}; }
+    if (kind === 'flight') return partner('skyscanner', {}, 'Book flights', 'book-flights');
+    if (kind === 'stay') {
+        var hotel = (ctx.stay && !/not sure|city center/i.test(ctx.stay) ? ctx.stay : title.replace(/^check in(?: at)?\s+/i, '')) || destination;
+        var place = city();
+        var ss = hotel && place && hotel.toLowerCase().indexOf(place.toLowerCase()) < 0 ? hotel + ', ' + destination : (hotel || destination);
+        return partner('booking', {destination: ss}, 'Book', 'item-book');
+    }
+    if (/\buber\b/i.test(title)) return direct(sources.find(function(s) { return /uber\.com/i.test(s); }) || 'https://www.uber.com/', 'Book', 'item-book');
+    if (/shuttle/i.test(title)) return direct(sources.find(function(s) { return /shuttle/i.test(s); }) || 'https://www.kahalaresort.com/shuttle-schedule/', 'Book', 'item-book');
+    var official = sources.find(function(s) { return /kualoa\.com\/tours|diveoahu\.com|xtremeparasail\.com|hawaiianparasail\.com|opentable\.com|dlnr\.hawaii\.gov\/dsp\/parks\/oahu\/diamond-head/i.test(s); });
+    if (/kualoa|jurassic adventure/i.test(title)) official = 'https://www.kualoa.com/tours-and-activities/jurassic-adventure-tour';
+    else if (/intro dive|dive o/i.test(title)) official = 'https://www.diveoahu.com/tours-charters';
+    else if (/parasail/i.test(title)) official = sources.find(function(s) { return /parasail/i.test(s); }) || 'https://www.xtremeparasail.com/parasailing';
+    else if (/diamond head/i.test(title)) official = 'https://dlnr.hawaii.gov/dsp/parks/oahu/diamond-head-state-monument/';
+    if (kind === 'reserve') {
+        var reserve = sources.find(function(s) { return /opentable\.com/i.test(s); }) || official;
+        if (reserve && /opentable\.com|restaurantsenia\.com/i.test(reserve)) return direct(reserve, 'Reserve', 'item-reserve');
+        return direct('https://www.google.com/search?q=' + encodeURIComponent(named() + ' reservation'), 'Reserve', 'item-reserve');
+    }
+    if (official) return direct(official, 'Book', 'item-book');
+    return partner('getyourguide', {query: named()}, 'Book', 'item-book');
+};
