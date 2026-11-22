@@ -1880,3 +1880,19 @@ Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deploy
 - Skipping Who or Ages no longer writes Couple / ages 25 & 25 (or age 10 for kids). The plan summary omits group and ages unless the traveler actually chose them. Age rules are not applied to invented ages. A neutral party size of 2 is used only internally.
 - Skipping or leaving blank the home activity chips or the trip-styles step does not pre-check chips or claim “you chose” a style. `selectedStyles()` still uses a scenic/wandering mix inside the planner only. Recommendation “why it fits” copy uses the destination tagline when styles were skipped.
 - New suite: `tests/test_required_dates.js`. Updated: `check-ui.cjs`, `test_full.py` (dates are required; the old skip-dates month check is gone), `test_question_flow.py`, `smoke.py`.
+## Elements preview (cache tag `elements-20261121`)
+- **New suite**: `test_elements.js` (node). It checks:
+  - Travel, flight and prep items have no elements.
+  - Inclusive mappings (lake meditation = water + wind; beach yoga = water + wind; pilates = wood + wind).
+  - Curated Oahu picks (1–2 elements) and restaurants (earth).
+  - Demo Day 2 and Day 4 collect all five and celebrate; Days 1, 3 and 5 do not.
+  - Celebration copy has no "missing" or nagging language.
+- **Updated expectations**:
+  - `test_travel_time.py`: the asset count is 34 (`js/elements.js` added); cache tag is `elements-20261121`.
+- **COPY-AUDIT** (new visible strings, English, one line):
+  - "Four elements, quietly gathered."
+  - "All five elements, in one day."
+  - "A day that gathered its elements."
+  - "A day that gathered every element."
+  - Detail labels: "Water · 水", "Fire · 火", "Wood · 木", "Wind · 风", "Earth · 土".
+  - No new morning question.
