@@ -57,11 +57,16 @@ async def main():
   await wait_plan(page)
   assert await page.get_by_text('Your note: Testing saved note').count()==1
   await page.get_by_test_id('nav-toggle').click(); await page.get_by_test_id('nav-home').click()  # ☰ → Home returns to the start
-  await page.get_by_test_id('home-unsure').click()
+  # "I'm not sure yet" was removed (Nov 21, 2026): the destination is always typed.
+  assert await page.get_by_test_id('home-unsure').count()==0
+  await page.get_by_test_id('home-destination').fill('Lisbon'); await page.get_by_test_id('start-new-trip').click()
   await page.get_by_test_id('start-from').fill('Seattle')
   await page.get_by_test_id('start-next').click()
-  # Six core steps now include the optional flights question.
-  for step in range(6): await page.get_by_test_id('q-skip').click()
+  # Dates are required; skip the remaining core steps, including optional flights.
+  await page.get_by_test_id('date-start').fill('2027-03-01')
+  await page.get_by_test_id('date-end').fill('2027-03-05')
+  await page.get_by_test_id('q-continue').click()
+  for step in range(5): await page.get_by_test_id('q-skip').click()
   print('Recommendations:',await page.get_by_test_id('rec-card').count())
   await page.get_by_test_id('rec-more').click()
   await page.get_by_test_id('rec-choose').first.click()

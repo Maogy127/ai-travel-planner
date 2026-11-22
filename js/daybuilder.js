@@ -691,7 +691,7 @@ function mount(root, ctx = {}) {
         item.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
         selectDay(nextDate, false);
         const d = current();
-        if (spec.time) { item.preferred = toTime(spec.time); item.manualTime = true; d.items.push(item); } else d.unscheduled.push(item);
+        if (spec.time) { item.preferred = toTime(spec.time); item.manualTime = true; const at=d.items.findIndex(i=>(i.preferred ?? 1e9)>item.preferred); d.items.splice(at<0?d.items.length:at,0,item); } else d.unscheduled.push(item);
         save();
         render({id: item.id, zone: 'day'});
         if (spec.schedule) openTransfer(item.id, 'tray', 'schedule');
@@ -725,6 +725,14 @@ function mount(root, ctx = {}) {
             return change ? {...item, ...change} : item;
         });
     }
+    function byTime(items) {
+        const loose = [], timed = [];
+        items.forEach((item, index) => (item.start == null ? loose : timed).push({item, index}));
+        timed.sort((a, b) => a.item.start - b.item.start || a.index - b.index);
+        const out = timed.map(entry => entry.item);
+        loose.forEach(entry => out.splice(Math.min(entry.index, out.length), 0, entry.item));
+        return out;
+    }
     function dayResult(stored, on) {
         let intent=adjustedItems(visibleItems(stored,on),on);
         if(ctx.flightAnswers&&(ctx.flightAnswers.flightsStep||ctx.flightAnswers.arrivalTime||ctx.flightAnswers.returnTime)&&window.GoNowFlights){
@@ -737,7 +745,8 @@ function mount(root, ctx = {}) {
             });
         }
         const result=reflow({...stored,items:stored.chronological?intent.map(i=>({...i,manualTime:true})):intent}, {...ctx,flightTime});
-        if(stored.chronological)result.items.sort((a,b)=>(a.start ?? Infinity)-(b.start ?? Infinity));
+        // A stop with a clock always shows in that slot, even if it was stored at the bottom of the day.
+        result.items=byTime(result.items);
         return result;
     }
     function schedule() {
@@ -843,6 +852,7 @@ function mount(root, ctx = {}) {
         const noteId = 'db-note-' + uid;
         const described = i.notes?.length ? ` aria-describedby="${esc(i.notes.map((_, index) => noteId + '-' + index).join(' '))}"` : '';
         const placeText = tray ? '' : `${esc(i.place)}${i.estimate ? ' · ' + durationText : ''}`;
+        const elIcons = !transport && window.GoNowElements ? window.GoNowElements.iconsHTML(i,{size:16}) : '';
         const heading = detail
             ? `<button type="button" class="db-expand" data-db-action="expand" data-testid="db-expand" id="db-title-${uid}" aria-expanded="${open}" aria-controls="db-detail-${uid}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}><strong title="${esc(title)}">${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}</button>`
             : `<strong id="db-title-${uid}" title="${esc(title)}"${flightDirection ? ` aria-label="${esc(title)}"` : ''}>${esc(cardTitle)}</strong>${tray ? `<small>${placeText}</small>` : ''}`;
@@ -853,7 +863,7 @@ function mount(root, ctx = {}) {
         return `<div class="${classes}" data-testid="db-pair" data-db-id="${esc(i.id)}" data-db-zone="${tray ? 'tray' : 'day'}"${src ? ` data-db-source="${esc(src)}"` : ''}${described}${i.locked && !print ? ' tabindex="0" aria-label="' + esc(title + '. ' + lockedLabel) + '"' : ''}>
             ${transport ? transportIcon : !tray && ['activity','meal','sight'].includes(i.kind) && ctx.photoFor && ctx.photoFor(src) ? `<img class="db-thumb" src="${esc(ctx.photoFor(src))}" alt=""${ctx.photoCredit && ctx.photoCredit(src) ? ` title="${esc(ctx.photoCredit(src))}"` : ''}>` : ''}
             <div class="db-activity" data-testid="db-activity">
-                ${heading}${tray ? '' : `<div class="db-meta">${timeEl}${canLock ? (i.locked ? `<span class="db-mini-lock" aria-hidden="true">${icons.lock}</span>` : '') : lockChip}${placeText && !transport ? `<small class="db-place">${placeText}</small>` : ''}</div>`}${flightEdit?`<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${Number.isFinite(i.preferred)?String(Math.floor(i.preferred/60)).padStart(2,'0')+':'+String(i.preferred%60).padStart(2,'0'):''}"><span data-testid="add-flight-time"><button type="button" data-testid="edit-flight" aria-haspopup="dialog" ${ctx.shared?'disabled':''}>Edit flight</button></span>`:''}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
+                ${heading}${elIcons}${tray ? '' : `<div class="db-meta">${timeEl}${canLock ? (i.locked ? `<span class="db-mini-lock" aria-hidden="true">${icons.lock}</span>` : '') : lockChip}${placeText && !transport ? `<small class="db-place">${placeText}</small>` : ''}</div>`}${flightEdit?`<input type="hidden" aria-label="Flight time" data-testid="db-flight-time" value="${Number.isFinite(i.preferred)?String(Math.floor(i.preferred/60)).padStart(2,'0')+':'+String(i.preferred%60).padStart(2,'0'):''}"><span data-testid="add-flight-time"><button type="button" data-testid="edit-flight" aria-haspopup="dialog" ${ctx.shared?'disabled':''}>Edit flight</button></span>`:''}${blocker ? `<small>Requires age ${esc(blocker.minAge)}+</small>` : ''}
 
                 ${!tray && i.detail ? `<small>${esc(i.detail)}</small>` : ''}
                 ${tray && !canLock ? lockChip : ''}
@@ -1133,7 +1143,7 @@ function mount(root, ctx = {}) {
         }).join('');
         const index = dayIndex(date);
         const card = inner => ctx.dayHead
-            ? `<section class="card day db-daycard" id="day-${index}" data-testid="plan-day" data-date="${date}">${ctx.dayHead(date)}${inner}${ctx.dayFooter ? ctx.dayFooter(date) : ''}</section>`
+            ? `<section class="card day db-daycard${window.GoNowElements&&window.GoNowElements.day(result.items).celebrated?' is-elements-day':''}" id="day-${index}" data-testid="plan-day" data-date="${date}">${ctx.dayHead(date)}${inner}${ctx.dayFooter ? ctx.dayFooter(date) : ''}</section>`
             : inner;
         content.innerHTML = `<div class="db-heading"><h2>${ctx.dayHead ? 'Your days' : 'Build your day'}</h2><span class="db-summary" data-testid="db-summary">${summary}</span></div>
             <div class="db-days" data-testid="db-day" role="group" aria-label="Oahu day">${chips}</div>
@@ -1175,7 +1185,7 @@ function mount(root, ctx = {}) {
         printAll.innerHTML = sourcePlan().days.map(day => {
             const stored = days[day.date] || buildSuggested(day.date);
             const result = dayResult(stored, day.date);
-            return `<section class="card day db-print-day" data-date="${day.date}">${ctx.dayHead ? ctx.dayHead(day.date, {print: true}) : ''}<div class="db-day">${timelineHTML(result, {print: true, date: day.date})}</div>${ctx.dayExtras ? ctx.dayExtras(day.date, {print: true}) : ''}</section>`;
+            return `<section class="card day db-print-day${window.GoNowElements&&window.GoNowElements.day(result.items).celebrated?' is-elements-day':''}" data-date="${day.date}">${ctx.dayHead ? ctx.dayHead(day.date, {print: true}) : ''}<div class="db-day">${timelineHTML(result, {print: true, date: day.date})}</div>${ctx.dayExtras ? ctx.dayExtras(day.date, {print: true}) : ''}</section>`;
         }).join('');
         printAll.querySelectorAll('[data-testid]').forEach(element => element.removeAttribute('data-testid'));
         printAll.querySelectorAll('.db-print-day').forEach(element=>element.setAttribute('data-testid','plan-day'));
@@ -1624,6 +1634,61 @@ function mount(root, ctx = {}) {
             days[on]=copy;save();render();return true;
         },
         swapItem: (id, alternative) => { const item=current().items.find(i=>i.id===id); if(item?.locked&&suggestLocked(item,'swap',{alternative}))return false; if(!item || item.locked)return false; if(block({...item,...alternative},date,target=>addToDay(target,alternative)))return false; Object.assign(item, alternative, {id:item.id, preferred:alternative.start ?? item.preferred, manualTime:true, duration:item.duration, checkinSwap:true}); delete item.textTime; save(); render(); return true; },
+        // Plan edits from GoNowAI (voice or typed). Every move still passes the opening-hours and dive rules and the reflow.
+        editableItems: () => sourcePlan().days.flatMap(day => {
+            const stored = days[day.date] || buildSuggested(day.date);
+            const fixed = i => !!(i.locked || i.booked || ['flight','travel','stay'].includes(i.kind));
+            return dayResult(stored, day.date).items.map(i => ({id:i.id, title:String(i.title||''), date:day.date, start:i.start ?? null, kind:i.kind||'activity', category:i.category||'', locked:fixed(i)}))
+                .concat((stored.unscheduled||[]).map(i => ({id:i.id, title:String(i.title||''), date:day.date, start:null, kind:i.kind||'activity', category:i.category||'', locked:fixed(i)})));
+        }),
+        applyEdits: ops => {
+            const before = clone(days), dates = sourcePlan().days.map(d => d.date), done = [];
+            const ensure = on => { if (!days[on]) days[on] = buildSuggested(on); days[on].unscheduled ||= []; return days[on]; };
+            const find = id => { for (const on of dates) { const day = ensure(on); for (const zone of ['items','unscheduled']) { const at = day[zone].findIndex(i => i.id === id); if (at >= 0) return {on, zone, at, item: day[zone][at]}; } } return null; };
+            for (const op of ops || []) {
+                const f = op && find(op.id);
+                if (!f) { done.push({...op, ok:false, reason:'missing'}); continue; }
+                const title = String(f.item.title || 'Stop');
+                if (f.item.locked || f.item.booked || ['flight','travel','stay'].includes(f.item.kind)) { done.push({...op, ok:false, reason:'locked', title}); continue; }
+                if (op.type === 'remove') {
+                    if (f.zone === 'unscheduled') { done.push({...op, ok:false, reason:'already', title}); continue; }
+                    ensure(f.on).items.splice(f.at, 1); ensure(f.on).unscheduled.push({...f.item, preferred:null, manualTime:false});
+                    done.push({...op, ok:true, title, from:f.on}); continue;
+                }
+                if (op.type !== 'move' || !Number.isFinite(op.start)) { done.push({...op, ok:false, reason:'unclear', title}); continue; }
+                const to = dates.includes(op.date) ? op.date : f.on, moved = {...f.item, preferred:op.start, manualTime:true};
+                const reason = blockedOn(moved, to, ruleContext());
+                if (reason) { done.push({...op, ok:false, reason, title, date:to}); continue; }
+                ensure(f.on)[f.zone].splice(f.at, 1);
+                const list = ensure(to).items, place = start => { const at = list.findIndex(i => (i.preferred ?? Infinity) > start); list.splice(at < 0 ? list.length : at, 0, moved); };
+                // Never stack two stops: try the asked time, then the nearest free time within 3 hours.
+                const clash = () => { const shown = dayResult(ensure(to), to).items, me = shown.find(i => i.id === moved.id); return !me || me.start == null || shown.some(i => i.id !== moved.id && i.start != null && i.end != null && me.start < i.end && me.end > i.start); };
+                const tries = [0]; for (let n = 15; n <= 180; n += 15) tries.push(n, -n);
+                let fitted = false;
+                for (const shift of tries) {
+                    const start = op.start + shift; if (start < 360 || start + (moved.duration || 60) > 1380) continue;
+                    if (blockedOn({...moved, preferred:start}, to, ruleContext())) continue;
+                    moved.preferred = start; place(start);
+                    if (!clash()) { fitted = true; break; }
+                    list.splice(list.indexOf(moved), 1);
+                }
+                if (!fitted) {
+                    moved.preferred = op.start; place(op.start);
+                    // Would only wait in Needs a time there: leave the stop where it was and say so.
+                    const shown = dayResult(ensure(to), to).items.find(i => i.id === moved.id);
+                    if (!shown || shown.start == null) { list.splice(list.indexOf(moved), 1); ensure(f.on)[f.zone].splice(f.at, 0, f.item); done.push({...op, ok:false, reason:'No free time then', title, date:to}); continue; }
+                }
+                done.push({...op, ok:true, title, from:f.on, date:to, nudged: fitted && moved.preferred !== op.start, overlap: !fitted});
+            }
+            if (!done.some(d => d.ok)) { Object.keys(days).forEach(k => delete days[k]); Object.assign(days, before); return {results:done, before:null}; }
+            save();
+            // Where each moved stop landed after the reflow (it may be nudged, or wait in Needs a time).
+            done.filter(d => d.ok && d.type === 'move').forEach(d => { const shown = dayResult(days[d.date], d.date).items.find(i => i.id === d.id); d.landed = shown ? shown.start ?? null : null; });
+            const moved = done.find(d => d.ok && d.type === 'move');
+            if (moved && moved.date !== date) selectDay(moved.date, false); else render();
+            return {results:done, before};
+        },
+        restore: snapshot => { if (!snapshot) return; Object.keys(days).forEach(k => delete days[k]); Object.assign(days, clone(snapshot)); save(); render(); },
         render, selectDay, renderPrint, root, openTime, timeInstances, draftItems: () => clone(draftItems()),
         getDay: () => clone(current()),
         date: () => date,
@@ -1658,6 +1723,9 @@ window.DayBuilder = {convert,slotCandidates,estimateTravel,parseClock:parse,clos
     draftItems: () => active()?.draftItems() || [],
     shiftUnlocked: (on,id,start) => active()?.shiftUnlocked(on,id,start) || false,
     swapItem: (id, alternative) => active()?.swapItem(id, alternative),
+    editableItems: () => active()?.editableItems() || [],
+    applyEdits: ops => active()?.applyEdits(ops) || {results:[], before:null},
+    restore: snapshot => active()?.restore(snapshot),
     addToDay: (date, spec) => active()?.addToDay(date, spec) || {ok: false, reason: 'Open a draft first'},
     resetSession: () => { stayOverride=''; session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
 })();

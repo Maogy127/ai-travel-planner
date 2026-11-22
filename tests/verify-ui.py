@@ -63,9 +63,9 @@ async def main():
         assert await page.locator("#toast").inner_text() == ""
         for img in await page.locator("img").all():
             assert await img.get_attribute("alt")
-        await page.evaluate("window.__gonow.go('recommendations')")
-        await check("recommendations")
-        assert await page.get_by_test_id("rec-card").count() == 3
+        # The recommendations screen was removed (Nov 21, 2026); the old route falls back to the normal flow.
+        await page.evaluate("window.__gonow.state.answers.destination='Oahu';window.__gonow.go('recommendations')")
+        assert await page.evaluate("window.__gonow.state.screen") == "fork"
         await page.evaluate("""() => {
             Object.assign(window.__gonow.state.answers, {
                 start:'2027-01-01',end:'2027-01-05',dietNeeds:['Vegan'],
