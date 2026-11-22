@@ -26,7 +26,7 @@ async def checks(browser):
         ctx, pg = await new(browser, BASE, width)
         try:
             for value, expected in [('la','Los Angeles (LAX)'), ('LA','Los Angeles (LAX)'), ('nyc','New York (NYC)'), ('sf','San Francisco (SFO)'), ('lax','Los Angeles (LAX)'), ('Los Angeles','Los Angeles'), ('zz','zz'), ('PDX','PDX'), ('1',None), ('x',None)]:
-                await pg.evaluate("() => { __gonow.state.fromHome=false; __gonow.state.answers.unsure=false; __gonow.state.answers.destination='Oahu'; __gonow.go('start'); }")
+                await pg.evaluate("() => { __gonow.state.fromHome=false; __gonow.state.answers.destination='Oahu'; __gonow.go('start'); }")
                 await expect(pg.locator('h1')).to_have_count(1)
                 await expect(pg.locator('h1')).to_have_text('Plan your trip')
                 await expect(pg.locator('label[for="to"]')).to_have_text('Where do you want to go?')
@@ -82,7 +82,7 @@ async def checks(browser):
             await pg.get_by_test_id('start-from').fill('la')
             await pg.get_by_test_id('start-next').click()
             assert await pg.evaluate('__gonow.state.screen') == 'dates'
-            await pg.evaluate("() => { __gonow.state.answers.unsure=true; __gonow.go('start'); }")
+            await pg.evaluate("() => { __gonow.state.answers.unsure=true; __gonow.go('start'); }")  # legacy flag is ignored
             await pg.get_by_test_id('start-from').fill('la')
             await pg.get_by_test_id('start-next').click()
             assert await pg.evaluate('__gonow.state.screen') == 'dates'

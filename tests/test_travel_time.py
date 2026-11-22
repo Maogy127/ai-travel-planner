@@ -23,7 +23,7 @@ async def checks(browser):
         # Free AI (Nov 20, 2026) adds js/ai-config.js and js/gemini.js.
         assert len(assets) == 35, len(assets)
         for path in assets:
-            assert path.endswith('?v=ai-20261121'), path  # free AI cache tag
+            assert path.endswith('?v=aibar-20261121'), path  # free AI cache tag
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()

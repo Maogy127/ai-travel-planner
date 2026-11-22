@@ -1662,7 +1662,12 @@ function mount(root, ctx = {}) {
                     if (!clash()) { fitted = true; break; }
                     list.splice(list.indexOf(moved), 1);
                 }
-                if (!fitted) { moved.preferred = op.start; place(op.start); }
+                if (!fitted) {
+                    moved.preferred = op.start; place(op.start);
+                    // Would only wait in Needs a time there: leave the stop where it was and say so.
+                    const shown = dayResult(ensure(to), to).items.find(i => i.id === moved.id);
+                    if (!shown || shown.start == null) { list.splice(list.indexOf(moved), 1); ensure(f.on)[f.zone].splice(f.at, 0, f.item); done.push({...op, ok:false, reason:'No free time then', title, date:to}); continue; }
+                }
                 done.push({...op, ok:true, title, from:f.on, date:to, nudged: fitted && moved.preferred !== op.start, overlap: !fitted});
             }
             if (!done.some(d => d.ok)) { Object.keys(days).forEach(k => delete days[k]); Object.assign(days, before); return {results:done, before:null}; }

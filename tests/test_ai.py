@@ -45,7 +45,8 @@ def where(pg, pid):
 
 async def open_bar(pg):
     bar = pg.get_by_test_id('ai-bar')
-    if await bar.get_attribute('open') is None:
+    # The bar is always open (Nov 21, 2026): input pill, mic and send sit right on it.
+    if await bar.evaluate("e=>e.tagName==='DETAILS'&&!e.open"):
         await bar.locator('summary').click()
     await expect(pg.get_by_test_id('ai-edit-input')).to_be_visible()
 
@@ -73,7 +74,18 @@ async def ai_plan(b, w):
         ok(f'{w} status shows the AI note', 'Planned with AI · Museums on cooler days' in await pg.get_by_test_id('ai-status').inner_text())
         ok(f'{w} re-plan offered for a picks plan', await pg.get_by_test_id('ai-replan').is_visible())
         ok(f'{w} no emoji in AI bar', await pg.get_by_test_id('ai-bar').evaluate("e=>!/[\\u{1F000}-\\u{1FAFF}\\u{2600}-\\u{27BF}]/u.test(e.innerText)"))
-        ok(f'{w} summary is one line', await pg.get_by_test_id('ai-bar').locator('summary').evaluate("e=>e.getBoundingClientRect().height<=60"))
+        bar = pg.get_by_test_id('ai-bar')
+        ok(f'{w} bar title is one line', await bar.locator('h3').evaluate("e=>e.getBoundingClientRect().height<=30"))
+        ok(f'{w} input, mic and send sit on the bar', await bar.locator('.ai-pill [data-testid=ai-edit-input]').is_visible() and await bar.locator('.ai-pill [data-testid=ai-voice-btn]').is_visible() and await bar.locator('.ai-pill [data-testid=ai-apply]').is_visible())
+        ok(f'{w} placeholder', await pg.get_by_test_id('ai-edit-input').get_attribute('placeholder') == 'Ask AI to change your plan…')
+        ok(f'{w} accent badge', await bar.locator('.ai-badge').evaluate("e=>getComputedStyle(e).backgroundColor!=='rgba(0, 0, 0, 0)'"))
+        if w == 390:
+            await pg.evaluate('scrollTo(0, document.body.scrollHeight)'); await pg.wait_for_timeout(300)
+            ok('phone floating AI button shows once the bar is off screen', await pg.get_by_test_id('ai-fab').is_visible())
+            await pg.get_by_test_id('ai-fab').click(); await pg.wait_for_timeout(700)
+            ok('floating button brings the bar back and focuses the field', await pg.evaluate("document.activeElement&&document.activeElement.dataset.testid==='ai-edit-input'") and not await pg.get_by_test_id('ai-fab').is_visible())
+        else:
+            ok(f'{w} no floating button on desktop', not await pg.get_by_test_id('ai-fab').is_visible())
         small = await pg.evaluate("""()=>[...document.querySelectorAll('[data-testid=ai-bar] summary,[data-testid=ai-bar] button,[data-testid=ai-bar] input,[data-testid=ai-bar] select,[data-testid=day-weather] summary')].filter(e=>e.offsetParent).filter(e=>e.getBoundingClientRect().height<44).map(e=>e.dataset.testid||e.tagName)""")
         ok(f'{w} AI and weather targets >= 44px', not small, small)
         # Typed simple edit: parsed locally, no AI call, Undo restores.
@@ -89,7 +101,7 @@ async def ai_plan(b, w):
         # Free-form edit goes to AI; the answer is applied with Undo.
         await pg.get_by_test_id('ai-edit-input').fill('make day 2 lighter')
         await pg.get_by_test_id('ai-apply').click()
-        await expect(pg.get_by_test_id('ai-status')).to_have_text('Took Kualoa off your day')
+        await expect(pg.get_by_test_id('ai-status')).to_have_text('Moved Kualoa Jurassic Adventure to Needs a time')
         k = await where(pg, 'kualoa')
         ok(f'{w} AI edit applied (Kualoa waits in Needs a time)', k is not None and k[1] is None, k)
         ok(f'{w} AI edit spent one call', await pg.evaluate("window.__aiCalls.map(c=>c.kind).join()") == 'plan,edit')
@@ -102,9 +114,11 @@ async def ai_plan(b, w):
         ok(f'{w} booked stop never moved', await where(pg, 'lamer') == ['2026-11-26', 1170])
         # Voice: the existing voice input fills the field and applies on the final result.
         await pg.evaluate("window.__say='move kualoa to 9 am'")
+        await pg.evaluate("document.querySelector('[data-testid=ai-status]').textContent='-'")
         await pg.get_by_test_id('ai-voice-btn').click()
-        await expect(pg.get_by_test_id('ai-edit-toast')).to_contain_text('Moved Kualoa')
-        ok(f'{w} voice edit applied', (await where(pg, 'kualoa'))[1] == 540, await where(pg, 'kualoa'))
+        await expect(pg.get_by_test_id('ai-status')).not_to_have_text('-')
+        await expect(pg.get_by_test_id('ai-status')).not_to_have_text('Working on it…')
+        ok(f'{w} voice edit applied', (await where(pg, 'kualoa'))[1] == 540, [await where(pg, 'kualoa'), await pg.get_by_test_id('ai-status').inner_text(), await pg.get_by_test_id('ai-edit-input').input_value()])
         # Weather: one line in each day head, details behind a tap, rain tip names outdoor stops.
         await pg.get_by_test_id('db-day-2026-11-28').click()
         wx = pg.locator('[data-weather-date="2026-11-28"]')
