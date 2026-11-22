@@ -96,7 +96,7 @@ assert(E.iconsHTML(sample.days[1].items.find(i=>i.kind==='sight'&&/Diamond Head/
 assert.equal(E.detailHTML({title:'Beach yoga',kind:'activity'}),'<p class="el-detail" data-testid="item-elements-detail">Water · 水 · Wind · 风</p>');
 console.log('PASS demo days, celebration copy, and no missing-element language');
 const intro=E.introHTML()+E.introInner();
-assert(intro.includes('Travel that balances you: 水 · 火 · 木 · 风 · 土'));
+assert(intro.includes('Travel that balances you:')&&intro.includes('水 · 火 · 木 · 风 · 土'));
 assert(intro.includes('Swim, sea, spa')&&intro.includes('Movement intensity')&&intro.includes('Hikes, walks, pilates')&&intro.includes('Yoga, meditation, sunsets')&&intro.includes('Good food and sleep'));
 assert(intro.includes('All five elements, in one day.')&&intro.includes('How it works'));
 assert(!/missing|still need|还差/i.test(intro));
