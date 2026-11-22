@@ -28,6 +28,13 @@ async def one_line(tray):
         assert await label.evaluate('''e=>{const r=document.createRange();
             r.selectNode(e.firstChild);return r.getClientRects().length===1;}''')
 
+
+async def expand_result(row):
+    if await row.get_by_test_id('activity-day').count():
+        return
+    await row.get_by_test_id('activity-expand').click()
+    await expect(row.get_by_test_id('activity-day')).to_be_visible()
+
 async def checks(browser):
     for width in (1280, 390):
         ctx, pg = await new(browser, BASE, width, 844)
@@ -41,14 +48,17 @@ async def checks(browser):
             await expect(tray).to_be_visible()
             await pg.evaluate('document.fonts.ready')
             honesty = tray.get_by_test_id('search-honesty')
-            await expect(honesty).to_have_text('Sample places for now')
+            await expect(honesty).to_have_text('Saved places for this city')
             assert await honesty.evaluate('e=>e.getBoundingClientRect().height<=1.6*parseFloat(getComputedStyle(e).lineHeight)')
             search = tray.get_by_test_id('activity-search')
             await search.fill('zzzz-not-a-place')
-            await expect(tray.get_by_test_id('activity-no-results')).to_have_text('No sample places found')
+            await expect(tray.get_by_test_id('activity-no-results')).to_have_text('No places found')
             await one_line(tray)
             await search.fill('Ala Moana')
             row = tray.get_by_test_id('activity-result').filter(has_text='Black Friday shopping').first
+            await expect(row.get_by_test_id('activity-expand')).to_be_visible()
+            await expect(row.get_by_test_id('activity-day')).to_have_count(0)
+            await expand_result(row)
             await row.get_by_test_id('activity-day').select_option('2026-11-26')
             buttons = row.locator('.library-actions button')
             assert await buttons.all_text_contents() == ['Add', 'Edit time', 'Add again']
@@ -74,6 +84,7 @@ async def checks(browser):
             await one_line(tray)
             await search.fill('pillbox')
             row = tray.get_by_test_id('activity-result').first
+            await expand_result(row)
             await row.get_by_test_id('activity-add-again').click()
             await expect(row.get_by_test_id('activity-add-note')).to_have_text('Added · booking still needed')
             note = row.get_by_test_id('activity-add-note')

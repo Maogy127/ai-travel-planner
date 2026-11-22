@@ -10,6 +10,11 @@ from test_full import new, SITE, db_pointer
 from playwright.async_api import async_playwright, expect
 
 KEY = 'gonow:daybuilder:oahu-demo-2026-11'
+async def expand_result(row):
+    if await row.get_by_test_id('activity-day').count():
+        return
+    await row.get_by_test_id('activity-expand').click()
+
 async def checks(browser, base, width):
     ctx, pg = await new(browser, base, width, 844, has_touch=width == 390)
     try:
@@ -37,6 +42,7 @@ async def checks(browser, base, width):
         await search.fill('parasail')
         card = pg.get_by_test_id('activity-result').first
         await expect(card).to_be_visible()
+        await expand_result(card)
         await card.get_by_test_id('activity-add').click()
         item = tray.locator('[data-db-id]').first
         identity = await item.get_attribute('data-db-id')
@@ -145,6 +151,7 @@ async def checks(browser, base, width):
         await expect(row.get_by_test_id('db-time')).to_have_text('3:00 PM–4:00 PM')
         if width == 390: await pg.get_by_test_id('tray-toggle').click()
         await search.fill('parasail')
+        await expand_result(card)
         await card.get_by_test_id('activity-edit-time').click()
         await expect(card.get_by_test_id('activity-time-choice')).to_have_count(3)
         await card.get_by_test_id('activity-time-choice').first.click()
@@ -256,6 +263,7 @@ async def checks(browser, base, width):
         await search.fill('Magic')
         unscheduled_title = 'Magic Island sunset'
         await expect(card.get_by_role('heading', name=unscheduled_title, exact=True)).to_be_visible()
+        await expand_result(card)
         await expect(card.get_by_test_id('activity-add-time')).to_have_value('')
         await card.get_by_test_id('activity-add').click()
         await expect(tray.locator('[data-db-id]').first.locator('strong').first).to_have_text(unscheduled_title)
