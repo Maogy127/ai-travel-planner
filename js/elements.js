@@ -159,6 +159,25 @@
     return '';
   }
 
+  const MEANINGS={
+    water:'Swim, sea, spa',
+    fire:'Movement intensity',
+    wood:'Hikes, walks, pilates',
+    wind:'Yoga, meditation, sunsets',
+    earth:'Good food and sleep'
+  };
+  function introInner(){
+    return '<p class="el-intro-line">Travel that balances you: 水 · 火 · 木 · 风 · 土</p>'
+      +'<ul class="el-intro-list">'+ORDER.map(id=>{
+        const e=BY[id];
+        return '<li class="el-intro-item"><span class="el-dot is-on el-'+id+'" aria-hidden="true">'+icon(id,20)+'</span><span><strong>'+esc(e.name)+' · '+esc(e.nameZh)+'</strong><small>'+esc(MEANINGS[id])+'</small></span></li>';
+      }).join('')+'</ul>'
+      +'<div class="el-intro-sample" data-testid="elements-sample"><ul class="el-dots" aria-hidden="true">'+ORDER.map(id=>'<li class="el-dot is-on el-'+id+'">'+icon(id,18)+'</li>').join('')+'</ul><p>All five elements, in one day.</p></div>'
+      +'<details class="el-intro-how"><summary>How it works</summary><p>Each stop quietly picks up to two elements. When a day gathers all five, the dots light up. Nothing is required.</p></details>';
+  }
+  function introHTML(){
+    return '<section class="el-intro" data-testid="elements-intro" aria-label="Five elements">'+introInner()+'</section>';
+  }
   function rowHTML(items){
     const gathered=day(items);
     const names=gathered.ids.map(e=>BY[e].name);
@@ -173,7 +192,7 @@
     '</div>';
   }
 
-  const api={LIST,ORDER,COLORS,PATHS,of,day,skipped,icon,label,iconsHTML,detailHTML,rowHTML,celebrateLine,tripLine,findPick};
+  const api={LIST,ORDER,COLORS,PATHS,of,day,skipped,icon,label,iconsHTML,detailHTML,rowHTML,celebrateLine,tripLine,findPick,introHTML,introInner,MEANINGS};
   root.GoNowElements=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);
