@@ -224,11 +224,10 @@ async def open_form(pg):
   if await pg.get_by_test_id('start-from').count()==0:
     # Direct legacy route preserves destination validation fixtures. Home is covered by test_question_flow.
     await pg.evaluate("__gonow.state.fromHome=false;__gonow.go('start')")
-async def answer(pg, dest, unsure=False, ages=('18','19'), who='couple', styles=('hotel','scenic'), start='2026-11-25', end='2026-11-29'):
+async def answer(pg, dest, ages=('18','19'), who='couple', styles=('hotel','scenic'), start='2026-11-25', end='2026-11-29'):
   await open_form(pg)
   await pg.get_by_test_id('start-from').fill('Los Angeles')
-  if unsure: await pg.get_by_test_id('start-unsure').click()
-  else: await pg.get_by_test_id('start-to').fill(dest)
+  await pg.get_by_test_id('start-to').fill(dest)
   await pg.get_by_test_id('start-next').click()
   await pg.get_by_test_id('date-start').fill(start); await pg.get_by_test_id('date-end').fill(end)
   hint=await pg.get_by_test_id('guide').inner_text()
@@ -471,31 +470,21 @@ async def run(base, label, shots):
     ok(f'{label} quick-plan notice', await pg.get_by_test_id('quick-notice').count()==1)
     ok(f'{label} template no h-scroll', not await overflow(pg))
     await ctx.close()
-    # C. Not sure -> recommendations
+    # C. "I'm not sure yet" was removed (Nov 21, 2026): the destination is always typed.
     ctx,pg=await new(b, base)
     await open_form(pg)
-    await pg.get_by_test_id('start-from').fill('Seattle'); await pg.get_by_test_id('start-unsure').click(); await pg.get_by_test_id('start-next').click()
-    await pg.get_by_test_id('date-start').fill('2027-02-10'); await pg.get_by_test_id('date-end').fill('2027-02-16'); await pg.get_by_test_id('q-continue').click()
-    await pg.get_by_test_id('q-skip').click()  # Optional flights before budget.
-    await pg.get_by_test_id('opt-3000').click(); await pg.get_by_test_id('q-continue').click()
-    await pg.get_by_test_id('opt-family').click()
-    if shots:
-      await pg.wait_for_timeout(300); await pg.screenshot(path=str(ROOT/'screenshots/pirate-local-questions.png'))
-    await pg.get_by_test_id('q-continue').click()
-    await pg.get_by_test_id('q-continue').click() if await pg.get_by_test_id('q-continue').is_enabled() else await pg.get_by_test_id('q-skip').click()
-    h=await pg.locator('h1').inner_text()
-    if 'old' in h.lower(): await pg.get_by_test_id('q-skip').click()
-    await pg.get_by_test_id('opt-nature').click(); await pg.get_by_test_id('q-continue').click()
-    await pg.get_by_test_id('rec-card').first.wait_for()
-    ok(f'{label} 3 recommendations', await pg.get_by_test_id('rec-card').count()==3)
-    rb=await pg.locator('main').text_content()
-    ok(f'{label} recs labeled estimate/typical', ('estimate' in rb.lower()) and ('not a forecast' in rb.lower()))
-    ok(f'{label} recs no h-scroll', not await overflow(pg))
-    name=await pg.get_by_test_id('rec-card').nth(1).locator('h2,h3').first.inner_text()
-    await pg.get_by_test_id('rec-choose').nth(1).click()
-    await pg.get_by_test_id('fork-no').click(); await wait_plan(pg)
-    ok(f'{label} picked rec -> plan', name.split(',')[0].split('/')[0].strip()[:5] in await pg.locator('main').text_content(), name)
-    await pg.get_by_test_id('photo-credits').first.click()
+    ok(f'{label} no not-sure option', await pg.get_by_test_id('start-unsure').count()==0 and await pg.get_by_test_id('home-unsure').count()==0 and "not sure yet" not in (await pg.locator('main').inner_text()).lower())
+    await pg.get_by_test_id('start-from').fill('Seattle')
+    if await pg.get_by_test_id('start-to').count():
+      await pg.get_by_test_id('start-to').fill(''); await pg.get_by_test_id('start-next').click()
+      ok(f'{label} destination required', await pg.evaluate('__gonow.state.screen')=='start' and 'Add a city, region or country.' in await pg.locator('#dest-error').inner_text())
+    # Saved state from the old flow (unsure + recommendations screen) migrates into the normal flow.
+    await pg.evaluate("()=>{localStorage.setItem('gonow:answers',JSON.stringify(Object.assign(JSON.parse(localStorage.getItem('gonow:answers')||'{}'),{unsure:true,destination:'Oahu'})));}")
+    await pg.reload()
+    ok(f'{label} legacy unsure flag dropped', await pg.evaluate('__gonow.state.answers.unsure===undefined'))
+    await pg.evaluate("__gonow.go('recommendations')")
+    ok(f'{label} old recommendations screen goes to the normal flow', await pg.evaluate('__gonow.state.screen')=='fork' and await pg.get_by_test_id('rec-card').count()==0)
+    await pg.evaluate("__gonow.go('credits')")
     cb=await pg.locator('main').text_content()
     ok(f'{label} credits screen', 'Pexels' in cb and 'Photo credits' in cb)
     ok(f'{label} credits no h-scroll', not await overflow(pg))
@@ -640,7 +629,9 @@ async def local_info_checks(b,base,label):
   body=await pg.locator('main').inner_text()
   ok(f'{label} no Good to know in prep',await pg.get_by_test_id('good-to-know').count()==0 and await pg.get_by_test_id('local-info').count()==0 and 'Good to know' not in body)
   ok(f'{label} Oahu has no plug adapter','adapter' not in body.lower())
-  ok(f'{label} no weather or FX requests',not any('open-meteo.com' in u or 'frankfurter.dev' in u for u in calls))
+  # Daily weather (Open-Meteo forecast/archive, keyless) is back as a one-line day header; FX and other weather calls stay out.
+  wx=[u for u in calls if 'open-meteo.com' in u]
+  ok(f'{label} no FX requests; weather only daily Open-Meteo',not any('frankfurter.dev' in u for u in calls) and all(('api.open-meteo.com/v1/forecast' in u or 'archive-api.open-meteo.com/v1/archive' in u) and 'daily=' in u and 'hourly' not in u for u in wx),str(wx[:3]))
   await ctx.close()
   ctx,pg=await new(b,base)
   await answer(pg,'Lisbon')

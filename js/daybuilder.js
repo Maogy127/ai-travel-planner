@@ -1625,6 +1625,61 @@ function mount(root, ctx = {}) {
             days[on]=copy;save();render();return true;
         },
         swapItem: (id, alternative) => { const item=current().items.find(i=>i.id===id); if(item?.locked&&suggestLocked(item,'swap',{alternative}))return false; if(!item || item.locked)return false; if(block({...item,...alternative},date,target=>addToDay(target,alternative)))return false; Object.assign(item, alternative, {id:item.id, preferred:alternative.start ?? item.preferred, manualTime:true, duration:item.duration, checkinSwap:true}); delete item.textTime; save(); render(); return true; },
+        // Plan edits from GoNowAI (voice or typed). Every move still passes the opening-hours and dive rules and the reflow.
+        editableItems: () => sourcePlan().days.flatMap(day => {
+            const stored = days[day.date] || buildSuggested(day.date);
+            const fixed = i => !!(i.locked || i.booked || ['flight','travel','stay'].includes(i.kind));
+            return dayResult(stored, day.date).items.map(i => ({id:i.id, title:String(i.title||''), date:day.date, start:i.start ?? null, kind:i.kind||'activity', category:i.category||'', locked:fixed(i)}))
+                .concat((stored.unscheduled||[]).map(i => ({id:i.id, title:String(i.title||''), date:day.date, start:null, kind:i.kind||'activity', category:i.category||'', locked:fixed(i)})));
+        }),
+        applyEdits: ops => {
+            const before = clone(days), dates = sourcePlan().days.map(d => d.date), done = [];
+            const ensure = on => { if (!days[on]) days[on] = buildSuggested(on); days[on].unscheduled ||= []; return days[on]; };
+            const find = id => { for (const on of dates) { const day = ensure(on); for (const zone of ['items','unscheduled']) { const at = day[zone].findIndex(i => i.id === id); if (at >= 0) return {on, zone, at, item: day[zone][at]}; } } return null; };
+            for (const op of ops || []) {
+                const f = op && find(op.id);
+                if (!f) { done.push({...op, ok:false, reason:'missing'}); continue; }
+                const title = String(f.item.title || 'Stop');
+                if (f.item.locked || f.item.booked || ['flight','travel','stay'].includes(f.item.kind)) { done.push({...op, ok:false, reason:'locked', title}); continue; }
+                if (op.type === 'remove') {
+                    if (f.zone === 'unscheduled') { done.push({...op, ok:false, reason:'already', title}); continue; }
+                    ensure(f.on).items.splice(f.at, 1); ensure(f.on).unscheduled.push({...f.item, preferred:null, manualTime:false});
+                    done.push({...op, ok:true, title, from:f.on}); continue;
+                }
+                if (op.type !== 'move' || !Number.isFinite(op.start)) { done.push({...op, ok:false, reason:'unclear', title}); continue; }
+                const to = dates.includes(op.date) ? op.date : f.on, moved = {...f.item, preferred:op.start, manualTime:true};
+                const reason = blockedOn(moved, to, ruleContext());
+                if (reason) { done.push({...op, ok:false, reason, title, date:to}); continue; }
+                ensure(f.on)[f.zone].splice(f.at, 1);
+                const list = ensure(to).items, place = start => { const at = list.findIndex(i => (i.preferred ?? Infinity) > start); list.splice(at < 0 ? list.length : at, 0, moved); };
+                // Never stack two stops: try the asked time, then the nearest free time within 3 hours.
+                const clash = () => { const shown = dayResult(ensure(to), to).items, me = shown.find(i => i.id === moved.id); return !me || me.start == null || shown.some(i => i.id !== moved.id && i.start != null && i.end != null && me.start < i.end && me.end > i.start); };
+                const tries = [0]; for (let n = 15; n <= 180; n += 15) tries.push(n, -n);
+                let fitted = false;
+                for (const shift of tries) {
+                    const start = op.start + shift; if (start < 360 || start + (moved.duration || 60) > 1380) continue;
+                    if (blockedOn({...moved, preferred:start}, to, ruleContext())) continue;
+                    moved.preferred = start; place(start);
+                    if (!clash()) { fitted = true; break; }
+                    list.splice(list.indexOf(moved), 1);
+                }
+                if (!fitted) {
+                    moved.preferred = op.start; place(op.start);
+                    // Would only wait in Needs a time there: leave the stop where it was and say so.
+                    const shown = dayResult(ensure(to), to).items.find(i => i.id === moved.id);
+                    if (!shown || shown.start == null) { list.splice(list.indexOf(moved), 1); ensure(f.on)[f.zone].splice(f.at, 0, f.item); done.push({...op, ok:false, reason:'No free time then', title, date:to}); continue; }
+                }
+                done.push({...op, ok:true, title, from:f.on, date:to, nudged: fitted && moved.preferred !== op.start, overlap: !fitted});
+            }
+            if (!done.some(d => d.ok)) { Object.keys(days).forEach(k => delete days[k]); Object.assign(days, before); return {results:done, before:null}; }
+            save();
+            // Where each moved stop landed after the reflow (it may be nudged, or wait in Needs a time).
+            done.filter(d => d.ok && d.type === 'move').forEach(d => { const shown = dayResult(days[d.date], d.date).items.find(i => i.id === d.id); d.landed = shown ? shown.start ?? null : null; });
+            const moved = done.find(d => d.ok && d.type === 'move');
+            if (moved && moved.date !== date) selectDay(moved.date, false); else render();
+            return {results:done, before};
+        },
+        restore: snapshot => { if (!snapshot) return; Object.keys(days).forEach(k => delete days[k]); Object.assign(days, clone(snapshot)); save(); render(); },
         render, selectDay, renderPrint, root, openTime, timeInstances, draftItems: () => clone(draftItems()),
         getDay: () => clone(current()),
         date: () => date,
@@ -1659,6 +1714,9 @@ window.DayBuilder = {convert,slotCandidates,estimateTravel,parseClock:parse,clos
     draftItems: () => active()?.draftItems() || [],
     shiftUnlocked: (on,id,start) => active()?.shiftUnlocked(on,id,start) || false,
     swapItem: (id, alternative) => active()?.swapItem(id, alternative),
+    editableItems: () => active()?.editableItems() || [],
+    applyEdits: ops => active()?.applyEdits(ops) || {results:[], before:null},
+    restore: snapshot => active()?.restore(snapshot),
     addToDay: (date, spec) => active()?.addToDay(date, spec) || {ok: false, reason: 'Open a draft first'},
     resetSession: () => { stayOverride=''; session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
 })();

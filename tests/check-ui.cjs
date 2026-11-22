@@ -230,7 +230,8 @@ assert(!node('view').innerHTML.includes('rank-badge'));
   assert(node('view').innerHTML.includes('Day 1 · Wed 25'));
   assert(node('view').innerHTML.includes('Nov 25–29, 2026'));
   assert.equal(node('toast').innerHTML,''); // Continue clears the ready toast.
-  api.go('recommendations');assert.equal(node('toast').innerHTML,'');
+  api.go('fork');assert.equal(node('toast').innerHTML,'');
+  api.state.answers.destination='Oahu';api.go('recommendations');assert.equal(api.state.screen,'fork'); // removed screen redirects
   Object.assign(api.state.answers,{templateOahu:true,start:'2027-01-01',end:'2027-01-05',dietNeeds:['Vegan'],level:'gentle',stay:'My Hotel',mustdos:'Museum visit'});
   api.go('fork');click('fork-yes');api.go('musts');click('q-continue');
   await new Promise(r=>setTimeout(r,20));

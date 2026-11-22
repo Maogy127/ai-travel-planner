@@ -1950,8 +1950,7 @@ html.reduce-motion .nav-panel{transition:none}
 .trip-card-actions .trip-menu>div[hidden]{display:none}
 .trip-card-actions .trip-menu>div button{margin:0;width:100%;text-align:left}
 
-/* =====================================================================
-   v2 "Color is your weather" (Nov 20, 2026). Tokens live in :root and are re-tinted by js/v2.js.
+/* ==============================================================   v2 "Color is your weather" (Nov 20, 2026). Tokens live in :root and are re-tinted by js/v2.js.
    Rhythm: 4/8 base, 14px inner / 16px card padding / 24px section gaps. Cards 24px (hero 28px),
    one hairline + one soft shadow everywhere. Display = Fraunces, UI = Hanken Grotesk.
    ===================================================================== */
@@ -2229,3 +2228,46 @@ html.reduce-motion button:active{transform:none!important}
 }
 .trip-card.is-elements-day .el-celebrate{margin:2px 0 0}
 .db-pair.is-open .el-icons{color:var(--ink-2)}
+/* ---------- Free AI bar + daily weather (Nov 20, 2026) ---------- */
+.ai-bar{position:relative;margin:16px 0 12px;padding:16px 16px 12px;display:grid;gap:12px;border-radius:24px;
+  background:linear-gradient(135deg,color-mix(in srgb,var(--accent-soft) 85%,var(--surface)) 0%,var(--surface) 70%);
+  border:1.5px solid color-mix(in srgb,var(--accent) 38%,transparent);box-shadow:var(--shadow-lift)}
+.ai-head{display:flex;align-items:center;gap:12px;min-width:0}
+.ai-head h3{margin:0;font-size:18px;line-height:1.2;color:var(--ink);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ai-badge{flex-shrink:0;display:grid;place-items:center;width:40px;height:40px;border-radius:50%;background:var(--accent);color:var(--on-accent)}
+.ai-tag{margin-left:auto;flex-shrink:0;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:650;letter-spacing:.06em;color:var(--accent-text);background:var(--surface);border:1px solid color-mix(in srgb,var(--accent) 35%,transparent)}
+.ai-pill{display:flex;align-items:center;gap:4px;min-height:56px;padding:4px 4px 4px 18px;border-radius:999px;background:var(--surface);border:1px solid var(--boundary)}
+.ai-pill:focus-within{outline:2px solid var(--focus);outline-offset:2px}
+.ai-pill .ai-ask{flex:1;min-width:0;display:block;margin:0}
+.ai-pill input{width:100%;min-height:48px;border:0;background:transparent;padding:0;font-size:16px;color:var(--ink);box-shadow:none}
+.ai-pill input:focus{outline:none;box-shadow:none}
+.ai-pill input::placeholder{color:var(--ink-2)}
+.ai-pill .ai-mic,.ai-pill .ai-send{flex-shrink:0;display:grid;place-items:center;width:48px;height:48px;min-height:48px;padding:0;border-radius:50%}
+.ai-pill .ai-mic.ai-mic{background:var(--soft);color:var(--ink);border:1px solid var(--boundary)}
+.ai-pill .ai-mic.is-listening,.ai-pill .ai-mic[aria-pressed=true]{background:var(--accent-text);color:var(--on-accent);border-color:var(--accent-text)}
+.ai-pill .ai-send{background:var(--accent);color:var(--on-accent);border:0}
+.ai-pill .ai-send:disabled{opacity:.6}
+.ai-foot{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px}
+.ai-foot:empty{display:none}
+.ai-foot>button{min-height:44px;display:inline-flex;align-items:center;gap:6px}
+.ai-foot .ai-voice-row{margin:0 0 0 auto;display:flex;align-items:center;gap:6px;font-size:13px;color:var(--ink-2)}
+.ai-foot .ai-voice-row select{min-height:44px;font-size:14px}
+.ai-foot .ai-voice-row [role=status],.ai-foot .ai-voice-row [data-testid$=voice-unsupported]{flex-basis:auto;font-size:13px}
+.ai-foot .ai-voice-row [role=status]:empty{display:none}
+.ai-status{margin:0;font-size:13px;color:var(--ink-2);min-height:20px}
+.ai-fab{position:fixed;right:16px;bottom:calc(96px + env(safe-area-inset-bottom));z-index:60;display:grid;place-items:center;width:56px;height:56px;padding:0;border-radius:50%;border:0;background:var(--accent);color:var(--on-accent);box-shadow:0 10px 24px -8px rgba(31,42,32,.45)}
+.ai-fab[hidden]{display:none}
+@media (min-width:721px){.ai-fab{display:none}}
+@keyframes ai-glow{0%,100%{box-shadow:var(--shadow-lift),0 0 0 0 color-mix(in srgb,var(--accent) 0%,transparent)}50%{box-shadow:var(--shadow-lift),0 0 0 6px color-mix(in srgb,var(--accent) 22%,transparent)}}
+.ai-bar.ai-intro{animation:ai-glow 1.6s ease-in-out 2}
+@media (prefers-reduced-motion:reduce){.ai-bar.ai-intro{animation:none}}
+.ai-loading .spinner{margin:24px auto}
+.ai-loading [data-testid=ai-skip]{display:block;margin:8px auto 0;min-height:48px}
+.day-weather{margin:4px 0 2px}
+.day-weather>details>summary{display:inline-flex;align-items:center;gap:6px;min-height:44px;list-style:none;cursor:pointer;color:var(--ink-2);font-size:14px;font-variant-numeric:tabular-nums}
+.day-weather>details>summary::-webkit-details-marker{display:none}
+.day-weather>details>summary .v2-icon{color:var(--ink-2)}
+.day-weather>details>p{margin:0 0 6px;font-size:13px;color:var(--ink-2)}
+.day-weather a{color:var(--accent-text)}
+@media (max-width:420px){.ai-tag{display:none}.ai-bar{padding:14px 12px 10px}.ai-pill{padding-left:14px;gap:2px}.ai-pill .ai-mic,.ai-pill .ai-send{width:44px;height:44px;min-height:44px}.ai-foot{flex-wrap:nowrap}.ai-foot .ai-voice-row label{font-size:0;gap:0}.ai-foot .ai-voice-row select{font-size:14px;max-width:112px}}
+@media print{.ai-bar,.ai-fab{display:none}}

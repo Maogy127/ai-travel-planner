@@ -39,14 +39,14 @@ const capacity=a=>({gentle:300,active:420,athlete:540}[pace(a)]);
 function departure(a){if(window.GoNowFlights&&(a.flightsStep||a.returnTime||a.arrivalTime)){const w=window.GoNowFlights.windowFor(a);return {flight:w.departure,leave:w.leave};}const sample=!a.generic&&a.start==='2026-11-25'&&a.end==='2026-11-29';const flight=minute(a.flightTime||a.builderFlightTime)??(sample?480:null);return {flight,leave:flight===null?600:Math.max(0,flight-185)};}
 
 const travel=(a,b)=>!a||!b?0:window.DayBuilder.estimateTravel(a,b).minutes;
-function scheduleOnce(a,catalog,attempt=0,seed){
+function scheduleOnce(a,catalog,attempt=0,seed,prefer){
  const start=a.start||'2026-11-25',end=a.end||'2026-11-29',days=[];
  for(let t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z')&&days.length<31;t+=86400000)days.push({date:new Date(t).toISOString().slice(0,10),theme:'',items:[],prep:[],unscheduled:[]});
  // Sample reservations only apply when their date is inside this trip; otherwise they are ordinary places.
  const sample=p=>p.reservation&&(p.reservation.date<start||p.reservation.date>end)?(({reservation,...rest})=>rest)(p):p;
  const picks=a.picks||{},all=[...catalog.activities,...catalog.restaurants].map(sample).map(p=>catalog.generic?{...p,area:p.area||'',duration:p.duration||60,price:p.price||'',intro:p.intro||'',closed:p.closed||[],hours:p.parsedHours||p.hours||{}}:p),selected=all.filter(i=>i.reservation||i.locked||i.booked||(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id));
  if(seed)days.forEach(d=>{d.items=JSON.parse(JSON.stringify(seed[d.date]||[]));});
- const fw=window.GoNowFlights.windowFor(a);const unfit=[],bookingIssues=[];const {flight,leave}=departure({...a,start,end,generic:catalog.generic});
+ let aiPlaced=0;const fw=window.GoNowFlights.windowFor(a);const unfit=[],bookingIssues=[];const {flight,leave}=departure({...a,start,end,generic:catalog.generic});
  function fits(p,d,t){
   const length=p.duration||60,close=d.date===end?Math.min(1320,leave):1320;
   if(d.date===end&&a.flightsStep&&fw.departure<=480)return false;
@@ -60,11 +60,13 @@ function scheduleOnce(a,catalog,attempt=0,seed){
   if(d.items.reduce((s,i)=>s+i.duration,0)+length>capacity(a))return false;
   return !d.items.some(i=>t<i.start+i.duration+travel(p,i.pick||i)+((i.tags||[]).includes('dive')?30:0)&&t+length+travel(p,i.pick||i)+((p.tags||[]).includes('dive')?30:0)>i.start);
  }
+ const add=(p,d,t)=>{d.items.push({id:p.id,title:p.name,kind:p.meals?'meal':'activity',time:window.DayBuilder.clock(t),start:t,duration:p.duration,desc:'About '+p.duration+' min. '+p.intro,category:p.category||'Food',area:p.area,lat:p.lat,lng:p.lng,movementMinutes:/Active|Moderate/.test(p.effort)?p.duration:0,wellness:/Active|Moderate/.test(p.effort)?{type:'movement'}:undefined,costEstimate:p.generic?undefined:p.meals?({'$':15,'$$':30,'$$$$':150}[p.price]||30):Number(((p.price||'').match(/\d+/)||[0])[0]),place:p.area,photo:p.photo,...(p.source==='google'&&p.photo?{photoBy:{name:String(p.creditName||'Google Maps').slice(0,80),url:/^https:\/\//.test(p.creditUrl||'')?p.creditUrl:''}}:{}),price:p.price,locked:!!(p.reservation||p.locked||p.booked),booked:!!(p.reservation||p.booked),bookable:!!p.bookable,needsTicket:!!p.needsTicket,booking:p.booking,tour:p.tour,closed:p.closed,hours:p.ruleHours&&(!p.ruleHours.date||p.ruleHours.date===d.date)?p.ruleHours:p.hours,tags:p.tags||[],prep:p.bookable?[{type:'book',text:'Reserve '+p.name}]:[],bring:[],sources:[],pick:p});};
  let ordered=selected.slice().sort((x,y)=>Number(!!(y.reservation||y.locked||y.booked))-Number(!!(x.reservation||x.locked||x.booked))||Number(!!y.meals)-Number(!!x.meals)||Number(y.fixed!=null)-Number(x.fixed!=null)||(attempt%2?y.area.localeCompare(x.area):x.area.localeCompare(y.area))||(attempt%3?x.duration-y.duration:y.duration-x.duration));
  if(window.goNowAccount?.group)ordered=window.goNowAccount.sort(ordered);
- for(const p of ordered){
-  if(days.some(d=>d.items.some(i=>(i.sourceId||i.id)===p.id)))continue;
-  if(p.minAge&&(a.ages||[]).some(age=>String(age).trim()!==''&&Number(age)<p.minAge)){((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);continue;}
+ const done=new Set(),placeOne=p=>{
+  if(done.has(p.id))return;done.add(p.id);
+  if(days.some(d=>d.items.some(i=>(i.sourceId||i.id)===p.id)))return;
+  if(p.minAge&&(a.ages||[]).some(age=>String(age).trim()!==''&&Number(age)<p.minAge)){((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);return;}
   let placed=false;
   const rotated=days.slice(attempt%days.length).concat(days.slice(0,attempt%days.length));
   const proximity=d=>{const activities=d.items.filter(i=>i.kind==='activity');return activities.length?Math.min(...activities.map(i=>travel(p,i.pick||i))):999;};
@@ -74,10 +76,21 @@ function scheduleOnce(a,catalog,attempt=0,seed){
    let slots=[];
    if(p.reservation)slots=[minute(p.reservation.time)];else if(p.fixed!=null)slots=[p.fixed];else if(p.meals){for(const meal of (p.meals.includes('breakfast')?['breakfast']:p.meals)){const range={breakfast:[420,600],lunch:[690,810],dinner:[1080,1200],snack:[870,1020]}[meal];for(let t=range[0];t+ p.duration<=range[1];t+=15)slots.push(t);}}else for(let t=540;t+p.duration<=1080;t+=15)slots.push(t);
    const t=slots.find(t=>fits(p,d,t));if(t===undefined)continue;
-   d.items.push({id:p.id,title:p.name,kind:p.meals?'meal':'activity',time:window.DayBuilder.clock(t),start:t,duration:p.duration,desc:'About '+p.duration+' min. '+p.intro,category:p.category||'Food',area:p.area,lat:p.lat,lng:p.lng,movementMinutes:/Active|Moderate/.test(p.effort)?p.duration:0,wellness:/Active|Moderate/.test(p.effort)?{type:'movement'}:undefined,costEstimate:p.generic?undefined:p.meals?({'$':15,'$$':30,'$$$$':150}[p.price]||30):Number(((p.price||'').match(/\d+/)||[0])[0]),place:p.area,photo:p.photo,...(p.source==='google'&&p.photo?{photoBy:{name:String(p.creditName||'Google Maps').slice(0,80),url:/^https:\/\//.test(p.creditUrl||'')?p.creditUrl:''}}:{}),price:p.price,locked:!!(p.reservation||p.locked||p.booked),booked:!!(p.reservation||p.booked),bookable:!!p.bookable,needsTicket:!!p.needsTicket,booking:p.booking,tour:p.tour,closed:p.closed,hours:p.ruleHours&&(!p.ruleHours.date||p.ruleHours.date===d.date)?p.ruleHours:p.hours,tags:p.tags||[],prep:p.bookable?[{type:'book',text:'Reserve '+p.name}]:[],bring:[],sources:[],pick:p});placed=true;break;
+   add(p,d,t);placed=true;break;
   }
   if(!placed)((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);
+ };
+ // Bookings and locks keep their slots before any AI proposal is tried.
+ if(prefer&&prefer.length)ordered.filter(p=>p.reservation||p.locked||p.booked).forEach(placeOne);
+ // AI proposals (GoNowAI): try each pick near its proposed day and time first. Every slot still passes fits().
+ if(prefer&&prefer.length)for(const want of prefer){
+  const p=selected.find(x=>x.id===want.id),d=days.find(x=>x.date===want.date);
+  if(!p||!d||p.reservation||(p.minAge&&(a.ages||[]).some(age=>String(age).trim()!==''&&Number(age)<p.minAge))||days.some(x=>x.items.some(i=>(i.sourceId||i.id)===p.id)))continue;
+  let slots=[];if(p.fixed!=null)slots=[p.fixed];else if(p.meals){for(const meal of (p.meals.includes('breakfast')?['breakfast']:p.meals)){const range={breakfast:[420,600],lunch:[690,810],dinner:[1080,1200],snack:[870,1020]}[meal];for(let t=range[0];t+p.duration<=range[1];t+=15)slots.push(t);}}else for(let t=Math.max(360,want.start-120);t<=Math.min(1200,want.start+120);t+=15)slots.push(t);
+  slots.sort((x,y)=>Math.abs(x-want.start)-Math.abs(y-want.start));
+  const t=slots.find(t=>fits(p,d,t));if(t!==undefined){add(p,d,t);aiPlaced++;}
  }
+ ordered.forEach(placeOne);
  for(const d of days){d.items.sort((a,b)=>a.start-b.start);const names=[...new Set(d.items.filter(i=>i.kind==='activity').map(i=>i.area))];d.theme=names.slice(0,2).join(' & ')||[...new Set(d.items.map(i=>i.area))].slice(0,1).join('')||(d.date===end?'Fly home':d.date===start?'Arrive & settle in':'Free day');}
  if(!seed&&days.length)days[days.length-1].items.push({id:'pick-airport',title:catalog.generic?'Leave for the airport':'Uber to HNL',kind:'travel',time:window.DayBuilder.clock(leave),start:leave,duration:a.flightsStep?fw.road:35,locked:true,desc:a.flightsStep?'About '+fw.road+' min.':'Leave for the airport.',prep:[],bring:[],sources:[]});
  if(days[0]){days[0].unscheduled=unfit.map(p=>({id:p.id,title:p.name,place:p.area,duration:p.duration,kind:p.meals?'meal':'activity',custom:true,tags:p.tags||[],closed:p.closed,hours:p.hours}));if(!seed&&fw.arrivalStart<1410&&!days[0].items.some(i=>i.start<1140)){const checkin=Math.max(900,fw.arrivalStart);days[0].items.unshift({id:'pick-checkin',title:'Hotel check-in',kind:'stay',time:window.DayBuilder.clock(checkin),start:checkin,desc:'About 30 min. Settle in.',duration:30,prep:[],bring:[],sources:[]});
@@ -86,13 +99,14 @@ function scheduleOnce(a,catalog,attempt=0,seed){
   if(!busy&&stroll+60<=dinner-30)days[0].items.push({id:'pick-arrival-stroll',title:catalog.generic?'Easy walk near your hotel':'Beach time near your hotel',kind:'activity',time:window.DayBuilder.clock(stroll),start:stroll,desc:'About 60 min. Optional, keep it easy after the flight.',duration:60,area:'',prep:[],bring:[],sources:[]});}}
  if(!seed&&days[0]&&Math.max(1170,fw.arrivalStart+30)+60<=1440&&!days[0].items.some(i=>i.kind==='meal'||i.start>=1110))days[0].items.push({id:'pick-arrival-meal',title:'Evening meal near hotel',kind:'meal',time:window.DayBuilder.clock(Math.max(1170,fw.arrivalStart+30)),desc:'About 60 min. Choose nearby.',duration:60,prep:[],bring:[],sources:[]});
  if(a.flightsStep&&!seed){days[0].items.unshift({id:'arrival-flight',title:window.GoNowFlights.label(a,'arrival'),kind:'flight',time:window.DayBuilder.clock(fw.landing),duration:0,locked:true,flightDirection:'arrival',prep:[],bring:[],sources:[]});days.at(-1).items.push({id:'return-flight',title:window.GoNowFlights.label(a,'return'),kind:'flight',time:window.DayBuilder.clock(fw.departure),duration:0,locked:true,flightDirection:'return',prep:[],bring:[],sources:[]});}
- return {days,unfit:unfit.map(p=>({...p,reason:reason(p,{...a,start,end})})),bookingIssues,flightTime:flight===null?'':window.DayBuilder.clock(flight),leaveTime:leave,pace:pace(a)};
+ return {days,unfit:unfit.map(p=>({...p,reason:reason(p,{...a,start,end})})),bookingIssues,flightTime:flight===null?'':window.DayBuilder.clock(flight),leaveTime:leave,pace:pace(a),aiPlaced};
 }
-function schedule(a,catalog){
- let best=scheduleOnce(a,catalog);
+function schedule(a,catalog,opts){
+ const prefer=opts&&opts.prefer;
+ let best=scheduleOnce(a,catalog,0,null,prefer);
  // Repack in alternative area, duration and day orders before reporting unfit.
  for(let attempt=1;best.unfit.length&&attempt<18;attempt++){
-  const candidate=scheduleOnce(a,catalog,attempt);
+  const candidate=scheduleOnce(a,catalog,attempt,null,prefer);
   if(candidate.bookingIssues.length<best.bookingIssues.length||candidate.bookingIssues.length===best.bookingIssues.length&&candidate.unfit.length<best.unfit.length)best=candidate;
  }
  return best;

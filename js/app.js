@@ -34,7 +34,7 @@
         } catch(e) {}
     }
     var defaults= {
-        track:'together', mode:'trip', localCity:'', localLength:'half', bedtime:'22:30', wake:'06:30', diet:[], dietNotes:'', dayPaces:{}, travelers:[], level:'unsure', activities:[], origin:'', destination:'', unsure:false, start:'', end:'', flexible:false, length:5, month:'', budget:null, includeFlights:true, covers:['flights','hotel','food','activities','transport'], completed:[], who:'', ages:[], adults:2, kids:0, styles:[], food:[], allergies:'', pace:'Moderate', mustdos:'', stay:''
+        track:'together', mode:'trip', localCity:'', localLength:'half', bedtime:'22:30', wake:'06:30', diet:[], dietNotes:'', dayPaces:{}, travelers:[], level:'unsure', activities:[], origin:'', destination:'', start:'', end:'', flexible:false, length:5, month:'', budget:null, includeFlights:true, covers:['flights','hotel','food','activities','transport'], completed:[], who:'', ages:[], adults:2, kids:0, styles:[], food:[], allergies:'', pace:'Moderate', mustdos:'', stay:''
     };
     function normalizeAnswers(a){
         a=a&&typeof a==='object'&&!Array.isArray(a)?a:{};
@@ -49,6 +49,8 @@
             var records=read('gonow.checkin.v1',{});
             a.track=personal||Object.keys(records).some(function(date){return Object.keys(records[date]||{}).some(function(id){return /^traveler-[1-9]\d*$/.test(id)&&Object.keys(records[date][id]||{}).length>0;});})?'each':'together';
         }
+        // Nov 21, 2026: "I'm not sure yet" (destination recommendations) was removed; the destination is always typed.
+        delete a.unsure;
         a.picks=a.picks||{activities:[],restaurants:[]};
         window.GoNowDiet.migrate(a);
         a.mode=a.mode==='local'?'local':'trip';
@@ -58,7 +60,7 @@
         return a;
     }
     var state= {
-        screen:'start', answers:Object.assign({}, defaults, normalizeAnswers(read(KEY+'answers',{}))), plan:null, tab:'plan', recOffset:0, excluded:[], edits: {}, packed: {}, packMeta: {}, hidePacked:false
+        screen:'start', answers:Object.assign({}, defaults, normalizeAnswers(read(KEY+'answers',{}))), plan:null, tab:'plan', edits: {}, packed: {}, packMeta: {}, hidePacked:false
     };
     if(!read(KEY+'answers',{}).covers&&state.answers.includeFlights===false)state.answers.covers=defaults.covers.filter(function(k){return k!=='flights';});
     var steps=['dates', 'flights', 'budget', 'who', 'ages', 'style'], extra=['food', 'pace', 'musts'];
@@ -70,7 +72,7 @@
     var activeGeneration=0, toastTimer, undoPending=false;
     // Only web links reach href; javascript:, data: and other schemes become inert.
     function safeHref(u){u=String(u==null?'':u).trim();return /^https?:\/\//i.test(u)?u:'#';}
-    function v2i(name,size){return window.GoNowIcons?window.GoNowIcons.icon(name,size||16):'';}
+    function v2i(name,size,cls){return window.GoNowIcons?window.GoNowIcons.icon(name,size||16,cls):'';}
     function esc(s, keepEmoji) {
         var text=String(s==null?'':s);
         if(!keepEmoji)text=text.replace(/[\p{Extended_Pictographic}\u200d\ufe0f]/gu,'');
@@ -297,7 +299,7 @@
         var a=state.answers;
         if(state.fromHome)a.destination=window.GoNowPlaces.normalize(a.destination).name;
         var combinedMode=!state.fromHome||window.GoNowPlaces.isJunk(a.destination);
-        view.innerHTML='<div class="shell"><div class="start-grid"><section class="intro"><div class="eyebrow">MOVE YOUR WAY.</div>'+heading('Come home better than you left.', 'Beautifully planned days that make room for movement, calm and sleep.')+'<div class="form-stack"><div>'+(a.unsure?'<div class="row banner" style="margin:0">Surprise me ✓ '+btn('Change', 'start-change', '')+'</div>':'<label class="field-label" for="to">Where do you want to go?</label><label class="destination-label"><input id="to" data-testid="start-to" placeholder="City, region or country" value="'+esc(a.destination)+'"></label><div class="error" id="dest-error" role="alert"></div>'+btn("I'm not sure yet", 'start-unsure', 'outline full')+'<small>Tell us a few things and we’ll suggest three places.</small>')+'</div><div><label class="'+(combinedMode?'field-label':'sr-only')+'" data-topic="origin" for="from">'+(combinedMode?'Flying from':'Where are you flying from?')+'</label><input id="from" data-testid="start-from" placeholder="City or airport code" value="'+esc(a.origin)+'" autocomplete="off"><small>We use this to estimate flights.</small><div class="error" id="origin-error" role="alert"></div></div>'+btn('Next <span aria-hidden="true">↗</span>', 'start-next', 'primary full')+'</div><div class="demo"><div class="eyebrow">A LITTLE INSPIRATION</div><strong>Try the demo: Oahu, Nov 25–29</strong><p>Couple aged 18 & 19 · The Kahala Hotel & Resort</p>'+btn('Open the Oahu sample ↗', 'demo-oahu', 'outline full')+'</div><p class="footer-note">Free to use. Your answers stay on this device until you save.</p></section>'+photo('images/hero.jpg', 'A sunlit island coastline, an invitation to slow down', 'hero-photo', '<div class="photo-caption"><span class="eyebrow" style="color:white">YOUR NEXT CHAPTER</span><strong>Somewhere feels like you.</strong><span>We’ll help you find it.</span></div>')+'</div><div class="start-footer"><span>'+icon('style')+' Made for your kind of travel</span><span>Thoughtful plans, down to the little things</span><span>Always yours to change</span></div></div>';
+        view.innerHTML='<div class="shell"><div class="start-grid"><section class="intro"><div class="eyebrow">MOVE YOUR WAY.</div>'+heading('Come home better than you left.', 'Beautifully planned days that make room for movement, calm and sleep.')+'<div class="form-stack"><div>'+'<label class="field-label" for="to">Where do you want to go?</label><label class="destination-label"><input id="to" data-testid="start-to" placeholder="City, region or country" value="'+esc(a.destination)+'"></label><div class="error" id="dest-error" role="alert"></div>'+'</div><div><label class="'+(combinedMode?'field-label':'sr-only')+'" data-topic="origin" for="from">'+(combinedMode?'Flying from':'Where are you flying from?')+'</label><input id="from" data-testid="start-from" placeholder="City or airport code" value="'+esc(a.origin)+'" autocomplete="off"><small>We use this to estimate flights.</small><div class="error" id="origin-error" role="alert"></div></div>'+btn('Next <span aria-hidden="true">↗</span>', 'start-next', 'primary full')+'</div><div class="demo"><div class="eyebrow">A LITTLE INSPIRATION</div><strong>Try the demo: Oahu, Nov 25–29</strong><p>Couple aged 18 & 19 · The Kahala Hotel & Resort</p>'+btn('Open the Oahu sample ↗', 'demo-oahu', 'outline full')+'</div><p class="footer-note">Free to use. Your answers stay on this device until you save.</p></section>'+photo('images/hero.jpg', 'A sunlit island coastline, an invitation to slow down', 'hero-photo', '<div class="photo-caption"><span class="eyebrow" style="color:white">YOUR NEXT CHAPTER</span><strong>Somewhere feels like you.</strong><span>We’ll help you find it.</span></div>')+'</div><div class="start-footer"><span>'+icon('style')+' Made for your kind of travel</span><span>Thoughtful plans, down to the little things</span><span>Always yours to change</span></div></div>';
         view.querySelector('.hero-photo').remove();
         view.querySelector('.start-grid').classList.add('origin-question');
         view.querySelector('.intro .eyebrow').remove();
@@ -316,14 +318,6 @@
             a.destination=e.target.value;
             save();
         }, 'input');
-        on('start-unsure', function() {
-            a.unsure=true;
-            go('start');
-        });
-        on('start-change', function() {
-            a.unsure=false;
-            go('start');
-        });
         on('start-next', function() {
             var valid=true;
             a.origin=window.GoNowPlaces.normalize(a.origin).name;
@@ -339,11 +333,11 @@
                 get('start-from').setAttribute('aria-invalid', 'true');
                 valid=false;
             }
-            if(!a.unsure&&!a.destination.trim()) {
-                document.getElementById('dest-error').textContent='Add a city, region or country, or choose “I’m not sure yet”.';
+            if(!a.destination.trim()) {
+                document.getElementById('dest-error').textContent='Add a city, region or country.';
                 if(get('start-to'))get('start-to').setAttribute('aria-invalid', 'true');
                 valid=false;
-            } else if(!a.unsure&&window.GoNowPlaces.isJunk(a.destination)) {
+            } else if(window.GoNowPlaces.isJunk(a.destination)) {
                 document.getElementById('dest-error').textContent='Enter a city or airport code.';
                 if(get('start-to'))get('start-to').setAttribute('aria-invalid', 'true');
                 valid=false;
@@ -572,15 +566,14 @@
         migrateLegacyTrip();
         var trips=readTrips();
         if(trips.length&&!newTripFlow){dashboard(trips);return;}
-        view.innerHTML='<div class="shell home-screen" data-testid="home-screen"><div class="wellness-hero"><section class="intro"><p class="eyebrow">WELLNESS IS PART OF THE JOURNEY</p>'+heading('Come home better than you left.','Beautifully planned days that make room for movement, calm and sleep.')+modeSwitch()+wellnessPicker()+(state.answers.mode==='local'?localFields():'<label class="field-label" data-topic="destination" for="home-destination">Where would you like to go?</label><label class="destination-label"><input id="home-destination" data-testid="home-destination" placeholder="City, region or country" value="'+esc(state.answers.destination)+'"></label><p id="home-dest-error" class="error" role="alert"></p>'+btn("I'm not sure yet",'home-unsure','outline')+'<div class="row">'+btn('Start planning','start-new-trip','primary')+'</div>')+'<p data-testid="storage-note" class="footer-note"><span data-save-summary="home">Saved on this device. Sign in to sync.</span></p></section>'+''+'</div>'+(trips.length?btn('← Your trips','back-dashboard','outline'):'<p class="muted">First visit — no saved trips yet.</p>')+'<div class="demo"><strong>A little inspiration: Oahu</strong><p>Nov 25–29 · couple, ages 18 and 19.</p>'+btn('Open the Oahu sample ↗','demo-oahu','outline')+'</div></div>';
+        view.innerHTML='<div class="shell home-screen" data-testid="home-screen"><div class="wellness-hero"><section class="intro"><p class="eyebrow">WELLNESS IS PART OF THE JOURNEY</p>'+heading('Come home better than you left.','Beautifully planned days that make room for movement, calm and sleep.')+modeSwitch()+wellnessPicker()+(state.answers.mode==='local'?localFields():'<label class="field-label" data-topic="destination" for="home-destination">Where would you like to go?</label><label class="destination-label"><input id="home-destination" data-testid="home-destination" placeholder="City, region or country" value="'+esc(state.answers.destination)+'"></label><p id="home-dest-error" class="error" role="alert"></p>'+'<div class="row">'+btn('Start planning','start-new-trip','primary')+'</div>')+'<p data-testid="storage-note" class="footer-note"><span data-save-summary="home">Saved on this device. Sign in to sync.</span></p></section>'+''+'</div>'+(trips.length?btn('← Your trips','back-dashboard','outline'):'<p class="muted">First visit — no saved trips yet.</p>')+'<div class="demo"><strong>A little inspiration: Oahu</strong><p>Nov 25–29 · couple, ages 18 and 19.</p>'+btn('Open the Oahu sample ↗','demo-oahu','outline')+'</div></div>';
         on('back-dashboard',function(){newTripFlow=false;home();});
         bindWellness();
         bindMode();
-        on('home-destination',function(e){state.answers.destination=e.target.value;state.answers.unsure=false;save();},'input');
+        on('home-destination',function(e){state.answers.destination=e.target.value;save();},'input');
         if(get('home-destination'))setupVoice('home-destination','home-');
         function startFromHome(){state.tripId=null;state.viewing='live';state.fromHome=true;go('start');}
-        on('home-unsure',function(){state.answers.unsure=true;startFromHome();});
-        on('start-new-trip',function(){if(!state.answers.destination.trim()){document.getElementById('home-dest-error').textContent='Add a destination or choose “I’m not sure yet”.';get('home-destination').focus();return;}if(window.GoNowPlaces.isJunk(state.answers.destination)){document.getElementById('home-dest-error').textContent='Enter a city or airport code.';get('home-destination').setAttribute('aria-invalid','true');return;}state.answers.destination=window.GoNowPlaces.normalize(state.answers.destination).name;get('home-destination').value=state.answers.destination;save();startFromHome();});
+        on('start-new-trip',function(){if(!state.answers.destination.trim()){document.getElementById('home-dest-error').textContent='Add a city, region or country.';get('home-destination').focus();return;}if(window.GoNowPlaces.isJunk(state.answers.destination)){document.getElementById('home-dest-error').textContent='Enter a city or airport code.';get('home-destination').setAttribute('aria-invalid','true');return;}state.answers.destination=window.GoNowPlaces.normalize(state.answers.destination).name;get('home-destination').value=state.answers.destination;save();startFromHome();});
         on('demo-oahu', demo);
     }
     var citySnapshotCatalog=null,citySnapDest='',citySnapPending=null,libraryOpen=new Set();
@@ -925,29 +918,31 @@
         if(el)el.disabled=!validQuestion();
     }
     var voiceCleanup;
-    function setupVoice(fieldId, prefix){
-        prefix=prefix||'';
+    function setupVoice(fieldId, prefix, opts){
+        prefix=prefix||'';opts=opts||{};
         function voiceGet(id){return get(prefix+id);}
         if(voiceCleanup)voiceCleanup();
         var field=get(fieldId||'mustdos'), Recognition=window.SpeechRecognition||window.webkitSpeechRecognition;
         field.closest('label').insertAdjacentHTML('afterend','<div class="voice-controls"><button type="button" data-testid="'+prefix+'voice-btn" aria-pressed="false" aria-label="Start voice input">Voice input</button><label>Language <select data-testid="'+prefix+'voice-lang"><option value="en-US">English</option><option value="zh-CN">中文</option></select></label><span data-testid="'+prefix+'voice-status" role="status" aria-live="polite"></span></div>');
         var button=voiceGet('voice-btn'), lang=voiceGet('voice-lang'), status=voiceGet('voice-status'), recognition, listening=false;
+        if(opts.icon){button.innerHTML=opts.icon;button.setAttribute('aria-label','Speak your change');}
+        if(opts.place)opts.place(button,button.closest('.voice-controls'));
         var choice;try{choice=localStorage.getItem(KEY+'voice-lang');}catch(e){}
         lang.value=['en-US','zh-CN'].includes(choice)?choice:(navigator.language||'').toLowerCase().startsWith('zh')?'zh-CN':'en-US';
         lang.onchange=function(){try{localStorage.setItem(KEY+'voice-lang',lang.value);}catch(e){}};
-        function reset(){listening=false;button.setAttribute('aria-pressed','false');button.setAttribute('aria-label','Start voice input');button.classList.remove('is-listening');button.textContent='Voice input';}
+        function reset(){listening=false;button.setAttribute('aria-pressed','false');button.setAttribute('aria-label',opts.icon?'Speak your change':'Start voice input');button.classList.remove('is-listening');if(opts.icon)button.innerHTML=opts.icon;else button.textContent='Voice input';}
         voiceCleanup=function(){if(recognition){recognition.onresult=recognition.onerror=recognition.onend=null;recognition.abort();}reset();};
         if(!Recognition){button.disabled=true;status.outerHTML='<span data-testid="'+prefix+'voice-unsupported">Voice input needs Chrome, Edge or Safari.</span>';return;}
         button.onclick=function(){
             if(listening){recognition.stop();reset();status.textContent='Voice input stopped.';return;}
-            recognition=new Recognition();recognition.lang=lang.value;recognition.interimResults=true;recognition.continuous=false;
+            recognition=new Recognition();recognition.lang=lang.value;recognition.interimResults=true;recognition.continuous=false;if(opts.replace)field.value='';
             recognition.onresult=function(event){if(!field.isConnected)return;var interim=[];
-                for(var i=event.resultIndex;i<event.results.length;i++){var result=event.results[i],text=result[0].transcript.trim();if(result.isFinal&&text){field.value+=(field.value.trim()?(recognition.lang==='zh-CN'?'，':', '):'')+text;field.dispatchEvent(new Event('input',{bubbles:true}));}else interim.push(text);}
+                for(var i=event.resultIndex;i<event.results.length;i++){var result=event.results[i],text=result[0].transcript.trim();if(result.isFinal&&text){field.value+=(field.value.trim()?(recognition.lang==='zh-CN'?'，':', '):'')+text;field.dispatchEvent(new Event('input',{bubbles:true}));if(opts.onFinal)setTimeout(opts.onFinal,0);}else interim.push(text);}
                 status.textContent=interim.join(' ')||'Voice input added.';
             };
             recognition.onerror=function(event){status.textContent=({'not-allowed':'Microphone permission was blocked.','no-speech':'No speech heard. Try again.',network:'Voice input network error. Try again.'})[event.error]||'Voice input could not start. Try again.';reset();};
             recognition.onend=function(){reset();if(status.textContent==='Listening…')status.textContent='Voice input ended.';};
-            listening=true;button.setAttribute('aria-pressed','true');button.setAttribute('aria-label','Stop voice input');button.classList.add('is-listening');button.textContent='Listening… tap to stop';status.textContent='Listening…';
+            listening=true;button.setAttribute('aria-pressed','true');button.setAttribute('aria-label','Stop voice input');button.classList.add('is-listening');if(!opts.icon)button.textContent='Listening… tap to stop';status.textContent='Listening…';
             try{recognition.start();}catch(e){reset();status.textContent='Voice input could not start. Try again.';}
         };
     }
@@ -1162,7 +1157,7 @@
         if(state.answers.mode==='local'){var localPages=questionPages(),next=localPages[localPages.indexOf(s)+1];go(next||'local-plan');return;}
         if(i>=0) {
             if(i<steps.length-1)go(steps[i+1]);
-            else go(state.answers.unsure?'recommendations':'fork');
+            else go('fork');
         } else if(j<extra.length-1)go(extra[j+1]);
         else generate();
     }
@@ -1245,59 +1240,10 @@
         on('confirm-plan',confirmTrip);
         on('trip-prep-button',function(){go('prep');});
     }
-    function recommendations() {
-        var a=state.answers, all=Engine.recommend(a).filter(function(d) {
-            return state.excluded.indexOf(d.id)<0;
-        }), cards=all.slice(state.recOffset, state.recOffset+3);
-        if(cards.length<3) {
-            state.recOffset=0;
-            cards=all.slice(0, 3);
-        }
-        view.innerHTML='<div class="shell">'+heading('Three places that fit', 'Based on your dates, budget and style. Pick one to keep going.')+(a.flexible?'<p class="badge" data-testid="dates-flexible">Dates: flexible · '+monthName(a.month)+' · '+(a.length||5)+' days</p>':'')+'<div class="rec-grid">'+cards.map(function(d) {
-            return'<article class="card rec" data-testid="rec-card">'+photo(d.image, d.name)+'<span class="badge">'+(d.score>=60?'Great fit':'Good fit')+'</span><h2>'+esc(d.name)+'</h2><p class="muted">'+esc(d.country)+' · '+esc(d.tagline)+'</p><ul>'+d.whyFits.map(function(t) {
-                return'<li>'+esc(t)+'</li>';
-            }).join('')+'</ul><strong>About '+money(d.total)+' total</strong><p>for '+a.ages.length+', flights from '+esc(a.origin)+(a.includeFlights?' included':' excluded')+'</p>'+(a.budget&&d.total>a.budget?'<span class="badge">Over budget by about '+money(d.total-a.budget)+'</span>':'')+'<details><summary data-testid="disclosure">See breakdown</summary>'+breakdown(d.breakdown)+'</details><small>Rough estimate — approx., verify before booking</small>'+(d.originNote?'<p><small>'+d.originNote+'</small></p>':'')+'<div class="banner">'+icon('style')+' Typically '+d.weather.loF+'–'+d.weather.hiF+'°F ('+Math.round((d.weather.loF-32)*5/9)+'–'+Math.round((d.weather.hiF-32)*5/9)+'°C) in '+new Date(2026, (a.flexible?a.month:Number(a.start.split('-')[1]))-1, 1).toLocaleString('en',  {
-                month:'long'
-            })+'<p>'+esc(d.weather.note)+'</p><small>Typical conditions, not a forecast</small></div>'+btn('Choose this place', 'rec-choose', 'primary full', 'data-dest="'+d.id+'"')+btn('Not this one', 'rec-dismiss', 'full', 'data-dismiss="'+d.id+'"')+'</article>';
-        }).join('')+'</div><div class="row" style="margin-top:24px">'+btn('Show me different ideas', 'rec-more', 'outline')+btn('← Back', 'rec-back', '')+btn('Change my answers', 'rec-change', '')+'</div><p class="footer-note">Costs are estimates. We’ll confirm real prices when you book.</p></div>';
-        view.querySelectorAll('[data-dest]').forEach(function(el) {
-            el.onclick=function() {
-                a.destination=window.CATALOG.find(function(d) {
-                    return d.id===el.dataset.dest;
-                }).name;
-                go('fork');
-            };
-        });
-        view.querySelectorAll('[data-dismiss]').forEach(function(el) {
-            el.onclick=function() {
-                state.excluded.push(el.dataset.dismiss);
-                if(state.excluded.length>8)state.excluded=[];
-                recommendations();
-            };
-        });
-        on('rec-more', function() {
-            state.recOffset=(state.recOffset+3)%9;
-            recommendations();
-        });
-        on('rec-back', function() {
-            go('style');
-        });
-        on('rec-change', function() {
-            go('dates');
-        });
-    }
-    function breakdown(b) {
-        return Object.keys(b).map(function(k) {
-            return'<div class="row" style="justify-content:space-between"><span>'+( {
-                flights:'Flights', stay:'Stay', food:'Food', activities:'Activities', localTransport:'Local transport'
-            }
-            [k]||k)+'</span><strong>'+money(b[k])+'</strong></div>';
-        }).join('');
-    }
     function fork() {
         view.innerHTML='<section class="question"><div class="eyebrow">A PLAN THAT FEELS LIKE YOU</div>'+heading('Want it more personal?', 'How detailed should we go? You can always refine later.')+'<div class="card"><span class="badge">ABOUT 1 MINUTE</span><h2>Yes, answer 3 more</h2><p>Food, sleep and must-dos.</p>'+btn('Ask me →', 'fork-yes', 'primary full')+'</div><div class="card" style="margin-top:16px"><h2>No, pick places now</h2><p>Choose activities and food next.</p>'+btn('Pick places →', 'fork-no', 'outline full')+'</div><div class="qfooter">'+btn('← Back', 'fork-back', '')+'</div></section>';
         on('fork-back', function() {
-            go(state.answers.unsure?'recommendations':'style');
+            go('style');
         });
         on('fork-yes', function() {
             state.answers.personal=true;
@@ -1355,14 +1301,23 @@
         });
         toastEl.setAttribute('data-testid','plan-toast');toastEl.querySelector('button').setAttribute('data-testid','plan-undo');
     }
-    function checkoutPicks(){
+    function checkoutPicks(opts){
+        opts=opts&&(opts.ai===true||opts.resume===true)?opts:null; // click handlers pass an Event
         if(window.goNowAccount&&window.goNowAccount.group&&!window.goNowAccount.owner())return;
         if(window.goNowAccount?.group){var voted=Object.keys(window.goNowAccount.group.votes||{}).filter(function(id){return window.goNowAccount.group.votes[id].length;});var catalog=pickCatalog();['activities','restaurants'].forEach(function(key){voted.forEach(function(id){if(catalog[key].some(function(p){return p.id===id;})&&!state.answers.picks[key].includes(id))state.answers.picks[key].push(id);});});}
         if(editingPicks){updatePicks();return;}
         state.answers.level=PickScheduler.pace(state.answers);
         var p=Engine.buildTemplatePlan(state.answers,Engine.matchDestination(state.answers.destination));
         var savedTrip=readTrips().find(function(t){return t.id===state.tripId;});
-        var result=window.PickScheduler.schedule(Object.assign({},state.answers,{start:p.start,end:p.end,builderFlightTime:savedTrip&&savedTrip.builder&&savedTrip.builder.flightTime}),pickCatalog());
+        var args=Object.assign({},state.answers,{start:p.start,end:p.end,builderFlightTime:savedTrip&&savedTrip.builder&&savedTrip.builder.flightTime});
+        var result=window.PickScheduler.schedule(args,pickCatalog());
+        // A saved AI arrangement is replayed through the planner on reload: no new AI call, same days.
+        var key=aiKey(args),saved=state.answers.aiPlan&&state.answers.aiPlan.key===key?state.answers.aiPlan:null;
+        if(!(opts&&opts.ai)&&saved&&saved.stops){var again=PickScheduler.schedule(args,pickCatalog(),{prefer:saved.stops});if(again.aiPlaced&&again.unfit.length<=result.unfit.length&&again.bookingIssues.length<=result.bookingIssues.length){finishCheckout(p,again,saved);return;}}
+        if(window.GoNowAI&&!state.shared&&(opts&&opts.ai||!(opts&&opts.resume)&&!saved&&GoNowAI.autoPlan())){aiCheckout(p,args,result,Object.assign({key:key},opts||{}));return;}
+        finishCheckout(p,result);
+    }
+    function finishCheckout(p,result,ai,resume){
         state.viewing='live';
         var trips=readTrips(),trip=trips.find(function(t){return t.id===state.tripId;});
         if(trip&&!state.shared){trip.confirmed=false;trip.snapshot=null;writeTrips(trips);}
@@ -1371,7 +1326,144 @@
         p.start=result.days[0].date;p.end=result.days[result.days.length-1].date;p.flightTime=result.flightTime;
         p.meta=Engine.planMeta(p.start,p.end,p.days.length,state.answers);
         result.days.forEach(function(d){d.items.forEach(function(i){if(i.photo)ITEM_PHOTOS[i.id]=i.photo;});});
-        showPlan(Engine.applyAgeRules(p,state.answers),false);
+        if(ai)p.ai={note:ai.note||'',placed:result.aiPlaced||0};
+        showPlan(Engine.applyAgeRules(p,state.answers),!!resume);
+    }
+    // Free AI (js/gemini.js) proposes days and times; PickScheduler still checks every stop. Any failure keeps the standard plan.
+    var aiRun=0;
+    function aiDates(start,end){var out=[];for(var t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z')&&out.length<31;t+=86400000)out.push(new Date(t).toISOString().slice(0,10));return out;}
+    function aiPlanInput(args,p){
+        var c=pickCatalog(),picks=args.picks||{},dates=aiDates(p.start,p.end),hm=GoNowAI.hm;
+        var chosen=c.activities.concat(c.restaurants).filter(function(i){return i.reservation||(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id);});
+        var fw=GoNowFlights.windowFor(Object.assign({},args)),dep=PickScheduler.departure(Object.assign({},args,{generic:c.generic})),T=window.GoNowTheme;
+        var feel={};dates.forEach(function(d){feel[d]=T?T.LABEL[T.stateName(T.valueFor(d))]:'High';});
+        var wd=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        var list=chosen.map(function(i){var h=i.parsedHours||i.hours,o={id:i.id,name:i.name,kind:i.meals?'meal':'activity',minutes:i.duration||60,area:i.area||''};if(i.meals)o.meals=i.meals;if(i.effort)o.effort=i.effort;if(i.category)o.category=i.category;if(h&&h.open!=null&&h.close!=null&&Number.isFinite(+h.open))o.hours=hm(+h.open)+'-'+hm(+h.close);var closed=(i.closed||[]).flatMap(function(r){return (r.weekdays||[]).map(function(n){return wd[n];});});if(closed.length)o.closed=closed;if(i.reservation)o.booked=i.reservation.date+' '+i.reservation.time;return o;});
+        var input={destination:args.destination||'',dates:dates,pace:PickScheduler.pace(args),capacity:PickScheduler.capacity(args),arrival:hm(Math.min(1410,Math.max(1140,fw.arrivalStart)))+' (meals only)',leave:hm(dep.leave),feel:feel,weather:{},picks:list};
+        var spot=planCoords(chosen);
+        return Promise.race([spot?GoNowAI.weather(spot.lat,spot.lng,dates):Promise.resolve({}),new Promise(function(ok){setTimeout(function(){ok({});},3000);})]).then(function(w){Object.keys(w||{}).forEach(function(k){input.weather[k]=GoNowAI.weatherLine(w[k]);});return input;});
+    }
+    function aiKey(a){var picks=a.picks||{};return JSON.stringify([a.start,a.end,PickScheduler.pace(a),(picks.activities||[]).slice().sort(),(picks.restaurants||[]).slice().sort()]);}
+    function aiCheckout(p,args,ruleResult,opts){
+        var run=++aiRun,base=cloneData(p),prior=state.answers.aiPlan?cloneData(state.answers.aiPlan):null;
+        function remember(v){if(v)state.answers.aiPlan=v;else delete state.answers.aiPlan;save();}
+        function rule(note){if(opts.undo){opts.undo();toast(note);return;}finishCheckout(cloneData(base),cloneData(ruleResult));if(note)toast(note);}
+        view.innerHTML='<section class="loading ai-loading" data-testid="ai-planning">'+heading('Arranging your picks','Free AI is fitting them to your pace, energy and weather.')+'<div class="spinner" aria-hidden="true"></div>'+btn(opts.undo?'Keep my plan':'Use the standard plan','ai-skip','outline')+'</section>';
+        on('ai-skip',function(){aiRun++;if(!opts.undo)remember({key:opts.key,standard:true});rule('');});
+        aiPlanInput(args,p).then(GoNowAI.planFromPicks).then(function(ai){
+            if(run!==aiRun)return;
+            var r=PickScheduler.schedule(args,pickCatalog(),{prefer:ai.stops});
+            // Never accept an AI arrangement that fits fewer picks or breaks a booking.
+            if(!r.aiPlaced||r.unfit.length>ruleResult.unfit.length||r.bookingIssues.length>ruleResult.bookingIssues.length){rule(opts.undo?'AI plan didn’t fit · plan unchanged':'AI plan didn’t fit · standard plan');return;}
+            var undo=opts.undo;remember({key:opts.key,stops:ai.stops,note:ai.note});
+            if(undo){var id=state.plan&&state.plan.id;if(id)localStorage.removeItem('gonow:daybuilder:'+id);}
+            finishCheckout(cloneData(base),r,ai,!!undo);
+            toast('Planned with AI ·',function(){var id=state.plan&&state.plan.id;if(undo){remember(prior);undo();return;}remember({key:opts.key,standard:true});if(id)localStorage.removeItem('gonow:daybuilder:'+id);finishCheckout(cloneData(base),cloneData(ruleResult),null,true);});
+            toastEl.setAttribute('data-testid','ai-toast');
+        }).catch(function(){
+            if(run!==aiRun)return;
+            var st=GoNowAI.status();rule(st.state==='ready'||st.state==='retry'?(opts.undo?'AI didn’t answer · plan unchanged':'AI didn’t answer · standard plan'):st.line.split(' · ')[0]+(opts.undo?' · plan unchanged':' · standard plan'));
+        });
+    }
+    // ---------- Free AI: change the plan by voice or text (js/gemini.js) ----------
+    function aiBarHTML(p){
+        if(!window.GoNowAI||state.shared||state.viewing==='finished')return '';
+        if(window.goNowAccount&&window.goNowAccount.group&&!window.goNowAccount.owner())return '';
+        var picks=/-picks-/.test(p.id||'')&&!!pickCatalog(),st=GoNowAI.status();
+        var line=p.ai&&p.ai.note?'Planned with AI · '+p.ai.note:st.line,intro=false;
+        try{intro=!localStorage.getItem(KEY+'ai-intro');}catch(e){}
+        return '<section class="ai-bar'+(intro?' ai-intro':'')+'" data-testid="ai-bar" aria-label="Change your plan with AI">'
+            +'<div class="ai-head"><span class="ai-badge" aria-hidden="true">'+v2i('sparkle',22)+'</span><h3>Change your plan</h3><span class="ai-tag">AI</span></div>'
+            +'<div class="ai-pill"><label class="ai-ask"><span class="sr-only">Your change</span><input type="text" data-testid="ai-edit-input" autocomplete="off" maxlength="300" placeholder="Ask AI to change your plan…" enterkeyhint="send"></label>'
+            +'<button type="button" class="ai-send" data-testid="ai-apply" aria-label="Apply change">'+v2i('arrow',20)+'</button></div>'
+            +'<div class="ai-foot">'+(picks?btn(v2i('sparkle',16)+'Re-plan my picks','ai-replan','outline','type="button"'):'')+'</div>'
+            +'<p class="ai-status" data-testid="ai-status" role="status" aria-live="polite">'+esc(line)+'</p></section>';
+    }
+    // Phone: a floating AI button appears once the bar scrolls out of view; it brings the bar back and focuses the field.
+    var aiFabObserver=null;
+    function aiFab(bar,input){
+        var fab=document.getElementById('ai-fab');
+        if(!fab){fab=document.createElement('button');fab.type='button';fab.id='ai-fab';fab.className='ai-fab';fab.dataset.testid='ai-fab';fab.setAttribute('aria-label','Change your plan with AI');fab.hidden=true;fab.innerHTML=v2i('sparkle',24);document.body.appendChild(fab);}
+        fab.onclick=function(){if(!input.isConnected)return;bar.scrollIntoView({block:'center',behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth'});setTimeout(function(){input.focus({preventScroll:true});},250);};
+        if(!fab.dataset.bound){fab.dataset.bound='1';addEventListener('scroll',function(){if(!get('ai-bar'))fab.hidden=true;},{passive:true});addEventListener('hashchange',hideAiFab);}
+        if(aiFabObserver)aiFabObserver.disconnect();
+        if(!window.IntersectionObserver)return;
+        aiFabObserver=new IntersectionObserver(function(es){var e=es[es.length-1];fab.hidden=!bar.isConnected||e.isIntersecting||e.boundingClientRect.top>0;});
+        aiFabObserver.observe(bar);
+    }
+    function hideAiFab(){var fab=document.getElementById('ai-fab');if(fab&&!get('ai-bar')){fab.hidden=true;if(aiFabObserver){aiFabObserver.disconnect();aiFabObserver=null;}}}
+    function aiDescribe(ok){
+        if(ok.length>1)return 'Made '+ok.length+' changes';
+        var o=ok[0],title=GoNowAI.short(o.title,32);
+        if(o.type==='remove')return 'Moved '+title+' to Needs a time';
+        var when=o.landed==null?null:GoNowAI.clock(o.landed),day=o.date!==o.from?dateLabel(o.date,{weekday:'short'})+' ':'';
+        return when?'Moved '+title+' to '+day+when+(o.nudged?' · nearest free time':o.overlap?' · overlaps a stop':''):'Moved '+title+' to Needs a time';
+    }
+    function aiFailLine(b){
+        if(!b)return 'No change made';
+        if(b.reason==='missing')return 'Couldn’t find that stop';
+        if(b.reason==='locked')return GoNowAI.short(b.title,32)+' is locked';
+        if(b.reason==='already')return GoNowAI.short(b.title,32)+' already needs a time';
+        if(b.reason==='unclear')return 'Say a day or a time';
+        return GoNowAI.short(b.title,32)+' · '+String(b.reason).replace(/^./,function(c){return c.toLowerCase();});
+    }
+    function bindAiBar(){
+        var bar=get('ai-bar');if(!bar)return;
+        var input=get('ai-edit-input'),status=get('ai-status'),apply=get('ai-apply'),busy=false;
+        function done(){busy=false;apply.disabled=false;}
+        function run(){
+            if(busy||!window.DayBuilder||!input.isConnected)return;
+            var text=input.value.trim();if(!text){status.textContent='Try “Move the hike to the morning”';input.focus();return;}
+            busy=true;apply.disabled=true;status.textContent='Working on it…';
+            var items=DayBuilder.editableItems(),dates=state.plan.days.map(function(d){return d.date;});
+            GoNowAI.edit(text,items,dates).then(function(r){
+                if(!r.ops.length){status.textContent=r.say||'Couldn’t match that · name a stop and a time';return;}
+                var out=DayBuilder.applyEdits(r.ops),ok=out.results.filter(function(x){return x.ok;}),bad=out.results.filter(function(x){return !x.ok;});
+                if(!ok.length){status.textContent=aiFailLine(bad[0]);return;}
+                input.value='';
+                var msg=aiDescribe(ok); // Factual, proofread line from what actually changed (not the model's wording).
+                status.textContent=msg+(bad.length?' · '+aiFailLine(bad[0]):'');
+                toast(msg+' ·',function(){DayBuilder.restore(out.before);status.textContent='Change undone';});
+                toastEl.setAttribute('data-testid','ai-edit-toast');
+            }).catch(function(){var st=GoNowAI.status();status.textContent=st.state==='ready'?'AI didn’t answer · try a simpler change':st.line;}).then(done,done);
+        }
+        apply.onclick=run;
+        input.addEventListener('keydown',function(e){if(e.key==='Enter'){e.preventDefault();run();}});
+        var pill=bar.querySelector('.ai-pill'),foot=bar.querySelector('.ai-foot');
+        setupVoice('ai-edit-input','ai-',{replace:true,onFinal:run,icon:v2i('mic',20),place:function(b,row){b.classList.add('ai-mic');pill.insertBefore(b,pill.querySelector('.ai-send'));if(row){row.classList.add('ai-voice-row');foot.appendChild(row);}}});
+        if(bar.classList.contains('ai-intro')){try{localStorage.setItem(KEY+'ai-intro','1');}catch(e){}}
+        aiFab(bar,input);
+        on('ai-replan',function(){
+            var st=GoNowAI.status();if(st.state!=='ready'){status.textContent=st.line;return;}
+            var prevPlan=cloneData(state.plan),key='gonow:daybuilder:'+prevPlan.id,prevBuilder=localStorage.getItem(key);
+            checkoutPicks({ai:true,undo:function(){if(prevBuilder===null)localStorage.removeItem(key);else localStorage.setItem(key,prevBuilder);showPlan(prevPlan,true);}});
+        });
+    }
+    // ---------- Free daily weather (Open-Meteo, no key) ----------
+    var weatherDays={},weatherFor='';
+    function loadWeather(p){
+        if(!window.GoNowAI||!p||!p.days||!p.days.length)return;
+        var id=p.id+':'+p.days[0].date+':'+p.days.length;if(weatherFor===id){paintWeather(document);return;}
+        weatherFor=id;weatherDays={};
+        var spot=planCoords(p.days.flatMap(function(d){return d.items||[];}));if(!spot)return;
+        GoNowAI.weather(spot.lat,spot.lng,p.days.map(function(d){return d.date;})).then(function(w){if(weatherFor!==id)return;weatherDays=w||{};paintWeather(document);});
+    }
+    function paintWeather(scope){
+        (scope||document).querySelectorAll('[data-weather-date]').forEach(function(node){
+            var date=node.getAttribute('data-weather-date'),w=weatherDays[date];if(!w){node.hidden=true;return;}
+            var stops=GoNowAI.wet(w)&&window.DayBuilder&&DayBuilder.editableItems?DayBuilder.editableItems().filter(function(i){return i.date===date&&i.start!=null;}):[];
+            var outdoor=stops.filter(function(i){return /outdoor|water|beach|hike|park/i.test(i.category||'');}).map(function(i){return i.title;});
+            var tip=GoNowAI.wet(w)&&outdoor.length?'<p data-testid="weather-tip">Rain likely · consider moving '+esc(outdoor.slice(0,2).map(function(t){return GoNowAI.short(t,28);}).join(' or '))+'</p>':'';
+            var open=node.querySelector('details')&&node.querySelector('details').open;
+            node.innerHTML='<details'+(open?' open':'')+'><summary>'+v2i(w.icon,16)+'<span>'+esc(GoNowAI.weatherLine(w))+'</span></summary><p>'+(w.kind==='forecast'?'Forecast':'Last year on this date · not a forecast')+' · <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer">Open-Meteo</a></p>'+tip+'</details>';
+            node.hidden=false;
+        });
+    }
+    function planCoords(items){
+        var pts=(items||[]).filter(function(i){return Number.isFinite(+i.lat)&&Number.isFinite(+i.lng)&&(+i.lat||+i.lng);}).map(function(i){return [+i.lat,+i.lng];});
+        if(pts.length){var mid=function(k){var v=pts.map(function(x){return x[k];}).sort(function(a,b){return a-b;});return v[Math.floor(v.length/2)];};return {lat:mid(0),lng:mid(1)};}
+        var id=window.Engine&&Engine.matchDestination?Engine.matchDestination(state.answers.destination||'').id:'',info=window.LocalInfo&&LocalInfo.table[id];
+        return info?{lat:info.latitude,lng:info.longitude}:null;
     }
     function pickScreen(){
         var food=state.screen==='pick-food',catalog=pickCatalog(),key=food?'restaurants':'activities';
@@ -1456,7 +1548,7 @@
 
     function generate(resume,withoutPicks) {
         normalizeAnswers(state.answers);
-        if(resume&&!openingDemo&&state.answers.picks&&state.answers.picks.initialized&&pickCatalog()){checkoutPicks();return;}
+        if(resume&&!openingDemo&&state.answers.picks&&state.answers.picks.initialized&&pickCatalog()){checkoutPicks({resume:true});return;}
         if(!resume&&!withoutPicks&&!openingDemo&&state.answers.mode!=='local'&&(pickCatalog()||window.GoNowPlaceSource)){state.answers.pickBack=['fork'].concat(extra).includes(state.screen)?state.screen:pickBackPage();pickFilter='All';pickQuery='';go('pick-activities');return;}
         normalizeAnswers(state.answers);
         var generation=++activeGeneration;
@@ -1854,7 +1946,7 @@
         var current=days.find(function(day){return day.date===d.date;});
         var next=days[days.findIndex(function(day){return day.date===d.date;})+1];
         var ringItems=schedule&&current?current.items:m.items;
-        return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+(window.GoNowElements?window.GoNowElements.rowHTML(ringItems):'')+(window.GoNowTheme?window.GoNowTheme.dialHTML(d.date):'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+info+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
+        return '<div class="day-head"><div class="day-title"><h2>Day '+(i+1)+' · '+label+'</h2>'+(d.theme?'<p>'+esc(d.theme)+'</p>':'')+(window.GoNowElements?window.GoNowElements.rowHTML(ringItems):'')+'<div class="day-weather" data-testid="day-weather" data-weather-date="'+esc(d.date)+'" hidden></div>'+(window.GoNowTheme?window.GoNowTheme.dialHTML(d.date):'')+'</div>'+paceDayHTML(d,ringItems,next&&next.items)+info+'</div>'+dayPeopleHTML(d,ringItems,next&&next.items)+(m.relaxed?'<div class="banner">Relaxed version: '+esc(d.relax)+'</div>':'')+(m.rain?'<div class="banner">'+icon('info')+' Rain backup: '+esc(d.rain)+'</div>':'');
     }
     function dayFooterHTML(d, i, m) {
         if(!d.relax&&!d.rain)return '';
@@ -1937,7 +2029,7 @@
                 return html;
             },
             photoCredit:function(src){var it=state.plan.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;});return it&&it.photoBy&&it.photoBy.name?'Photo: '+it.photoBy.name+' · Google':'';},
-            afterRender:function(scope){pruneEmptySections(scope);bindItems(scope);bindPace(scope);scope.querySelectorAll('[data-db-source]').forEach(function(row){var src=row.dataset.dbSource,it=p.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;});var host=row.querySelector('.db-activity');if(host){if(it){var safe=window.GoNowDiet.safeMeal(Object.assign({},it,{locked:it.locked||row.classList.contains('db-locked')}),state.answers);host.insertAdjacentHTML('beforeend',dietTag(safe));if(safe.title!==it.title){var title=host.querySelector('.db-expand strong,strong[id^=db-title]');if(title)title.textContent=safe.title;}}(eachPerson()?travelers():[]).forEach(function(t,i){var c=window.GoNowCheckin.get('gonow.checkin.v1',window.DayBuilder.selectedDate(),personId(i)),alt=(c.alternatives||{})[row.dataset.dbId];if(alt&&!row.classList.contains('db-locked'))host.insertAdjacentHTML('beforeend','<small class="traveler-alternative" data-testid="traveler-alternative">'+esc(t.name)+': '+esc(alt.title.toLowerCase())+' instead</small>');});}});}
+            afterRender:function(scope){pruneEmptySections(scope);paintWeather(scope);bindItems(scope);bindPace(scope);scope.querySelectorAll('[data-db-source]').forEach(function(row){var src=row.dataset.dbSource,it=p.days.flatMap(function(d){return d.items;}).find(function(i){return i.id===src;});var host=row.querySelector('.db-activity');if(host){if(it){var safe=window.GoNowDiet.safeMeal(Object.assign({},it,{locked:it.locked||row.classList.contains('db-locked')}),state.answers);host.insertAdjacentHTML('beforeend',dietTag(safe));if(safe.title!==it.title){var title=host.querySelector('.db-expand strong,strong[id^=db-title]');if(title)title.textContent=safe.title;}}(eachPerson()?travelers():[]).forEach(function(t,i){var c=window.GoNowCheckin.get('gonow.checkin.v1',window.DayBuilder.selectedDate(),personId(i)),alt=(c.alternatives||{})[row.dataset.dbId];if(alt&&!row.classList.contains('db-locked'))host.insertAdjacentHTML('beforeend','<small class="traveler-alternative" data-testid="traveler-alternative">'+esc(t.name)+': '+esc(alt.title.toLowerCase())+' instead</small>');});}});}
         };
     }
     function planRender(moveFocus) {
@@ -1967,12 +2059,14 @@
         bindPace(view);
         if(mergedPlan()){
             var db=document.createElement('section');db.className='db-root';db.dataset.testid='db-root';db.setAttribute('aria-label','Your days');
+            document.getElementById('tab-content').insertAdjacentHTML('beforeend',aiBarHTML(p));
             document.getElementById('tab-content').append(db);
             var built=builderContext();
             built.plan=p;window.DayBuilder.mount(db,built);
         }
         // Apply the persisted view only after the builder exists. List is the default.
         expeditionUI();
+        bindAiBar();loadWeather(p);
         on('build-template', function() {
             state.answers.templateOahu=true;
             save();
@@ -2424,6 +2518,7 @@
         view.querySelectorAll('[data-map-day]').forEach(function(b){b.onclick=function(){setMap(false,true);if(mergedPlan()&&window.DayBuilder.selectedDate){var date=state.plan.days[b.dataset.mapDay].date;window.DayBuilder.selectDay(date,false);var chip=document.querySelector('[data-testid="db-day-'+date+'"]'),card=document.querySelector('.db-daycard');(card||chip).scrollIntoView({block:'start',behavior:'auto'});chip.focus({preventScroll:true});return;}var t=document.querySelector('#day-'+b.dataset.mapDay);if(!t)return;t.tabIndex=-1;t.scrollIntoView({block:'start',behavior:'auto'});t.focus({preventScroll:true});};});
     }
     function render() {
+        hideAiFab();
         if(state.screen==='prep')prepScreen();
         else if(state.screen==='credits')creditsScreen();
         else if(state.screen==='home')home();
@@ -2433,7 +2528,7 @@
         else if(state.screen==='start')start();
         else if(steps.indexOf(state.screen)>=0||extra.indexOf(state.screen)>=0)question();
         else if(state.screen==='fork')fork();
-        else if(state.screen==='recommendations')recommendations();
+        else if(state.screen==='recommendations'){go(String(state.answers.destination||'').trim()?'fork':'start');return;}
         else if((state.screen==='profile'||state.screen==='community')&&pages)pages.render(state.screen,view);
         else if(state.screen==='loading') {
             view.innerHTML='<section class="loading">'+heading('Planning your trip', 'A few thoughtful details make all the difference.')+'<div class="spinner"></div><p id="loading-line" aria-live="polite">Checking the weather for your dates…</p><small>This usually takes under 30 seconds.</small><p>'+btn('Cancel', 'cancel-plan', 'outline')+'</p></section>';
@@ -2462,8 +2557,6 @@
             ages:[], styles:[], food:[]
         });
         state.plan=null;
-        state.excluded=[];
-        state.recOffset=0;
         go('home');
     }
     function goHome(){state.viewing='live';newTripFlow=false;go('home');}
@@ -2472,7 +2565,7 @@
         goHome();
     };
     // Where the in-page Start over shows: questions after the first page, pick pages and unconfirmed drafts.
-    function midFlow(){var s=state.screen;if(state.shared)return false;if(steps.indexOf(s)>=0||extra.indexOf(s)>=0||['fork','recommendations','pick-activities','pick-food'].indexOf(s)>=0)return true;if((s==='plan'||s==='draft')&&state.plan&&!tripConfirmed(currentTrip()))return true;return false;}
+    function midFlow(){var s=state.screen;if(state.shared)return false;if(steps.indexOf(s)>=0||extra.indexOf(s)>=0||['fork','pick-activities','pick-food'].indexOf(s)>=0)return true;if((s==='plan'||s==='draft')&&state.plan&&!tripConfirmed(currentTrip()))return true;return false;}
     // Same reorder rule as DayBuilder: unlocked items run in order from the day's first start.
     function releaseTimes(d){var first=null,seen=false;d.items.forEach(function(x){if(x.locked||x.booked||x.textTime||x.kind==='flight'||x.kind==='prep')return;if(!seen){seen=true;first=Number.isFinite(x.preferred)?x.preferred:null;}x.preferred=null;delete x.manualTime;delete x.hoursOk;});var lead=d.items.find(function(x){return !(x.locked||x.booked||x.textTime||x.kind==='flight'||x.kind==='prep');});if(lead&&first!==null)lead.preferred=first;}
     var groupSeen={},appliedGroupChanges={},applyingGroup=false;

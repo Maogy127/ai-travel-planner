@@ -1896,3 +1896,16 @@ Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deploy
   - "A day that gathered every element."
   - Detail labels: "Water · 水", "Fire · 火", "Wood · 木", "Wind · 风", "Earth · 土".
   - No new morning question.
+## Free AI and daily weather (cache tag `ai-20261120`)
+
+- `tests/test_travel_time.py:22`: `assert len(assets) == 33` → `assert len(assets) == 35` (adds `js/ai-config.js` and `js/gemini.js`); `?v=v2design-20261120` → `?v=ai-20261120`. Asset HTTP 200 checks unchanged.
+- New: `tests/test_gemini.js`, `tests/test_ai.py`. No other assertions changed.
+
+- `tests/test_full.py` local-info check: "no weather or FX requests" became "no FX requests; weather only daily Open-Meteo". The free daily weather line now deliberately calls Open-Meteo's keyless forecast/archive endpoints (daily fields only); FX calls are still asserted absent.
+
+- AI preview note: App Check for Firebase AI Logic is Unenforced for the preview (Nov 21, 2026). It must get a real provider (reCAPTCHA Enterprise / Fraud Defense, site key in `js/ai-config.js`) and be re-enforced before **Jan 21, 2027**, when Firebase re-enforces it automatically. AI tests stay mocked; they don't depend on App Check.
+- `tests/test_gemini.js`: a `429 … prepayment credits are depleted` answer (Paid-tier project with no Prepay credit) is classed as AI off (10 min), not "busy"; a free-tier daily 429 that mentions "billing details" is still a daily pause.
+- AI moved to its own free Spark project `gonow-ai-cb7a3` (Nov 21, 2026): `js/ai-config.js` carries its public web config (`firebase`), `js/gemini.js` initializes the `gonow-ai` app from it. Accounts, Firestore and Places stay on `gonow-8e9e8`. App Check for AI Logic on `gonow-ai-cb7a3` is Unenforced for the preview and needs a real provider before Jan 21, 2027. Cache tag `ai-20261120` → `ai-20261121` → `aibar-20261121` (AI bar, destination cleanup) (`tests/test_travel_time.py` updated).
+- AI bar redesign (Nov 21, 2026): `tests/test_ai.py` `open_bar` no longer needs to open a details row (the bar is always open). Screenshots `ai-demo/10-ai-bar-prominent-{before,after}-{390,1280}.png` and `after-390-fab`.
+- "I'm not sure yet" removed: `tests/test_full.py` section C now checks the option is gone, the destination is required, a saved `unsure: true` is dropped and the old `recommendations` route lands on the fork; the `answer(..., unsure=)` parameter is gone. `tests/check-ui.cjs` checks the old route redirects. `tests/smoke.py` and `tests/verify-ui.py` (manual scripts) type a destination instead. `tests/test_origin_alias.py` keeps a legacy `unsure` flag and expects it to be ignored.
+- Real Gemini checked live (Nov 21, 2026, project `gonow-ai-cb7a3`): `ai-demo/08-real-ai-plan.png`, `09-real-ai-edit.png`, `11-real-ai-desktop-1280.png` (`ai-demo/real_shots.py`, not part of the suite; tests stay mocked).
