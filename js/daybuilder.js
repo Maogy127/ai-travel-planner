@@ -691,7 +691,7 @@ function mount(root, ctx = {}) {
         item.id = 'instance-' + Date.now() + '-' + Math.random().toString(36).slice(2,8);
         selectDay(nextDate, false);
         const d = current();
-        if (spec.time) { item.preferred = toTime(spec.time); item.manualTime = true; d.items.push(item); } else d.unscheduled.push(item);
+        if (spec.time) { item.preferred = toTime(spec.time); item.manualTime = true; const at=d.items.findIndex(i=>(i.preferred ?? 1e9)>item.preferred); d.items.splice(at<0?d.items.length:at,0,item); } else d.unscheduled.push(item);
         save();
         render({id: item.id, zone: 'day'});
         if (spec.schedule) openTransfer(item.id, 'tray', 'schedule');
@@ -725,6 +725,14 @@ function mount(root, ctx = {}) {
             return change ? {...item, ...change} : item;
         });
     }
+    function byTime(items) {
+        const loose = [], timed = [];
+        items.forEach((item, index) => (item.start == null ? loose : timed).push({item, index}));
+        timed.sort((a, b) => a.item.start - b.item.start || a.index - b.index);
+        const out = timed.map(entry => entry.item);
+        loose.forEach(entry => out.splice(Math.min(entry.index, out.length), 0, entry.item));
+        return out;
+    }
     function dayResult(stored, on) {
         let intent=adjustedItems(visibleItems(stored,on),on);
         if(ctx.flightAnswers&&(ctx.flightAnswers.flightsStep||ctx.flightAnswers.arrivalTime||ctx.flightAnswers.returnTime)&&window.GoNowFlights){
@@ -737,7 +745,8 @@ function mount(root, ctx = {}) {
             });
         }
         const result=reflow({...stored,items:stored.chronological?intent.map(i=>({...i,manualTime:true})):intent}, {...ctx,flightTime});
-        if(stored.chronological)result.items.sort((a,b)=>(a.start ?? Infinity)-(b.start ?? Infinity));
+        // A stop with a clock always shows in that slot, even if it was stored at the bottom of the day.
+        result.items=byTime(result.items);
         return result;
     }
     function schedule() {

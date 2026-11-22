@@ -39,12 +39,36 @@ const capacity=a=>({gentle:300,active:420,athlete:540}[pace(a)]);
 function departure(a){if(window.GoNowFlights&&(a.flightsStep||a.returnTime||a.arrivalTime)){const w=window.GoNowFlights.windowFor(a);return {flight:w.departure,leave:w.leave};}const sample=!a.generic&&a.start==='2026-11-25'&&a.end==='2026-11-29';const flight=minute(a.flightTime||a.builderFlightTime)??(sample?480:null);return {flight,leave:flight===null?600:Math.max(0,flight-185)};}
 
 const travel=(a,b)=>!a||!b?0:window.DayBuilder.estimateTravel(a,b).minutes;
+function km(a,b){if(!a||!b||!Number.isFinite(+a.lat)||!Number.isFinite(+b.lat))return null;const R=6371,d=x=>x*Math.PI/180,dl=d(+b.lat-+a.lat),dg=d(+b.lng-+a.lng),h=Math.sin(dl/2)**2+Math.cos(d(+a.lat))*Math.cos(d(+b.lat))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.min(1,Math.sqrt(h)));}
+function hoursOk(p,start,duration){const hrs=p.ruleHours||p.hours;return !(hrs&&hrs.open!=null&&(start<minute(hrs.open)||start+duration>minute(hrs.close)));}
+// Keep locked times. Walk the flexible stops in nearest-neighbor order through the slots they already hold.
+function sequenceDays(days){
+ for(const d of days){
+  const acts=d.items.filter(i=>i.kind==='activity'&&!i.locked&&!i.pinned&&Number.isFinite(+i.lat)&&i.start!=null);
+  if(acts.length<2)continue;
+  const slots=acts.map(i=>i.start).sort((a,b)=>a-b);
+  const before=d.items.filter(i=>(i.pinned||i.locked)&&Number.isFinite(+i.lat)&&i.start!=null&&i.start<=slots[0]).sort((a,b)=>b.start-a.start)[0];
+  let from=before||acts.slice().sort((a,b)=>a.start-b.start)[0];
+  const left=acts.slice(),ordered=[];
+  while(left.length){left.sort((a,b)=>(km(from,a)??1e9)-(km(from,b)??1e9)||String(a.title).localeCompare(String(b.title)));const next=left.shift();ordered.push(next);from=next;}
+  const snapshot=acts.map(i=>({id:i.id,start:i.start,time:i.time}));
+  ordered.forEach((item,i)=>{item.start=slots[i];item.time=window.DayBuilder.clock(slots[i]);});
+  const seq=d.items.filter(i=>i.start!=null).slice().sort((a,b)=>a.start-b.start);
+  let ok=ordered.every(item=>hoursOk(item.pick||item,item.start,item.duration||60));
+  for(let i=0;ok&&i<seq.length-1;i++)if(seq[i].start+(seq[i].duration||0)>seq[i+1].start)ok=false;
+  if(!ok)snapshot.forEach(s=>{const item=acts.find(i=>i.id===s.id);item.start=s.start;item.time=s.time;});
+ }
+}
 function scheduleOnce(a,catalog,attempt=0,seed){
  const start=a.start||'2026-11-25',end=a.end||'2026-11-29',days=[];
  for(let t=Date.parse(start+'T12:00:00Z');t<=Date.parse(end+'T12:00:00Z')&&days.length<31;t+=86400000)days.push({date:new Date(t).toISOString().slice(0,10),theme:'',items:[],prep:[],unscheduled:[]});
  // Sample reservations only apply when their date is inside this trip; otherwise they are ordinary places.
  const sample=p=>p.reservation&&(p.reservation.date<start||p.reservation.date>end)?(({reservation,...rest})=>rest)(p):p;
- const picks=a.picks||{},all=[...catalog.activities,...catalog.restaurants].map(sample).map(p=>catalog.generic?{...p,area:p.area||'',duration:p.duration||60,price:p.price||'',intro:p.intro||'',closed:p.closed||[],hours:p.parsedHours||p.hours||{}}:p),selected=all.filter(i=>i.reservation||i.locked||i.booked||(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id));
+ const picks=a.picks||{},all=[...catalog.activities,...catalog.restaurants].map(sample).map(p=>catalog.generic?{...p,area:p.area||'',duration:p.duration||60,price:p.price||'',intro:p.intro||'',closed:p.closed||[],hours:p.parsedHours||p.hours||{}}:p);
+ const budget=window.GoNowBudget;
+ // A sample reservation is not a real booking. Skip pricey ones the traveler did not ask for.
+ const autoOk=p=>!budget||budget.fits(p,a);
+ const selected=all.filter(i=>{const chosen=(picks.activities||[]).includes(i.id)||(picks.restaurants||[]).includes(i.id);if(chosen)return true;return (i.reservation||i.locked||i.booked)&&autoOk(i);});
  if(seed)days.forEach(d=>{d.items=JSON.parse(JSON.stringify(seed[d.date]||[]));});
  const fw=window.GoNowFlights.windowFor(a);const unfit=[],bookingIssues=[];const {flight,leave}=departure({...a,start,end,generic:catalog.generic});
  function fits(p,d,t){
@@ -60,7 +84,46 @@ function scheduleOnce(a,catalog,attempt=0,seed){
   if(d.items.reduce((s,i)=>s+i.duration,0)+length>capacity(a))return false;
   return !d.items.some(i=>t<i.start+i.duration+travel(p,i.pick||i)+((i.tags||[]).includes('dive')?30:0)&&t+length+travel(p,i.pick||i)+((p.tags||[]).includes('dive')?30:0)>i.start);
  }
- let ordered=selected.slice().sort((x,y)=>Number(!!(y.reservation||y.locked||y.booked))-Number(!!(x.reservation||x.locked||x.booked))||Number(!!y.meals)-Number(!!x.meals)||Number(y.fixed!=null)-Number(x.fixed!=null)||(attempt%2?y.area.localeCompare(x.area):x.area.localeCompare(y.area))||(attempt%3?x.duration-y.duration:y.duration-x.duration));
+ const mealAt=t=>t<630?'breakfast':t<870?'lunch':t<1080?'snack':'dinner';
+ const mealRanges={breakfast:[420,600],lunch:[690,810],dinner:[1080,1200],snack:[870,1020]};
+ const taken=d=>new Set(d.items.filter(i=>i.kind==='meal'&&i.start!=null).map(i=>mealAt(i.start)));
+ function slotsFor(p,d){
+  if(p.reservation)return [minute(p.reservation.time)];
+  if(p.fixed!=null)return [p.fixed];
+  if(p.meals){const out=[];for(const meal of ['breakfast','lunch','dinner','snack'].filter(m=>p.meals.includes(m)&&!taken(d).has(m))){const range=mealRanges[meal];for(let t=range[0];t+p.duration<=range[1];t+=15)out.push(t);}return out;}
+  const out=[];for(let t=540;t+p.duration<=1080;t+=15)out.push(t);return out;
+ }
+ // Pull a flexible stop onto the day where the nearest activity actually is, when that day can hold it.
+ function regroupDays(){
+  const flex=i=>i&&i.pick&&!i.locked&&!i.pinned&&!i.booked&&Number.isFinite(+i.lat)&&(i.kind==='activity'||i.kind==='meal');
+  const nearest=(day,item)=>day.items.filter(i=>i!==item&&i.kind==='activity'&&Number.isFinite(+i.lat)).reduce((best,i)=>!best||(km(item,i)??1e9)<(km(item,best)??1e9)?i:best,null);
+  for(let guard=0;guard<8;guard++){
+   let moved=false;
+   for(const d of days){
+    for(const item of d.items.slice()){
+     if(!flex(item))continue;
+     const here=nearest(d,item), hereDist=here?(km(item,here)??50):50;
+     let best=null, bestDist=hereDist, bestTime=null;
+     for(const other of days){
+      if(other===d)continue;
+      const near=nearest(other,item);if(!near)continue;
+      const dist=km(item,near)??1e9;if(dist+3>=bestDist)continue;
+      const open=slotsFor(item.pick,other).filter(t=>fits(item.pick,other,t));
+      const preferred=item.kind==='meal'?open.filter(t=>mealAt(t)===mealAt(item.start)):open;
+      const t=preferred[0];
+      if(t==null)continue;
+      best=other;bestDist=dist;bestTime=t;
+     }
+     if(!best)continue;
+     d.items=d.items.filter(i=>i!==item);
+     item.start=bestTime;item.time=window.DayBuilder.clock(bestTime);
+     best.items.push(item);moved=true;
+    }
+   }
+   if(!moved)break;
+  }
+ }
+ let ordered=selected.slice().sort((x,y)=>Number(!!(y.reservation||y.locked||y.booked))-Number(!!(x.reservation||x.locked||x.booked))||Number(!!y.meals)-Number(!!x.meals)||((x.meals?x.meals.length:9)-(y.meals?y.meals.length:9))||Number(y.fixed!=null)-Number(x.fixed!=null)||(attempt%2?y.area.localeCompare(x.area):x.area.localeCompare(y.area))||(attempt%3?x.duration-y.duration:y.duration-x.duration));
  if(window.goNowAccount?.group)ordered=window.goNowAccount.sort(ordered);
  for(const p of ordered){
   if(days.some(d=>d.items.some(i=>(i.sourceId||i.id)===p.id)))continue;
@@ -68,17 +131,40 @@ function scheduleOnce(a,catalog,attempt=0,seed){
   let placed=false;
   const rotated=days.slice(attempt%days.length).concat(days.slice(0,attempt%days.length));
   const proximity=d=>{const activities=d.items.filter(i=>i.kind==='activity');return activities.length?Math.min(...activities.map(i=>travel(p,i.pick||i))):999;};
-  const candidates=rotated.sort((x,y)=>p.meals?Number(x.date===start)-Number(y.date===start)||proximity(x)-proximity(y):y.items.filter(i=>i.pick&&i.pick.area===p.area).length-x.items.filter(i=>i.pick&&i.pick.area===p.area).length);
+  const mealOpen=d=>!p.meals||p.meals.some(m=>!taken(d).has(m));
+  const candidates=rotated.slice().sort((x,y)=>p.meals?Number(!mealOpen(x))-Number(!mealOpen(y))||Number(x.date===start)-Number(y.date===start)||proximity(x)-proximity(y):proximity(x)-proximity(y)||y.items.filter(i=>i.pick&&i.area===p.area).length-x.items.filter(i=>i.pick&&i.area===p.area).length);
   for(const d of candidates){
    if(p.reservation&&d.date!==p.reservation.date)continue;
+   if(p.meals&&!p.reservation&&d!==candidates[0])continue;
    let slots=[];
-   if(p.reservation)slots=[minute(p.reservation.time)];else if(p.fixed!=null)slots=[p.fixed];else if(p.meals){for(const meal of (p.meals.includes('breakfast')?['breakfast']:p.meals)){const range={breakfast:[420,600],lunch:[690,810],dinner:[1080,1200],snack:[870,1020]}[meal];for(let t=range[0];t+ p.duration<=range[1];t+=15)slots.push(t);}}else for(let t=540;t+p.duration<=1080;t+=15)slots.push(t);
-   const t=slots.find(t=>fits(p,d,t));if(t===undefined)continue;
-   d.items.push({id:p.id,title:p.name,kind:p.meals?'meal':'activity',time:window.DayBuilder.clock(t),start:t,duration:p.duration,desc:'About '+p.duration+' min. '+p.intro,category:p.category||'Food',area:p.area,lat:p.lat,lng:p.lng,movementMinutes:/Active|Moderate/.test(p.effort)?p.duration:0,wellness:/Active|Moderate/.test(p.effort)?{type:'movement'}:undefined,costEstimate:p.generic?undefined:p.meals?({'$':15,'$$':30,'$$$$':150}[p.price]||30):Number(((p.price||'').match(/\d+/)||[0])[0]),place:p.area,photo:p.photo,...(p.source==='google'&&p.photo?{photoBy:{name:String(p.creditName||'Google Maps').slice(0,80),url:/^https:\/\//.test(p.creditUrl||'')?p.creditUrl:''}}:{}),price:p.price,locked:!!(p.reservation||p.locked||p.booked),booked:!!(p.reservation||p.booked),bookable:!!p.bookable,needsTicket:!!p.needsTicket,booking:p.booking,tour:p.tour,closed:p.closed,hours:p.ruleHours&&(!p.ruleHours.date||p.ruleHours.date===d.date)?p.ruleHours:p.hours,tags:p.tags||[],prep:p.bookable?[{type:'book',text:'Reserve '+p.name}]:[],bring:[],sources:[],pick:p});placed=true;break;
+   const ranges=mealRanges;
+   if(p.reservation)slots=[minute(p.reservation.time)];else if(p.fixed!=null)slots=[p.fixed];else if(!p.meals)for(let t=540;t+p.duration<=1080;t+=15)slots.push(t);
+   const beside=(t)=>{let best=999;const end=t+(p.duration||60);for(const i of d.items){if(i.start==null)continue;if(i.start<end&&i.start+(i.duration||0)>t)continue;const gap=i.start+(i.duration||0)<=t?t-(i.start+(i.duration||0)):i.start-end;if(gap<=120)best=Math.min(best,travel(p,i.pick||i));}return best;};
+   let t, host=d;
+   if(p.meals&&!p.reservation&&p.fixed==null){
+    // Try breakfast on every day before a bakery becomes a snack on the nearest day.
+    if(d!==candidates[0])continue;
+    meal:for(const meal of ['breakfast','lunch','dinner','snack'].filter(m=>p.meals.includes(m))){
+     for(const day of candidates){
+      if(taken(day).has(meal))continue;
+      const range=mealRanges[meal], openMeal=[];
+      for(let s=range[0];s+p.duration<=range[1];s+=15)if(fits(p,day,s))openMeal.push(s);
+      if(!openMeal.length)continue;
+      t=openMeal[0];host=day;break meal;
+     }
+    }
+   }else{
+    const open=slots.filter(s=>fits(p,d,s));
+    t=p.reservation||p.fixed!=null?open[0]:open.slice().sort((a,b)=>beside(a)-beside(b)||a-b)[0];
+   }
+   if(t===undefined)continue;
+   host.items.push({id:p.id,title:p.name,kind:p.meals?'meal':'activity',time:window.DayBuilder.clock(t),start:t,duration:p.duration,desc:'About '+p.duration+' min. '+p.intro,category:p.category||'Food',area:p.area,lat:p.lat,lng:p.lng,movementMinutes:/Active|Moderate/.test(p.effort)?p.duration:0,wellness:/Active|Moderate/.test(p.effort)?{type:'movement'}:undefined,costEstimate:p.generic?undefined:p.meals?({'$':15,'$$':30,'$$$':70,'$$$$':150}[p.price]||30):Number(((p.price||'').match(/\d+/)||[0])[0]),place:p.area,photo:p.photo,...(p.source==='google'&&p.photo?{photoBy:{name:String(p.creditName||'Google Maps').slice(0,80),url:/^https:\/\//.test(p.creditUrl||'')?p.creditUrl:''}}:{}),price:p.price,locked:!!(p.reservation||p.locked||p.booked),booked:!!(p.reservation||p.booked),pinned:!!(p.reservation||p.locked||p.booked||p.fixed!=null),bookable:!!p.bookable,needsTicket:!!p.needsTicket,booking:p.booking,tour:p.tour,closed:p.closed,hours:p.ruleHours&&(!p.ruleHours.date||p.ruleHours.date===host.date)?p.ruleHours:p.hours,tags:p.tags||[],prep:p.bookable?[{type:'book',text:'Reserve '+p.name}]:[],bring:[],sources:[],pick:p});placed=true;break;
   }
   if(!placed)((p.reservation||p.locked||p.booked)?bookingIssues:unfit).push(p);
  }
- for(const d of days){d.items.sort((a,b)=>a.start-b.start);const names=[...new Set(d.items.filter(i=>i.kind==='activity').map(i=>i.area))];d.theme=names.slice(0,2).join(' & ')||[...new Set(d.items.map(i=>i.area))].slice(0,1).join('')||(d.date===end?'Fly home':d.date===start?'Arrive & settle in':'Free day');}
+ regroupDays();
+ sequenceDays(days);
+ for(const d of days){d.items.sort((a,b)=>(a.start??9999)-(b.start??9999));const names=[...new Set(d.items.filter(i=>i.kind==='activity').map(i=>i.area))];d.theme=names.slice(0,2).join(' & ')||[...new Set(d.items.map(i=>i.area))].slice(0,1).join('')||(d.date===end?'Fly home':d.date===start?'Arrive & settle in':'Free day');}
  if(!seed&&days.length)days[days.length-1].items.push({id:'pick-airport',title:catalog.generic?'Leave for the airport':'Uber to HNL',kind:'travel',time:window.DayBuilder.clock(leave),start:leave,duration:a.flightsStep?fw.road:35,locked:true,desc:a.flightsStep?'About '+fw.road+' min.':'Leave for the airport.',prep:[],bring:[],sources:[]});
  if(days[0]){days[0].unscheduled=unfit.map(p=>({id:p.id,title:p.name,place:p.area,duration:p.duration,kind:p.meals?'meal':'activity',custom:true,tags:p.tags||[],closed:p.closed,hours:p.hours}));if(!seed&&fw.arrivalStart<1410&&!days[0].items.some(i=>i.start<1140)){const checkin=Math.max(900,fw.arrivalStart);days[0].items.unshift({id:'pick-checkin',title:'Hotel check-in',kind:'stay',time:window.DayBuilder.clock(checkin),start:checkin,desc:'About 30 min. Settle in.',duration:30,prep:[],bring:[],sources:[]});
   // An early landing gets a light, optional afternoon instead of a blank gap before dinner.
