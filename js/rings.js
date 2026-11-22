@@ -61,7 +61,9 @@
       const departure=first?minutes(first.start):510;
       const bed=minutes(preferences.bedtime), rise=minutes(preferences.wake);
       const start=Math.max(returned===null?(bed===null?1320:bed):returned+45,bed===null?0:bed);
-      const end=Math.min(departure-30,rise===null?1440:rise);
+      // The morning you actually get up ends the night. A shifted wake only counts when it still leaves 7 hours.
+      let end=departure-30;
+      if(rise!==null){const clipped=Math.min(end,rise);if((1440+clipped-start)/60>=7)end=clipped;}
       sleep=Math.max(0,Math.min(10,(1440+end-start)/60));
       sleepDetail={returned:returned===null?start:returned,departure,start,end,first,lastItem,stay:preferences.stay||'your stay',bedtime:preferences.usualBedtime,adjusted:preferences.jetlagAdjusted};
     }

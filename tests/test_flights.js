@@ -8,7 +8,7 @@ assert.equal(domestic.international,false);assert.equal(international.internatio
 assert.equal(domestic.leave,480-120-domestic.road);assert.equal(international.leave,480-180-international.road);
 assert.equal(F.windowFor({...a,arrivalTime:'17:30'}).arrivalStart,1125);
 assert.equal(F.windowFor({...a,arrivalTime:'5:30 PM'}).arrivalStart,1125);
-assert.equal(F.route(a).landing,780,'9 AM LAX + 6h - 2h local offset = 1 PM HNL');
+assert.equal(F.route(a).landing,750,'9 AM LAX + 5.5h in the air - 2h local offset = 12:30 PM HNL');
 assert.notEqual(F.route({...a,origin:'New York'}).landing,F.route(a).landing,'origin changes local landing estimate');
 assert.equal(F.route({...a,destination:'Kyoto'}).international,true);
 assert.equal(F.route({...a,destination:'Seattle'}).hours,2.5);
