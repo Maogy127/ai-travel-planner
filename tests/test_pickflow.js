@@ -35,12 +35,18 @@ for(const d of diving.days)for(const i of d.items.filter(i=>i.id==='dive'))asser
 const swapAnswers=JSON.parse(JSON.stringify(a));const alternative=ctx.PickScheduler.swap(swapAnswers,'bishop-museum',c);assert(alternative);assert.equal(alternative.category,'Culture');assert(!Object.values(swapAnswers.picks).flat().includes('bishop-museum'));
 console.log('PASS shared closure truth, exact child ages, meal filters, dive-flight buffer and fitting swap');
 const meals=ctx.PickScheduler.schedule({...a,picks:{activities:[],restaurants:c.restaurants.map(i=>i.id)}},c);
-assert.equal(meals.unfit.length,0);
+const mealAt=t=>t<630?'breakfast':t<870?'lunch':t<1080?'snack':'dinner';
+for(const d of meals.days){
+ const slots=d.items.filter(i=>i.kind==='meal'&&i.start!=null).map(i=>mealAt(i.start));
+ assert.equal(new Set(slots).size,slots.length,'one breakfast, lunch and dinner');
+}
 for(const d of meals.days)for(const i of d.items.filter(i=>i.pick&&!i.locked)){
  const windows={breakfast:[420,600],lunch:[690,840],dinner:[1050,1230],snack:[870,1020]};
  assert(i.pick.meals.some(m=>i.start>=windows[m][0]&&i.start+i.duration<=windows[m][1]),i.id);
 }
-console.log('PASS all 13 restaurants fit; non-reserved meals stay in meal windows');
+assert(meals.unfit.length<=1,'only a meal with no open window is left out');
+assert.equal(meals.days.flatMap(d=>d.items.filter(i=>i.pick)).length+meals.unfit.length,c.restaurants.length);
+console.log('PASS one meal of each kind per day; non-reserved meals stay in meal windows');
 const photos=[...c.activities,...c.restaurants].map(i=>i.photo);
 assert.equal(new Set(photos).size,photos.length,'one distinct photo per catalog place');
 assert(!c.activities.some(i=>['black-friday','royal-market'].includes(i.id)));

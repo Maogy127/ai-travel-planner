@@ -604,7 +604,8 @@ async def affiliate_checks(b,base,label):
     for link in links:
       url=urlparse(link['href']);query=parse_qs(url.query)
       # Flight routes use known IATA codes; unknown routes use the homepage.
-      dest_ok=(destination.lower() in unquote(link['href']).lower()) if link['key']!='skyscanner' else (('/LAX/HNL/' in url.path) if destination=='Oahu' else url.path=='/')
+      iata={'Oahu':'HNL','Lisbon':'LIS'}[destination]
+      dest_ok=(destination.lower() in unquote(link['href']).lower() or (destination=='Oahu' and 'hawaii' in unquote(link['href']).lower())) if link['key']!='skyscanner' else ('/LAX/'+iata+'/' in url.path)
       ok(f"{label} {destination} {link['key']} safe search",link['href'].startswith('https://'+domains[link['key']]+'/') and dest_ok and not any(k in query for k in ('aid','partner_id','pid','mcid')) and {'sponsored','noopener'}.issubset(link['rel'].split()) and link['target']=='_blank' and link['text'] in ('Book','Reserve','Book flights','Find a hotel'))
     # DayBuilder mounts one day at a time; arrival day need not contain attractions.
     ok(f'{label} {destination} activity searches',await plan_count(pg, '[data-testid=item-book]')>0)
