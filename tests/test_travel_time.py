@@ -21,9 +21,9 @@ async def checks(browser):
         # Compact-cards batch adds the app shell (☰ menu, Start over, sign-in nudge).
         # v2 design (Nov 20, 2026) adds js/v2.js (theme, icons, motion).
         # Elements preview (Nov 21, 2026) adds js/elements.js.
-        assert len(assets) == 34, len(assets)
+        assert len(assets) == 35, len(assets)
         for path in assets:
-            assert path.endswith('?v=elements-20261121'), path  # elements preview cache tag
+            assert path.endswith('?v=combined-20261122'), path  # combined preview cache tag
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()

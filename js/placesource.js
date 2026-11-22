@@ -4,6 +4,7 @@
 const CONTACT='gonow-preview@users.noreply.github.com', DAY=86400000;
 const OVERPASS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter'];
 const normalize=q=>String(q||'').normalize('NFKC').trim().replace(/\s+/g,' ').toLowerCase();
+function placeName(t){const local=t.name||'',en=t['name:en']||'';if(!en)return local;if(!local||normalize(en)===normalize(local))return en;const cut=local.replace(new RegExp(en.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'),'ig'),'').replace(/[()]/g,'').replace(/\s+/g,' ').trim();if(cut&&normalize(cut)!==normalize(en))return en+' ('+cut+')';return en+' ('+local+')';}
 function slug(q){
  const text=normalize(q).normalize('NFD').replace(/[\u0300-\u036f]/g,''),base=text.replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
  // Keep distinct IDs for destinations written in scripts without ASCII letters.
@@ -33,14 +34,15 @@ function parseHours(raw){
  return {week};
 }
 function allows(hours,date,start,duration){return !hours||hours.week[new Date(date+'T12:00:00Z').getUTCDay()].some(([a,b])=>start>=a&&start+duration<=b);}
-function category(t){return (['restaurant','cafe'].includes(t.amenity)?t.amenity:'')|| (t.leisure==='park'?'park':t.natural==='beach'?'beach':t.tourism)||'attraction';}
-const labels={park:'Park',beach:'Beach',museum:'Museum',viewpoint:'Viewpoint',attraction:'Attraction',zoo:'Zoo',aquarium:'Aquarium',gallery:'Gallery',restaurant:'Restaurant',cafe:'Cafe'};
-const estimates=k=>({duration:['museum','zoo','aquarium'].includes(k)?120:60,effort:['park','beach','viewpoint'].includes(k)?'Moderate est.':'Easy est.'});
+function wellnessKind(t){return (t.natural==='hot_spring'||t.leisure==='hot_spring'||t.amenity==='public_bath')?'hotspring':(t.leisure==='sauna'||t.amenity==='sauna')?'sauna':t.leisure==='fitness_centre'?'fitness':(t.amenity==='massage'||t.shop==='massage')?'massage':(t.leisure==='spa'||t.amenity==='spa'||t.amenity==='bath')?'spa':'';}
+function category(t){return (['restaurant','cafe'].includes(t.amenity)?t.amenity:'')||wellnessKind(t)||(t.leisure==='park'?'park':t.natural==='beach'?'beach':t.tourism)||'attraction';}
+const labels={park:'Park',beach:'Beach',museum:'Museum',viewpoint:'Viewpoint',attraction:'Attraction',zoo:'Zoo',aquarium:'Aquarium',gallery:'Gallery',restaurant:'Restaurant',cafe:'Cafe',spa:'Spa',sauna:'Sauna',hotspring:'Hot spring',fitness:'Fitness',massage:'Massage'};
+const estimates=k=>({duration:['museum','zoo','aquarium'].includes(k)?120:['spa','sauna','hotspring'].includes(k)?90:60,effort:['park','beach','viewpoint','fitness'].includes(k)?'Moderate est.':'Easy est.'});
 const durationLabel=p=>(p.duration/60)+' h est.';
 const ratingLabel=p=>p.rating?'★ '+p.rating.toFixed(1)+(p.ratingCount?' ('+(p.ratingCount>=1000?Math.round(p.ratingCount/100)/10+'k':p.ratingCount)+')':''):'';
 const cardLine=p=>p.category+' · '+(p.rating?ratingLabel(p):(p.cuisine||durationLabel(p)));
 // v2: 1.5px line icons on a soft state gradient (no emoji / dingbats).
-const icons={park:'park',beach:'wave',museum:'museum',viewpoint:'view',attraction:'spot',zoo:'spot',aquarium:'wave',gallery:'museum',restaurant:'bowl',cafe:'cup'};
+const icons={park:'park',beach:'wave',museum:'museum',viewpoint:'view',attraction:'spot',zoo:'spot',aquarium:'wave',gallery:'museum',restaurant:'bowl',cafe:'cup',spa:'flower',sauna:'flower',hotspring:'wave',fitness:'flower',massage:'flower'};
 const lineIcon=n=>root.GoNowIcons?root.GoNowIcons.icon(n,40):'';
 function placeholder(p){return '<div class="place-placeholder" data-testid="place-placeholder" role="img" aria-label="'+(labels[p.type]||'Attraction')+' illustration">'+lineIcon(icons[p.type]||'spot')+'</div>';}
 const root=typeof window==='undefined'?globalThis:window;
@@ -63,7 +65,7 @@ function create(options={}){
   if(!rows.length||!Number.isFinite(+rows[0].lat)||!Number.isFinite(+rows[0].lon))throw Error('No city');return {lat:+rows[0].lat,lng:+rows[0].lon};
  });geoTail=job.catch(()=>{});return job;});}
  function nearby(center,radius=10000){const key='near:'+center.lat.toFixed(3)+','+center.lng.toFixed(3)+':'+radius;return cached(key,7*DAY,()=>{
-  const job=overTail.then(async()=>{const around='(around:'+radius+','+center.lat+','+center.lng+')',query='[out:json][timeout:20];(nwr'+around+'[tourism~"^(attraction|museum|viewpoint|zoo|aquarium|gallery)$"][name];nwr'+around+'[leisure=park][name];nwr'+around+'[natural=beach][name];nwr'+around+'[amenity~"^(restaurant|cafe)$"][name];);out center tags 160;';
+  const job=overTail.then(async()=>{const around='(around:'+radius+','+center.lat+','+center.lng+')',query='[out:json][timeout:20];(nwr'+around+'[tourism~"^(attraction|museum|viewpoint|zoo|aquarium|gallery)$"][name];nwr'+around+'[leisure=park][name];nwr'+around+'[natural=beach][name];nwr'+around+'[amenity~"^(restaurant|cafe)$"][name];nwr'+around+'[leisure~"^(spa|sauna|fitness_centre)$"][name];nwr'+around+'[amenity~"^(spa|sauna|public_bath|massage)$"][name];nwr'+around+'[natural=hot_spring][name];);out center tags 160;';
    // Public Overpass instances often return 502/504 under load: try the main instance, then one alternate, then fall back.
    // About 8 s per server so a down service fails fast (Places gives a retry button).
    for(let attempt=0;attempt<2;attempt++){try{return await json(OVERPASS[attempt],{timeout:8000,method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'data='+encodeURIComponent(query)});}catch(e){if(attempt)throw e;await sleep(300);}}
@@ -74,10 +76,10 @@ function create(options={}){
  function slim(data){return {elements:(data.elements||[]).filter(e=>e.tags&&e.tags.name).map(e=>({type:e.type,id:e.id,lat:e.lat,lon:e.lon,center:e.center,tags:Object.fromEntries(KEEP.filter(k=>e.tags[k]!==undefined).map(k=>[k,e.tags[k]])),n:Object.keys(e.tags).length}))};}
  function catalog(data,center,city){
   const seen=new Set(),distance=p=>Math.hypot(p.lat-center.lat,(p.lng-center.lng)*Math.cos(center.lat*Math.PI/180));
-  const rows=(data.elements||[]).filter(e=>e.tags&&e.tags.name).map(e=>{const t=e.tags,k=category(t),point=e.center||e,dining=['restaurant','cafe'].includes(k);return {id:'osm-'+e.type+'-'+e.id,name:t['name:en']||t.name,type:k,category:labels[k]||'Attraction',lat:+point.lat,lng:+point.lon,area:t['addr:suburb']||city,address:[t['addr:housenumber'],t['addr:street'],t['addr:city']].filter(Boolean).join(' '),...estimates(k),needsTicket:t.fee==='yes'||!!t.charge,price:'',intro:'',photo:'',generic:true,section:'popular',cuisine:t.cuisine?t.cuisine.replace(/[_;]/g,' '):k==='cafe'?'Coffee':'',...(dining?{meals:k==='cafe'?['breakfast','lunch','snack']:['lunch','dinner']}:{}),openingHours:t.opening_hours||'',parsedHours:parseHours(t.opening_hours),hours:parseHours(t.opening_hours)||{},closed:[],closedDates:[],tags:[],wikipedia:t.wikipedia,wikidata:t.wikidata,mapUrl:'https://www.openstreetmap.org/'+e.type+'/'+e.id,notability:Number(!!t.wikipedia)+Number(!!t.wikidata),richness:e.n||Object.keys(t).length};}).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
+  const rows=(data.elements||[]).filter(e=>e.tags&&e.tags.name).map(e=>{const t=e.tags,k=category(t),point=e.center||e,dining=['restaurant','cafe'].includes(k),well=!!wellnessKind(t);return {id:'osm-'+e.type+'-'+e.id,name:placeName(t),type:k,category:labels[k]||'Attraction',lat:+point.lat,lng:+point.lon,area:t['addr:suburb']||city,address:[t['addr:housenumber'],t['addr:street'],t['addr:city']].filter(Boolean).join(' '),...estimates(k),needsTicket:t.fee==='yes'||!!t.charge,price:'',intro:'',photo:'',generic:true,section:'popular',cuisine:t.cuisine?t.cuisine.replace(/[_;]/g,' '):k==='cafe'?'Coffee':'',...(dining?{meals:k==='cafe'?['breakfast','lunch','snack']:['lunch','dinner']}:{}),...(well?{wellness:true}:{}),openingHours:t.opening_hours||'',parsedHours:parseHours(t.opening_hours),hours:parseHours(t.opening_hours)||{},closed:[],closedDates:[],tags:[],wikipedia:t.wikipedia,wikidata:t.wikidata,mapUrl:'https://www.openstreetmap.org/'+e.type+'/'+e.id,notability:Number(!!t.wikipedia)+Number(!!t.wikidata),richness:e.n||Object.keys(t).length};}).filter(p=>Number.isFinite(p.lat)&&Number.isFinite(p.lng));
   rows.sort((a,b)=>b.notability-a.notability||b.richness-a.richness||distance(a)-distance(b));
   const unique=rows.filter(p=>{const n=normalize(p.name);if(seen.has(n))return false;seen.add(n);return true;});
-  return {generic:true,city,center,activities:unique.filter(p=>!p.meals),restaurants:unique.filter(p=>p.meals)};
+  const well=p=>!!p.wellness;return {generic:true,source:'osm',city,center,activities:unique.filter(p=>!p.meals&&!well(p)),restaurants:unique.filter(p=>p.meals),wellness:unique.filter(well)};
  }
  // Speed: Google first (3 s per request); OpenStreetMap starts only if Google fails or is still loading after 1.2 s, hard 4.5 s cap,
  // so the worst case is about 5.7 s. Results are cached per city for a day, so repeat cities are instant.
@@ -87,11 +89,54 @@ function create(options={}){
  async function load(city,hotel,opts={}){const key=googleKey();
   // Warm city: the day-old Google catalog answers at once, without waking the OpenStreetMap fallback.
   const warm=key&&read(googleCacheKey(city,hotel));if(warm)return {catalog:warm,fallback:false,source:'google'};
+  const atHotel=!!hotelCenter(hotel);
+  // Static pre-warmed snapshots load first so popular cities never wait on a live Overpass/Places call.
+  if(!atHotel&&!opts.liveOnly){const snap=await snapshot(city);if(snap)return {catalog:snap,fallback:false,source:'snapshot'};}
   // OpenStreetMap is the last resort: it only starts if Google fails or is still loading after OSM_HEAD_START,
   // and it has a hard cap, so the worst case stays near 6 s.
   let osmTask=null;const startOsm=()=>osmTask||(osmTask=cap(osm(city,hotel),OSM_CAP).then(c=>({catalog:c,fallback:false,source:'osm'}),()=>null));
   if(key){const slow=setTimeout(startOsm,OSM_HEAD_START);try{const catalog=await google(city,hotel,key,opts);clearTimeout(slow);return {catalog,fallback:false,source:'google'};}catch(e){clearTimeout(slow);/* Fall through to OpenStreetMap. */}}
-  return (await startOsm())||{catalog:null,fallback:true};}
+  const live=await startOsm();if(live)return live;
+  if(atHotel&&!opts.liveOnly){const snap=await snapshot(city);if(snap)return {catalog:snap,fallback:false,source:'snapshot'};}
+  return {catalog:null,fallback:true};}
+
+ const SNAPSHOT_VERSION=1;
+ function snapshotIndex(){const idx=root.GONOW_CITY_INDEX;return idx&&idx.version===SNAPSHOT_VERSION&&Array.isArray(idx.cities)?idx:null;}
+ function matchSnapshot(city){
+  const index=snapshotIndex();if(!index)return null;
+  const q=normalize(city),s=slug(city);
+  const alias=root.GoNowPlaces&&root.GoNowPlaces.normalize?normalize(root.GoNowPlaces.normalize(city).name):'';
+  return index.cities.find(c=>c.slug===s||normalize(c.name)===q||(alias&&normalize(c.name)===alias)||(c.aliases||[]).some(a=>normalize(a)===q||(alias&&normalize(a)===alias)||slug(a)===s))||null;
+ }
+ function snapshotUrl(meta){
+  const index=snapshotIndex()||{},base=options.snapshotBase!=null?options.snapshotBase:(index.base||'data/cities/');
+  return String(base).replace(/\/?$/,'/')+meta.slug+'.json';
+ }
+ function revivePlace(p){
+  const parsed=p.parsedHours||parseHours(p.openingHours)||null;
+  return Object.assign({},p,{parsedHours:parsed,hours:p.hours&&Number.isFinite(p.hours.open)?p.hours:(parsed||{}),generic:true,section:p.section||'popular',photo:p.photo||'',intro:p.intro||'',price:p.price||'',closed:p.closed||[],closedDates:p.closedDates||[],tags:p.tags||[]});
+ }
+ function snapshotFromFile(url){
+  try{
+   if(String(url).startsWith('file:'))return true;
+   // Browsers cannot fetch sibling JSON from a file:// page (and they log a console error if we try).
+   if(root.location&&root.location.protocol==='file:'&&!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(String(url)))return true;
+  }catch(e){}
+  return false;
+ }
+ function snapshot(city){
+  const meta=matchSnapshot(city);if(!meta)return Promise.resolve(null);
+  if(snapshotFromFile(snapshotUrl(meta)))return Promise.resolve(null);
+  const key='snap:'+SNAPSHOT_VERSION+':'+meta.slug;
+  return cached(key,30*DAY,async()=>{
+   const data=await json(snapshotUrl(meta),{timeout:4000});
+   if(!data||data.version!==SNAPSHOT_VERSION||!Array.isArray(data.activities)||!Array.isArray(data.restaurants))throw Error('bad snapshot');
+   const wellness=(data.wellness||[]).map(revivePlace);
+   const acts=data.activities.map(revivePlace),seen=new Set(acts.map(p=>normalize(p.name)));
+   const merged=acts.concat(wellness.filter(p=>{const n=normalize(p.name);if(p.meals||seen.has(n))return false;seen.add(n);return true;}));
+   return {generic:true,source:'snapshot',city:data.city||meta.name,center:data.center||null,activities:merged,restaurants:data.restaurants.map(revivePlace),wellness};
+  }).catch(()=>null);
+ }
  function googleKey(){return String(options.googleKey!==undefined?options.googleKey:(root.GONOW_PLACES_CONFIG&&root.GONOW_PLACES_CONFIG.GOOGLE_PLACES_KEY)||'').trim();}
  // App-side safety cap: at most LIMIT Places API requests per browser per day (Cloud quotas can't be lowered on
  // the trial account). Past the cap the app quietly uses the cached city, the shared ID list or the fallback.
@@ -170,12 +215,12 @@ function google(city,hotel,key,opts={}){const center=hotelCenter(hotel);
   const data=await json('https://'+m[1]+'.wikipedia.org/api/rest_v1/page/summary/'+encodeURIComponent(m[2]));
   return {photo:data.thumbnail&&data.thumbnail.source||'',intro:(data.extract||'').split(/(?<=[.!?])\s/)[0],creditUrl:data.content_urls&&data.content_urls.desktop&&data.content_urls.desktop.page||'https://'+m[1]+'.wikipedia.org/wiki/'+encodeURIComponent(m[2])};
  }).then(data=>Object.assign(place,data)).catch(()=>place);}
- return {load,geocode,nearby,enrich,catalog};
+ return {load,geocode,nearby,enrich,catalog,snapshot,matchSnapshot};
 }
 // Google photos are stored as key-free 'gplace:<photo name>' tokens; the URL (with the key) is built only at render time.
 // Photo loads are billed too: at most PHOTO_LIMIT distinct Google photos per browser per day, then placeholders.
 const PHOTO_LIMIT=150;
 function photoAllowed(name){try{const ls=root.localStorage,day=new Date().toISOString().slice(0,10);let b=JSON.parse(ls.getItem('gonow:places-photos')||'null');if(!b||b.day!==day)b={day,seen:[]};if(b.seen.includes(name))return true;if(b.seen.length>=PHOTO_LIMIT)return false;b.seen.push(name);ls.setItem('gonow:places-photos',JSON.stringify(b));return true;}catch(e){return true;}}
 function photoSrc(v){v=String(v||'');const m=/^gplace:(places\/[\w-]+\/photos\/[\w-]+)$/.exec(v);if(!m)return /^gplace:/.test(v)?'':v;if(!photoAllowed(m[1]))return '';const cfg=root.GONOW_PLACES_CONFIG,key=String(cfg&&cfg.GOOGLE_PLACES_KEY||'').trim();return key?'https://places.googleapis.com/v1/'+m[1]+'/media?maxWidthPx=480&key='+encodeURIComponent(key):'';}
-window.GoNowPlaceSource={photoSrc,create,prune,parseHours,allows,estimates,durationLabel,cardLine,ratingLabel,placeholder,slug,normalize,CONTACT};
+window.GoNowPlaceSource={photoSrc,create,prune,parseHours,allows,estimates,durationLabel,cardLine,ratingLabel,placeholder,slug,normalize,CONTACT,matchSnapshot:function(city){const idx=root.GONOW_CITY_INDEX;if(!idx||idx.version!==1||!Array.isArray(idx.cities))return null;const q=normalize(city),s=slug(city);return idx.cities.find(c=>c.slug===s||normalize(c.name)===q||(c.aliases||[]).some(a=>normalize(a)===q||slug(a)===s))||null;}};
 })();
