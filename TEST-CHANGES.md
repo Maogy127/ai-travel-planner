@@ -1873,3 +1873,10 @@ Firestore rules: unchanged; local emulator (demo project) 12/12 pass. Not deploy
   - Date tiles now read Day N / weekday / date numeral, with the same accessible name, plus " · nothing planned" on an empty day.
   - Group votes over 3 read "A B C · 5" (was "A B C 👍 5").
   - Community buttons drop the ♡ ☆ 💬 glyphs for line icons. Their labels are unchanged.
+
+
+## Required dates, no invented skip facts (cache tag `nodates-20261121`)
+- Dates cannot be skipped. The Skip button is hidden on the dates step, and Continue stays disabled until the traveler sets exact start and end dates, or checks “My dates are flexible” and chooses a month and trip length themselves. Checking flexible no longer auto-fills a month about 75 days out or a 5-day length.
+- Skipping Who or Ages no longer writes Couple / ages 25 & 25 (or age 10 for kids). The plan summary omits group and ages unless the traveler actually chose them. Age rules are not applied to invented ages. A neutral party size of 2 is used only internally.
+- Skipping or leaving blank the home activity chips or the trip-styles step does not pre-check chips or claim “you chose” a style. `selectedStyles()` still uses a scenic/wandering mix inside the planner only. Recommendation “why it fits” copy uses the destination tagline when styles were skipped.
+- New suite: `tests/test_required_dates.js`. Updated: `check-ui.cjs`, `test_full.py` (dates are required; the old skip-dates month check is gone), `test_question_flow.py`, `smoke.py`.

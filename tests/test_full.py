@@ -263,10 +263,12 @@ async def extra(b, base, label):
   await pg.get_by_test_id('start-to').fill('1'); await pg.get_by_test_id('start-next').click()
   ok(f'{label} place validation message', "Enter a city or airport code." in await pg.locator('main').text_content())
   await pg.get_by_test_id('start-to').fill('Oahu'); await pg.get_by_test_id('start-from').fill('Los Angeles'); await pg.get_by_test_id('start-next').click()
-  # skip dates -> flexible month (not January hard-coded)
-  await pg.get_by_test_id('q-skip').click()
-  m=await pg.evaluate('window.__gonow.state.answers.month'); exp=await pg.evaluate('new Date(Date.now()+75*864e5).getMonth()+1')
-  ok(f'{label} skip dates sets month ~75 days out', m==exp, f'{m} vs {exp}')
+  # Dates cannot be skipped; Continue stays off until start and end are set.
+  ok(f'{label} dates step has no Skip', await pg.get_by_test_id('q-skip').count()==0)
+  ok(f'{label} dates Continue starts disabled', await pg.get_by_test_id('q-continue').is_disabled())
+  await pg.get_by_test_id('date-start').fill('2027-03-01'); await pg.get_by_test_id('date-end').fill('2027-03-05')
+  ok(f'{label} dates Continue enables once dates are set', await pg.get_by_test_id('q-continue').is_enabled())
+  await pg.get_by_test_id('q-continue').click()
   # Skip the optional flights question before checking budget validation.
   await pg.get_by_test_id('q-skip').click()
   # disabled continue style

@@ -34,7 +34,7 @@
         } catch(e) {}
     }
     var defaults= {
-        track:'together', mode:'trip', localCity:'', localLength:'half', bedtime:'22:30', wake:'06:30', diet:[], dietNotes:'', dayPaces:{}, travelers:[], level:'unsure', activities:[], origin:'', destination:'', unsure:false, start:'', end:'', flexible:false, length:5, month:11, budget:null, includeFlights:true, covers:['flights','hotel','food','activities','transport'], completed:[], who:'', ages:[], adults:2, kids:0, styles:[], food:[], allergies:'', pace:'Moderate', mustdos:'', stay:''
+        track:'together', mode:'trip', localCity:'', localLength:'half', bedtime:'22:30', wake:'06:30', diet:[], dietNotes:'', dayPaces:{}, travelers:[], level:'unsure', activities:[], origin:'', destination:'', unsure:false, start:'', end:'', flexible:false, length:5, month:'', budget:null, includeFlights:true, covers:['flights','hotel','food','activities','transport'], completed:[], who:'', ages:[], adults:2, kids:0, styles:[], food:[], allergies:'', pace:'Moderate', mustdos:'', stay:''
     };
     function normalizeAnswers(a){
         a=a&&typeof a==='object'&&!Array.isArray(a)?a:{};
@@ -87,9 +87,6 @@
         write(KEY+'answers', state.answers);
         if(state.plan&&state.tripId&&['plan','draft','food','pace','musts'].includes(state.screen)){var trips=readTrips(), trip=trips.find(function(t){return t.id===state.tripId;});if(trip){trip.answers=cloneData(state.answers);writeTrips(trips);}}
     }
-    function flexibleMonth() {
-        return new Date(Date.now()+75*864e5).getMonth()+1;
-    }
     function monthName(m) {
         return new Date(2026, m-1, 1).toLocaleString('en', { month:'long' });
     }
@@ -134,11 +131,11 @@
     }
     function planBanner(p) {
         var dest=Engine.matchDestination(state.answers.destination);
-        p.meta=Engine.dateRange(p.start||p.days[0].date,p.end||p.days[p.days.length-1].date)+' · '+p.days.length+' days · '+(state.answers.who||'Travelers').replace(/^./,function(c){return c.toUpperCase();})+((state.answers.ages||[]).length?' · Ages '+state.answers.ages.join(' & '):'');
+        p.meta=Engine.planMeta(p.start||p.days[0].date,p.end||p.days[p.days.length-1].date,p.days.length,state.answers);
         var image=dest.id==='custom'?'images/hero.jpg':'images/'+dest.id+'.jpg';
         var visual=state.answers.templateOahu&&dest.id==='oahu'?'':photo(image, p.title, 'banner-photo');
         if(visual){ var bid=image.split('/').pop().replace('.jpg',''); var bc=window.PHOTO_CREDITS.find(function(c){return c.id===bid;}); visual+='<div class="banner-credit">'+creditHTML(bc)+'</div>'; }
-        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted plan-meta">'+esc(p.meta)+'</p>'+stayLine(p)+'<small class="local-times" data-testid="time-diff">'+esc(timeDiffLine())+'</small>'+originAsk()+hotelForm()+'<div class="draft-confirm-row plan-actions">'+planPrimaryHTML()+planMoreHTML()+'</div></div></header>';
+        return'<header class="plan-header">'+visual+'<div class="plan-title">'+(tripConfirmed(currentTrip())?'<div class="eyebrow">YOUR NEXT CHAPTER, ALL PLANNED</div>':'')+'<div class="plan-heading-row">'+heading(esc(p.title), '')+shareMenuHTML()+'</div><p class="muted plan-meta" data-testid="plan-meta">'+esc(p.meta)+'</p>'+stayLine(p)+'<small class="local-times" data-testid="time-diff">'+esc(timeDiffLine())+'</small>'+originAsk()+hotelForm()+'<div class="draft-confirm-row plan-actions">'+planPrimaryHTML()+planMoreHTML()+'</div></div></header>';
     }
     function shareMenuHTML() {
         return '<div class="share-controls"><button type="button" data-testid="share-menu-toggle" aria-haspopup="menu" aria-expanded="false" aria-controls="plan-share-menu"><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 16V3m-5 5 5-5 5 5M5 13v7h14v-7"/></svg>Share</button><div id="plan-share-menu" data-testid="share-menu" role="menu" aria-label="Share" hidden>'+[['Print / Save as PDF','print-plan'],['Copy as text','copy'],['Share link','share-link'],['Download calendar','download-ics'],['Invite friends','invite-friends']].map(function(item){var wrapper=item[1]==='print-plan'?'print':item[1]==='share-link'?'share':'';return (wrapper?'<span data-testid="'+wrapper+'">':'')+btn(item[0],item[1],'','role="menuitem" tabindex="-1"')+(wrapper?'</span>':'');}).join('')+'</div></div>';
@@ -810,7 +807,7 @@
     function validQuestion() {
         var a=state.answers, s=state.screen;
         if(s==='dates') {
-            if(a.flexible)return!!a.month&&a.length>=2;
+            if(a.flexible){var month=Number(a.month),length=Number(a.length);return month>=1&&month<=12&&length>=2&&length<=10;}
             return!!a.start&&!!a.end&&a.end>a.start&&a.start>=new Date().toLocaleDateString('en-CA');
         }
         if(s==='budget')return a.budgetChoice==='flexible'||(a.budgetChoice&&Number(a.budget)>100);
@@ -869,13 +866,13 @@
         if(s==='dates') {
             content='<label class="checkrow"><input type="checkbox" data-testid="flexible" '+(a.flexible?'checked':'')+'>My dates are flexible</label>';
             if(a.flexible) {
-                content+='<label>Month<select data-testid="month">'+Array.from( {
+                content+='<label>Month<select data-testid="month"><option value=""'+(!Number(a.month)?' selected':'')+'>Choose a month</option>'+Array.from( {
                     length:12
                 }, function(_, i) {
                     return'<option value="'+(i+1)+'" '+(Number(a.month)===i+1?'selected':'')+'>'+new Date(2026, i, 1).toLocaleString('en',  {
                         month:'long'
                     })+'</option>';
-                }).join('')+'</select></label><label>Trip length: '+(a.length||5)+' days<input data-testid="length" type="number" min="2" max="10" value="'+(a.length||5)+'"></label>';
+                }).join('')+'</select></label><label>Trip length (days)<input data-testid="length" type="number" min="2" max="10" placeholder="2–10" value="'+(Number(a.length)>=2?esc(a.length):'')+'"></label>';
             } else content+='<div class="two"><label>Start date<input data-testid="date-start" type="date" value="'+esc(a.start)+'"></label><label>End date<input data-testid="date-end" type="date" value="'+esc(a.end)+'"></label></div><p id="date-summary">'+(a.start&&a.end&&a.end>a.start?Engine.tripDays(a)+' days · '+(Engine.tripDays(a)-1)+' nights':'Pick your dates to see trip length.')+'</p><p class="error" id="date-error" role="alert"></p>';
         } else if(s==='flights') {
             a.flightsStep=true;content=window.GoNowFlights.fields(a,esc);
@@ -917,7 +914,7 @@
         view.innerHTML='<section class="question" data-topic="'+({style:'styles',pace:'sleep'}[s]||s)+'"><p>Step '+(idx+1)+' of '+total+'</p><div class="progress" role="progressbar" aria-label="Step '+(idx+1)+' of '+total+'" aria-valuenow="'+(idx+1)+'" aria-valuemin="0" aria-valuemax="'+total+'"><span style="width:'+((idx+1)/total*100)+'%"></span></div>'+heading(copy[0], copy[1])+(s==='food'||s==='pace'||s==='flights'?'':'<fieldset><legend'+(s==='ages'?' class="sr-only"':'')+'>'+({
             flights:'Your flights', dates:'Travel dates', budget:'Total trip budget', who:'Travel group', ages:'Traveler ages', style:state.answers.mode==='local'?'Day styles':'Trip styles', food:'Food preferences', pace:'Your days', musts:'Your requests'
         }
-        [s])+'</legend>')+content+(s==='food'||s==='pace'||s==='flights'?'':'</fieldset>')+'<div class="qfooter">'+btn('← Back', 'q-back', '')+btn('Skip', 'q-skip', '')+btn(s==='musts'||(a.mode==='local'&&s==='pace')?'Build my plan':s==='style'&&a.unsure?'See my options':'Continue →', 'q-continue', 'primary', validQuestion()?'':'disabled')+'</div></section>';
+        [s])+'</legend>')+content+(s==='food'||s==='pace'||s==='flights'?'':'</fieldset>')+'<div class="qfooter">'+btn('← Back', 'q-back', '')+(s==='dates'?'':btn('Skip', 'q-skip', ''))+btn(s==='musts'||(a.mode==='local'&&s==='pace')?'Build my plan':s==='style'&&a.unsure?'See my options':'Continue →', 'q-continue', 'primary', validQuestion()?'':'disabled')+'</div></section>';
 
         on('pace-summary-edit',function(){state.paceEditing=!state.paceEditing;question();});
         requestAnimationFrame(function(){
@@ -932,6 +929,7 @@
                 el.closest('.option').classList.toggle('stamped',el.checked);
                 var key=el.name;
                 if(key==='styles')a.styleSkipped=false;
+                if(key==='who')a.whoSkipped=false;
                 if(el.type==='checkbox') {
                     var values=a[key]||[];
                     if(el.checked&&key==='styles'&&values.length>=2) {
@@ -976,7 +974,10 @@
         });
         on('flexible', function(e) {
             a.flexible=e.target.checked;
-            if(a.flexible&&!a.monthSet)a.month=flexibleMonth();
+            if(a.flexible){
+                if(!a.monthSet)a.month='';
+                if(!a.lengthSet)a.length='';
+            }
             save();
             question();
             var f=get('flexible');
@@ -987,8 +988,10 @@
         bindWellnessDetails();on('stay-unsure',function(){a.stayUnsure=!a.stayUnsure;if(a.stayUnsure)a.stay='';save();question();if(!a.stayUnsure)get('stay').focus();});
         ['month', 'length', 'adults', 'kids', 'mustdos', 'stay'].forEach(function(k) {
             on(k, function(e) {
-                if(k==='month')a.monthSet=true;
-                a[k]=['month', 'length', 'adults', 'kids'].indexOf(k)>=0?Math.max(k==='kids'?0:k==='length'?2:1, Math.min(k==='length'?10:12, Math.floor(Number(e.target.value)))):e.target.value;
+                if(k==='month'||k==='length'){
+                    if(k==='month')a.monthSet=true; else a.lengthSet=true;
+                    a[k]=e.target.value===''?'':Math.max(k==='length'?2:1, Math.min(k==='length'?10:12, Math.floor(Number(e.target.value))));
+                } else a[k]=['adults', 'kids'].indexOf(k)>=0?Math.max(k==='kids'?0:1, Math.min(12, Math.floor(Number(e.target.value)))):e.target.value;
                 save();
                 if(k==='adults'||k==='kids')a.ages=[];
                 updateContinue();
@@ -1014,6 +1017,7 @@
         view.querySelectorAll('[data-age]').forEach(function(el) {
             el.oninput=function() {
                 var n=Number(el.dataset.age);
+                a.agesSkipped=false;
                 a.ages[n]=el.value===''?'':Number(el.value);
                 save();
                 updateContinue();
@@ -1030,24 +1034,21 @@
             var pages=questionPages(),at=pages.indexOf(s);go(at===0?(a.mode==='local'?'home':'start'):pages[at-1]);
         });
         on('q-skip', function() {
+            if(s==='dates')return;
             if(s==='flights'){a.arrivalTime='';a.returnTime='';a.arrivalFlight='';a.returnFlight='';a.flightsStep=true;}
-            if(s==='dates') {
-                a.flexible=true;
-                a.month=flexibleMonth();
-                a.length=5;
-            }
             if(s==='budget') {
                 a.budget=null;
                 a.budgetChoice='flexible';
             }
             if(s==='who') {
-                a.who='couple';
-                a.ages=[25, 25];
+                a.whoSkipped=true;
+                a.who='';
+                a.agesSkipped=true;
+                a.ages=[];
             }
             if(s==='ages') {
-                var n=a.who==='solo'?1:a.who==='couple'?2:Number(a.adults)+Number(a.kids);
-                a.ages=Array(n).fill(25);
-                if(a.kids)for(var k=a.adults; k<n; k++)a.ages[k]=10;
+                a.agesSkipped=true;
+                a.ages=[];
             }
             if(s==='style') {
                 a.styles=[];
@@ -1273,7 +1274,7 @@
         result.days.forEach(function(d){var template=p.days.find(function(t){return t.date===d.date;});if(template&&template.car)d.car=template.car;});
         p.destinationId=Engine.matchDestination(state.answers.destination).id;if(pickCatalog().generic)p.destinationId=GoNowPlaceSource.slug(state.answers.destination);p.id=p.destinationId+'-picks-'+p.start;p.days=result.days;p.unfit=result.unfit;p.bookingIssues=result.bookingIssues;p.curatedMismatch=false;p.banner='';
         p.start=result.days[0].date;p.end=result.days[result.days.length-1].date;p.flightTime=result.flightTime;
-        p.meta=Engine.dateRange(p.start,p.end)+' · '+(state.answers.who||'Travelers')+((state.answers.ages||[]).length?' · Ages '+state.answers.ages.join(' & '):'');
+        p.meta=Engine.planMeta(p.start,p.end,p.days.length,state.answers);
         result.days.forEach(function(d){d.items.forEach(function(i){if(i.photo)ITEM_PHOTOS[i.id]=i.photo;});});
         showPlan(Engine.applyAgeRules(p,state.answers),false);
     }
@@ -2265,7 +2266,7 @@
             Object.values(edits.items||{}).forEach(function(it){if(!it||typeof it!=='object')throw new Error('item');});
             Object.values(edits.added||{}).forEach(function(items){if(!Array.isArray(items)||!items.every(function(it){return it&&typeof it.id==='string'&&typeof it.title==='string'&&typeof it.time==='string';}))throw new Error('added');});
             var a=Object.assign({},defaults,normalizeAnswers(data.answers));
-            if(!Array.isArray(a.ages)||!Array.isArray(a.styles)||!Array.isArray(a.foodLoves)||!(a.length>=2&&a.length<=30)||(!a.flexible&&(!/^\d{4}-\d{2}-\d{2}$/.test(a.start)||!/^\d{4}-\d{2}-\d{2}$/.test(a.end)||!(new Date(a.end)>=new Date(a.start))||(new Date(a.end)-new Date(a.start)>29*864e5))))throw new Error('answers');
+            if(!Array.isArray(a.ages)||!Array.isArray(a.styles)||!Array.isArray(a.foodLoves)||(a.flexible?!(Number(a.month)>=1&&Number(a.month)<=12&&a.length>=2&&a.length<=30):(!/^\d{4}-\d{2}-\d{2}$/.test(a.start)||!/^\d{4}-\d{2}-\d{2}$/.test(a.end)||!(new Date(a.end)>=new Date(a.start))||(new Date(a.end)-new Date(a.start)>29*864e5))))throw new Error('answers');
             if(data.db!==undefined&&(!data.db||typeof data.db!=='object'||Array.isArray(data.db)))throw new Error('builder');
             state.shared=true;state.sharedEdits=data.edits;state.sharedBuilder=data.db||null;state.answers=a;openingDemo=data.id==='oahu-demo-2026-11';generate(true);
         }catch(e){state.shared=true;state.answers=Object.assign({},defaults);go('start');view.insertAdjacentHTML('afterbegin','<p class="banner" role="status">This trip link couldn’t be opened. Start a new adventure below.</p>');}

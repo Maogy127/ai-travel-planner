@@ -67,10 +67,45 @@ assert(!node('view').innerHTML.includes('rank-badge'));
     input.value='';input.oninput();assert.equal(api.state.answers.ages[0],'');assert.equal(node('[data-testid="q-continue"]').disabled,true);
     node('view').querySelectorAll=()=>[];
     click('q-back');assert.equal(api.state.screen,'who');api.go('ages');click('q-skip');
-    assert.equal(api.state.screen,'style');assert.equal(api.state.answers.ages.length,count);
-    assert.equal(api.state.answers.ages[count-1],kids?10:25);
+    assert.equal(api.state.screen,'style');assert.equal(api.state.answers.agesSkipped,true);
+    assert.deepEqual((api.state.answers.ages||[]).filter(function(x){return x!=='';}),[]);
     api.state.answers.ages=[30,31,32,33];api.go('ages');assert.equal(api.state.answers.ages.length,count);
   }
+  Object.assign(api.state.answers,originalAnswers);
+  api.state.answers.start='';api.state.answers.end='';api.state.answers.flexible=false;api.state.answers.month='';api.go('dates');
+  assert(!node('view').innerHTML.includes('data-testid="q-skip"'),'dates step has no Skip');
+  assert(/data-testid="q-continue"[^>]*\bdisabled/.test(node('view').innerHTML),'dates Continue starts disabled');
+  api.state.answers.flexible=true;api.state.answers.month='';api.state.answers.length='';api.go('dates');
+  assert(!node('view').innerHTML.includes('data-testid="q-skip"'));
+  assert(node('view').innerHTML.includes('Choose a month'));
+  assert(/data-testid="q-continue"[^>]*\bdisabled/.test(node('view').innerHTML),'flexible dates need a chosen month and length');
+  api.state.answers.month=2;api.state.answers.length=5;api.go('dates');
+  assert(!/data-testid="q-continue"[^>]*\bdisabled/.test(node('view').innerHTML),'chosen flexible dates enable Continue');
+
+  Object.assign(api.state.answers,originalAnswers,{who:'',ages:[],whoSkipped:false,agesSkipped:false,styles:[],styleSkipped:false,start:'2027-03-01',end:'2027-03-05',flexible:false});
+  api.go('who');click('q-skip');
+  assert.equal(api.state.answers.whoSkipped,true);assert.equal(api.state.answers.who,'');
+  assert.equal(api.state.screen,'ages');
+  api.go('who'); // stay in flow; then skip ages from a known group too
+  Object.assign(api.state.answers,{who:'couple',whoSkipped:false,ages:[]});
+  api.go('ages');click('q-skip');
+  assert.equal(api.state.answers.agesSkipped,true);
+  assert.deepEqual((api.state.answers.ages||[]).filter(x=>x!==''),[]);
+  var skippedMeta=ctx.Engine.planMeta('2027-03-01','2027-03-05',5,api.state.answers);
+  assert(!/Couple/.test(skippedMeta)||api.state.answers.who==='couple');
+  assert(!/Ages/.test(skippedMeta)&&!/25/.test(skippedMeta),'skipped ages stay out of the summary');
+  api.state.answers.whoSkipped=true;api.state.answers.who='';
+  skippedMeta=ctx.Engine.planMeta('2027-03-01','2027-03-05',5,api.state.answers);
+  assert(!/Couple/.test(skippedMeta)&&!/Ages/.test(skippedMeta)&&!/25/.test(skippedMeta));
+
+  api.go('style');
+  assert(node('view').innerHTML.includes('data-testid="q-skip"'));
+  click('q-skip');
+  assert.equal(api.state.answers.styleSkipped,true);
+  assert.deepEqual(api.state.answers.styles,[]);
+  var why=ctx.Engine.recommend(Object.assign({},api.state.answers,{destination:'Oahu',origin:'Los Angeles (LAX)'}))[0].whyFits.join(' ');
+  assert(!/Scenic viewpoints/.test(why),'skipped styles are not claimed in recommendations');
+
   Object.assign(api.state.answers,originalAnswers);
   node('photo-credits').onclick();
   assert.equal((node('view').innerHTML.match(/class="card credit-card"/g)||[]).length, ctx.PHOTO_CREDITS.length);

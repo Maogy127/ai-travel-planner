@@ -54,7 +54,7 @@ const memory=()=>{const map=new Map();return {getItem:k=>map.get(k)||null,setIte
  const beforeExpiry=calls.length;time+=8*86400000;await source.load('Seattle');assert.equal(calls.length,beforeExpiry+1,'place cache expires after seven days; city cache lasts longer');
  // Exercise the app's actual checkout with generic catalogs as the Oahu suite does.
  const app=fs.readFileSync('js/app.js','utf8');ctx.GoNowPlaceSource=S;
- ctx.Engine={buildTemplatePlan:a=>({start:a.start,end:a.end,days:[]}),matchDestination:()=>({id:'custom'}),dateRange:()=>'',applyAgeRules:p=>p};
+ ctx.Engine={buildTemplatePlan:a=>({start:a.start,end:a.end,days:[]}),matchDestination:()=>({id:'custom'}),dateRange:()=>'',planMeta:(start,end,n)=>((start||'')+' · '+(n||0)+' days'),applyAgeRules:p=>p};
  ctx.readTrips=()=>[];ctx.ITEM_PHOTOS={};ctx.showPlan=p=>ctx.state.plan=p;
  vm.runInContext(app.slice(app.indexOf('    function checkoutPicks('),app.indexOf('    function pickScreen(')),ctx);
  for(const [city,cat] of [['Seattle',c],['Tokyo',tokyo.catalog]]){

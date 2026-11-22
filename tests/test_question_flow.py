@@ -61,7 +61,15 @@ async def checks(browser):
                         await pg.locator('[data-testid=pace-option][data-value=gentle]').check()
                         await edit.click()
                         await expect(pg.get_by_test_id('pace-summary')).to_contain_text('Gentle')
-                    await pg.get_by_test_id('q-skip').click()
+                    if page == 'dates':
+                        await expect(pg.get_by_test_id('q-skip')).to_have_count(0)
+                        await expect(pg.get_by_test_id('q-continue')).to_be_disabled()
+                        await pg.get_by_test_id('date-start').fill('2027-03-01')
+                        await pg.get_by_test_id('date-end').fill('2027-03-05')
+                        await expect(pg.get_by_test_id('q-continue')).to_be_enabled()
+                        await pg.get_by_test_id('q-continue').click()
+                    else:
+                        await pg.get_by_test_id('q-skip').click()
                     if page == 'style' and mode == 'trip':
                         await pg.get_by_test_id('fork-yes').click()
                 if mode == 'local':
