@@ -167,7 +167,7 @@
     earth:'Good food and sleep'
   };
   function introInner(){
-    return '<p class="el-intro-line">Travel that balances you: 水 · 火 · 木 · 风 · 土</p>'
+    return '<p class="el-intro-line">Travel that balances you: <span class="el-intro-marks">水 · 火 · 木 · 风 · 土</span></p>'
       +'<ul class="el-intro-list">'+ORDER.map(id=>{
         const e=BY[id];
         return '<li class="el-intro-item"><span class="el-dot is-on el-'+id+'" aria-hidden="true">'+icon(id,20)+'</span><span><strong>'+esc(e.name)+' · '+esc(e.nameZh)+'</strong><small>'+esc(MEANINGS[id])+'</small></span></li>';
