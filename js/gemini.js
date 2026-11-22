@@ -64,8 +64,9 @@ function sdk(){
  sdkJob=(async()=>{
   const c=cfg(),imp=root.GONOW_AI_IMPORTER||(u=>import(u));
   const [app,ai,check]=await Promise.all([imp(c.sdk+'firebase-app.js'),imp(c.sdk+'firebase-ai.js'),c.appCheckSiteKey?imp(c.sdk+'firebase-app-check.js'):null]);
-  const a=app.getApps().find(x=>x.name==='gonow-ai')||app.initializeApp(root.GONOW_FIREBASE_CONFIG,'gonow-ai');
-  // App Check is enforced for AI Logic: a reCAPTCHA v3 or reCAPTCHA Enterprise site key (public) attests this site.
+  const a=app.getApps().find(x=>x.name==='gonow-ai')||app.initializeApp(c.firebase||root.GONOW_FIREBASE_CONFIG,'gonow-ai');
+  // AI runs in its own Firebase app (c.firebase = project gonow-ai-cb7a3); accounts/Firestore keep the main app.
+  // App Check for AI Logic: a reCAPTCHA v3 or reCAPTCHA Enterprise site key (public) attests this site.
   if(check)check.initializeAppCheck(a,{provider:c.appCheckProvider==='enterprise'?new check.ReCaptchaEnterpriseProvider(c.appCheckSiteKey):new check.ReCaptchaV3Provider(c.appCheckSiteKey),isTokenAutoRefreshEnabled:true});
   return {ai,inst:ai.getAI(a,{backend:new ai.GoogleAIBackend()})};
  })();
