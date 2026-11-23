@@ -2249,6 +2249,43 @@ html.reduce-motion button:active{transform:none!important}
 .el-intro-dialog h2{font-family:var(--font-display);font-weight:500;font-size:28px;margin:0 0 8px}
 .el-intro-dialog .el-intro-line{font-size:16px}
 .el-intro-dialog [data-testid=elements-got-it]{width:100%;margin-top:8px}
+.el-swap{width:32px;height:32px;min-width:32px;min-height:32px;padding:0;border:0;border-radius:50%;background:transparent;color:inherit;display:grid;place-items:center;box-shadow:none}
+.wuxing-bar{margin:8px 0 16px;padding:12px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.wuxing-intro,.wuxing-badges,.element-kicker{margin:0;font-size:13px;line-height:1.4;color:var(--ink-2)}
+.wuxing-tools,.element-challenge .row,.balance-buddy .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:8px}
+.wuxing-toggle{display:flex;align-items:center;gap:8px;min-height:44px;font-size:14px}
+.element-challenge,.balance-buddy{margin:8px 0;padding:10px 12px;border-radius:14px;background:var(--soft);border:1px solid var(--line)}
+.element-flip{min-height:44px}
+.element-checkin{min-height:32px;padding:4px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface);font-size:12px}
+.element-checkin.is-on{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.balance-buddy{display:flex;gap:10px;align-items:flex-start}
+.balance-buddy p{margin:0 0 4px;font-size:13px;line-height:1.35}
+.jindou{display:block;flex:none}
+.wuxing-recap,.wuxing-swap{width:min(420px,calc(100vw - 24px));border:0;border-radius:18px;padding:18px;background:var(--surface);color:var(--ink)}
+.wuxing-recap h2,.wuxing-swap h2{font-family:var(--font-display);font-weight:500;margin:0 0 8px}
+.wuxing-swap button,.wuxing-recap button{display:block;width:100%;margin-top:8px;text-align:left}
+.wuxing-toast{position:fixed;left:16px;right:16px;bottom:16px;margin:0 auto;max-width:420px;padding:12px 14px;border-radius:14px;background:var(--ink);color:var(--surface);z-index:80}
+.el-row.is-wuxing-pop .el-dot.is-on{animation:wuxing-pop .5s ease}
+@keyframes wuxing-pop{from{transform:scale(.8)}to{transform:none}}
+@media(prefers-reduced-motion:reduce){.el-row.is-wuxing-pop .el-dot.is-on{animation:none}}
+html.reduce-motion .el-row.is-wuxing-pop .el-dot.is-on{animation:none}
+.cx-elements{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}
+.cx-el{display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 12px;border-radius:999px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px}
+.cx-el[aria-pressed=true]{border-color:currentColor}
+.cx-el.el-water[aria-pressed=true]{color:var(--el-water);background:color-mix(in oklch,var(--el-water) 16%,var(--surface))}
+.cx-el.el-fire[aria-pressed=true]{color:var(--el-fire);background:color-mix(in oklch,var(--el-fire) 14%,var(--surface))}
+.cx-el.el-wood[aria-pressed=true]{color:var(--el-wood);background:color-mix(in oklch,var(--el-wood) 16%,var(--surface))}
+.cx-el.el-wind[aria-pressed=true]{color:var(--ink-2);background:color-mix(in oklch,var(--el-wind) 72%,var(--surface))}
+.cx-el.el-earth[aria-pressed=true]{color:var(--el-earth-deep);background:color-mix(in oklch,var(--el-earth) 28%,var(--surface))}
+.cx-el-all[aria-pressed=true]{background:var(--ink);color:var(--surface);border-color:var(--ink)}
+.cx-el-tags{display:flex;align-items:center;gap:4px;margin:4px 0}
+.cx-el-dot{display:grid;place-items:center;width:18px;height:18px;border-radius:50%}
+.cx-el-dot.el-water.is-on{color:var(--el-water);background:color-mix(in oklch,var(--el-water) 16%,transparent)}
+.cx-el-dot.el-fire.is-on{color:var(--el-fire);background:color-mix(in oklch,var(--el-fire) 14%,transparent)}
+.cx-el-dot.el-wood.is-on{color:var(--el-wood);background:color-mix(in oklch,var(--el-wood) 16%,transparent)}
+.cx-el-dot.el-wind.is-on{color:var(--ink-2);background:color-mix(in oklch,var(--el-wind) 72%,transparent)}
+.cx-el-dot.el-earth.is-on{color:var(--el-earth-deep);background:color-mix(in oklch,var(--el-earth) 28%,transparent)}
+.cx-all-five{font-size:11px;color:var(--ink-2);margin-left:4px}
 /* ---------- Free AI bar + daily weather (Nov 20, 2026) ---------- */
 .ai-bar{position:relative;margin:16px 0 12px;padding:16px 16px 12px;display:grid;gap:12px;border-radius:24px;
   background:linear-gradient(135deg,color-mix(in srgb,var(--accent-soft) 85%,var(--surface)) 0%,var(--surface) 70%);

@@ -22,9 +22,27 @@ function nightsOf(t){const a=Date.parse(t.start),b=Date.parse(t.end);return Numb
 function dayLines(plan){return (plan&&plan.days||[]).slice(0,21).map(d=>({theme:cut(d.theme,60),stops:(d.items||[]).filter(i=>!isFlight(i)).slice(0,12).map(i=>cut(i.title,80))}));}
 function cover(destination){const m=root.Engine&&root.Engine.matchDestination&&root.Engine.matchDestination(destination||'');const id=m&&m.id;return id&&/^[a-z]+$/.test(id)?'images/'+id+'.jpg':'';}
 // The public card for a trip: only places, day themes and a cleaned copy of the plan.
+const EL_ORDER=['water','fire','wood','wind','earth'];
+function tagPost(post){
+ const E=root.GoNowElements;
+ const listed=Array.isArray(post&&post.elements)?post.elements.filter(id=>EL_ORDER.includes(id)):[];
+ if(!E)return {elements:listed,allFive:!!(post&&post.allFive)};
+ const found=new Set(listed);
+ let allFive=!!(post&&post.allFive);
+ const planDays=post&&post.trip&&post.trip.plan&&post.trip.plan.days;
+ const sources=planDays&&planDays.length?planDays:(post&&post.days||[]).map(d=>({items:(d.stops||[]).map(title=>({title:title,kind:/breakfast|lunch|dinner|meal/i.test(title)?'meal':'activity'}))}));
+ sources.forEach(d=>{
+  const day=new Set();
+  (d.items||[]).forEach(it=>E.of(it).forEach(id=>{found.add(id);day.add(id);}));
+  if(day.size>=5)allFive=true;
+ });
+ if(post&&post.kind==='checkin')E.of({title:post.title||post.place,kind:'meal'}).forEach(id=>found.add(id));
+ return {elements:EL_ORDER.filter(id=>found.has(id)),allFive:allFive};
+}
 function tripPost(trip,builder){const hotel=hotelOf(trip,trip.plan),avoid=[trip.destination,trip.answers&&trip.answers.destination,trip.plan&&trip.plan.title].join(' '),plan=cleanPlan(trip.plan,hotel,avoid);const dest=cut(trip.destination||plan&&plan.title,80);const days=nightsOf(trip);
  const post={kind:'trip',title:cut(days+' days in '+dest.split(',')[0],80),line:cut(dayLines(plan).map(d=>d.theme).filter(Boolean).slice(0,3).join(' · '),120),destination:dest,photo:cover(dest),days:dayLines(plan),
   trip:{destination:dest,nights:days,start:String(trip.start||'').slice(0,10),end:String(trip.end||'').slice(0,10),answers:{destination:dest,styles:(trip.answers&&trip.answers.styles||[]).slice(0,6),level:trip.answers&&trip.answers.level||''},plan,builder:cleanBuilder(builder,hotel,avoid)}};
+ const tags=tagPost(post);post.elements=tags.elements;post.allFive=tags.allFive;
  if(JSON.stringify(post).length>300000){delete post.trip.builder;}if(JSON.stringify(post).length>300000)return null;return post;}
 function checkinPost(place,city,note){return {kind:'checkin',title:cut(place,80),line:cut(note,140)||cut(city,80),destination:cut(city,80),place:cut(place,80),note:cut(note,140),photo:cover(city)};}
 const safeId=s=>String(s).replace(/[^A-Za-z0-9_-]/g,'-').slice(0,120);
@@ -40,28 +58,42 @@ function create(app){
  function media(p){return p.photo&&/^images\/[a-z-]+\.jpg$/.test(p.photo)?'<img loading="lazy" src="'+esc(p.photo)+'" alt="">':'<span class="community-placeholder" aria-hidden="true">'+esc((p.destination||p.title||'?').trim()[0]||'?')+'</span>';}
  // Design preview (Xiaohongshu-style feed). Extra photos, likes and the extra cards below are example data only.
  const EXTRA={'ex-oahu':['images/activity-diamond-head.jpg','images/activity-kualoa.jpg','images/activity-lanikai.jpg','images/food-giovannis.jpg'],'ex-lisbon':[],'ex-kyoto':[],'ex-c-giovannis':['images/activity-sharks-cove.jpg'],'ex-c-leonards':['images/activity-waikiki-sunset.jpg']};
- const MOCK=[['ex-m-bali','Slow week in Bali','Rice terraces, yoga, sunsets','Bali','images/bali.jpg'],['ex-m-reykjavik','Reykjavik, lights & lagoons','Hot springs and the Golden Circle','Reykjavik','images/reykjavik.jpg'],['ex-m-barcelona','Barcelona long weekend','Tapas, Gaudí and the beach','Barcelona','images/barcelona.jpg'],['ex-m-banff','Banff lakes road trip','Moraine, Louise and easy hikes','Banff','images/banff.jpg'],['ex-m-capetown','Cape Town in 6 days','Table Mountain and the Cape','Cape Town','images/capetown.jpg']].map(([id,title,line,destination,photo])=>({id,kind:'trip',title,line,destination,photo,mock:true}));
+ const MOCK=[['ex-m-bali','Slow week in Bali','Rice terraces, yoga, sunsets','Bali','images/bali.jpg',['water','wood','wind']],['ex-m-reykjavik','Reykjavik, lights & lagoons','Hot springs and the Golden Circle','Reykjavik','images/reykjavik.jpg',['water','earth']],['ex-m-barcelona','Barcelona long weekend','Tapas, Gaudí and the beach','Barcelona','images/barcelona.jpg',['earth','water','wood']],['ex-m-banff','Banff lakes road trip','Moraine, Louise and easy hikes','Banff','images/banff.jpg',['wood','water']],['ex-m-capetown','Cape Town in 6 days','Table Mountain and the Cape','Cape Town','images/capetown.jpg',['wood','earth']]].map(([id,title,line,destination,photo,elements])=>({id,kind:'trip',title,line,destination,photo,elements,mock:true}));
  const hash=s=>{let h=7;for(const c of String(s))h=(h*31+c.charCodeAt(0))>>>0;return h;};
  const likes=p=>p.example?18+hash(p.id)%420:null;
  const photos=p=>[p.photo,...(EXTRA[p.id]||[])].filter(x=>x&&/^images\/[a-z-]+\.jpg$/.test(x));
  const byline=p=>p.example?'Example':(p.ownerName||'Traveler');
  const avatar=p=>'<span class="cx-avatar" aria-hidden="true">'+esc(byline(p).trim()[0]||'T')+'</span>';
- function card(p){const tall=hash(p.id)%3;return '<button class="community-card cx-card cx-h'+tall+'" data-testid="community-card" data-post="'+esc(p.id)+'"><span class="community-media">'+media(p)+(p.example?'<span class="example-tag" data-testid="example-tag">Example</span>':'')+'</span><strong>'+esc(p.title)+'</strong><small class="cx-line">'+esc(p.kind==='checkin'?(p.destination+(p.note?' · '+p.note:'')):p.line||p.destination)+'</small><span class="cx-meta">'+avatar(p)+'<span class="cx-name">'+esc(byline(p))+'</span>'+(likes(p)!==null?'<span class="cx-likes" aria-label="'+likes(p)+' likes">'+(window.GoNowIcons?window.GoNowIcons.icon('heart',16):'')+''+likes(p)+'</span>':'')+'</span></button>';}
+ const EL_LABEL={water:['Water','水'],fire:['Fire','火'],wood:['Wood','木'],wind:['Wind','风'],earth:['Earth','土']};
+ function elementTags(p){const tag=tagPost(p);if(!tag.elements.length)return '';const icon=id=>root.GoNowIcons?root.GoNowIcons.icon(id,14):'';return '<span class="cx-el-tags" data-testid="community-elements">'+tag.elements.map(id=>'<i class="cx-el-dot el-'+id+' is-on" title="'+esc(EL_LABEL[id][0])+'">'+icon(id)+'</i>').join('')+(tag.allFive?'<span class="cx-all-five">All five</span>':'')+'</span>';}
+ function card(p){const tall=hash(p.id)%3;return '<button class="community-card cx-card cx-h'+tall+'" data-testid="community-card" data-post="'+esc(p.id)+'"><span class="community-media">'+media(p)+(p.example?'<span class="example-tag" data-testid="example-tag">Example</span>':'')+'</span><strong>'+esc(p.title)+'</strong><small class="cx-line">'+esc(p.kind==='checkin'?(p.destination+(p.note?' · '+p.note:'')):p.line||p.destination)+'</small>'+elementTags(p)+'<span class="cx-meta">'+avatar(p)+'<span class="cx-name">'+esc(byline(p))+'</span>'+(likes(p)!==null?'<span class="cx-likes" aria-label="'+likes(p)+' likes">'+(window.GoNowIcons?window.GoNowIcons.icon('heart',16):'')+''+likes(p)+'</span>':'')+'</span></button>';}
  function mine(p){const u=user();return !!(u&&!p.example&&p.ownerId===u.uid);}
- let query='';
+ let query='',pickedEls=[],wantAllFive=false;
  const TABS=[['all','For you'],['trip','Nearby trips'],['checkin','Food']];
+ function elementChips(){
+  const icon=id=>root.GoNowIcons?root.GoNowIcons.icon(id,16):'';
+  return '<div class="cx-elements" data-testid="element-filters" role="group" aria-label="Filter by element">'+EL_ORDER.map(id=>'<button type="button" class="cx-el el-'+id+'" data-testid="element-filter" data-element="'+id+'" aria-pressed="'+(pickedEls.includes(id))+'">'+icon(id)+'<span>'+EL_LABEL[id][0]+' · '+EL_LABEL[id][1]+'</span></button>').join('')+'<button type="button" class="cx-el cx-el-all" data-testid="element-filter-all" aria-pressed="'+(wantAllFive?'true':'false')+'">All five</button></div>';
+ }
+ function matchesElements(p){
+  const tag=tagPost(p);
+  if(wantAllFive&&!tag.allFive)return false;
+  return pickedEls.every(id=>tag.elements.includes(id));
+ }
  function community(view){
   if(!TABS.some(([k])=>k===tab))tab='all';
   const q=query.trim().toLowerCase();
-  const list=all().concat(examples?MOCK.map(p=>Object.assign({example:true},p)):[]).filter(p=>tab==='all'||p.kind===tab).filter(p=>!q||[p.title,p.destination,p.line,p.note].join(' ').toLowerCase().includes(q));
+  const list=all().concat(examples?MOCK.map(p=>Object.assign({example:true},p)):[]).filter(p=>tab==='all'||p.kind===tab).filter(matchesElements).filter(p=>!q||[p.title,p.destination,p.line,p.note].join(' ').toLowerCase().includes(q));
   view.innerHTML='<section class="shell community-page cx-page" data-testid="community-page"><h1 tabindex="-1" id="step-title">Community</h1><p class="muted cx-note">Design preview · cards marked Example use sample data.</p>'+
    '<label class="cx-search"><span class="sr-only">Search community</span><input type="search" data-testid="community-search" placeholder="Search trips, cities, food" value="'+esc(query)+'"></label>'+
    '<div class="community-tabs cx-tabs" role="tablist">'+TABS.map(([k,l])=>'<button role="tab" data-testid="community-tab-'+(k==='all'?'foryou':k)+'" aria-selected="'+(tab===k)+'" data-tab="'+k+'">'+l+'</button>').join('')+'</div>'+
+   elementChips()+
    (tab==='checkin'?'<button class="outline" data-testid="checkin-start">Check in at a restaurant</button>':'')+
    (posts===null?'<p class="muted" data-testid="community-loading">Loading…</p>':'')+(status==='offline'&&posts!==null?'<p class="muted" data-testid="community-offline">Showing examples. Couldn’t reach the community right now.</p>':'')+
-   '<div class="community-grid cx-feed" data-testid="community-grid">'+list.map(card).join('')+'</div>'+(posts!==null&&!list.length?'<p class="muted">Nothing shared yet.</p>':'')+
+   '<div class="community-grid cx-feed" data-testid="community-grid">'+list.map(card).join('')+'</div>'+(posts!==null&&!list.length?'<p class="muted" data-testid="element-filter-empty">'+(pickedEls.length||wantAllFive?'No trips with those elements.':'Nothing shared yet.')+'</p>':'')+
    '<button class="cx-fab" data-testid="community-fab" aria-label="Share a trip">＋ Share</button></section>';
   view.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;community(view);});
+  view.querySelectorAll('[data-testid=element-filter]').forEach(b=>b.onclick=()=>{const id=b.dataset.element;pickedEls=pickedEls.includes(id)?pickedEls.filter(x=>x!==id):pickedEls.concat(id);community(view);});
+  const allFiveBtn=view.querySelector('[data-testid=element-filter-all]');if(allFiveBtn)allFiveBtn.onclick=()=>{wantAllFive=!wantAllFive;community(view);};
   const search=view.querySelector('[data-testid=community-search]');search.oninput=()=>{query=search.value;const at=search.selectionStart;community(view);const again=view.querySelector('[data-testid=community-search]');again.focus();try{again.setSelectionRange(at,at);}catch(e){}};
   const pool=()=>all().concat(MOCK.map(p=>Object.assign({example:true},p)));
   view.querySelectorAll('[data-post]').forEach(b=>b.onclick=()=>details(pool().find(p=>String(p.id)===b.dataset.post),view));
@@ -135,6 +167,6 @@ function create(app){
  const target=document.getElementById('view');if(target)new MutationObserver(shareItem).observe(target,{childList:true,subtree:true});
  return {render,refresh,tripPost,homeCity,_posts:()=>posts};
 }
-root.GoNowCommunity={create,tripPost,checkinPost,cleanPlan,cleanBuilder,scrub};
+root.GoNowCommunity={create,tripPost,checkinPost,cleanPlan,cleanBuilder,scrub,tagPost};
 if(typeof module!=='undefined')module.exports=root.GoNowCommunity;
 })(typeof window==='undefined'?globalThis:window);

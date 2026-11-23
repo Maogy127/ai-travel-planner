@@ -139,7 +139,7 @@
     const ids=of(item);if(!ids.length)return '';
     const size=(opts&&opts.size)||14;
     const names=ids.map(label).join(', ');
-    return '<span class="el-icons" data-testid="item-elements" data-elements="'+esc(ids.join(' '))+'" aria-label="'+esc(names)+'">'+ids.map(id=>icon(id,size)).join('')+'</span>';
+    return '<span class="el-icons" data-testid="item-elements" data-elements="'+esc(ids.join(' '))+'" aria-label="'+esc(names)+'">'+ids.map(id=>'<button type="button" class="el-swap" data-testid="element-swap" data-element="'+id+'" aria-label="See other '+esc(BY[id].name)+' places">'+icon(id,size)+'</button>').join('')+'</span>';
   }
 
   function detailHTML(item){
