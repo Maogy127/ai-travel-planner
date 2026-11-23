@@ -57,18 +57,33 @@ function elementOf(day){
   const n=Number(String(day.date||'1').slice(-2))||1;
   return list[n%list.length];
 }
-function challengeText(element, items){
-  const stop=items.find(it=>ofItem(it).includes(element)&&!['travel','flight','prep'].includes(it.kind));
+function sunsetMinute(){
+  const text=(plan()&&plan().weather&&plan().weather.text)||'';
+  const m=String(text).match(/sunset approx\. (\d{1,2}:\d{2})\s*(AM|PM)/i);
+  if(m&&root.DayBuilder&&root.DayBuilder.parseClock)return root.DayBuilder.parseClock(m[1]+' '+m[2]);
+  return 17*60+48;
+}
+function clockOf(n){return root.DayBuilder&&root.DayBuilder.clock?root.DayBuilder.clock(n):'';}
+function feasibleStop(it, day){
+  if(!day||it.start==null)return true;
+  const flight=dayItems(day).find(x=>x.kind==='flight'||x.flight);
+  if(flight&&it!==flight&&it.start<(flight.start||0))return false;
+  if(/sunset|beach|ocean|sea|swim|snorkel|dive|pool/i.test(it.title||'')&&it.start>=sunsetMinute())return false;
+  return true;
+}
+function challengeText(element, items, day){
+  const stop=(items||[]).find(it=>ofItem(it).includes(element)&&!['travel','flight','prep'].includes(it.kind)&&feasibleStop(it, day));
   const name=stop?short(stop.title):'today’s plan';
   if(element==='water'){
-    if(stop&&/beach|pool|ocean|sea|dive|sunset/i.test(stop.title))return 'Visit the water at '+name+' and stay only as deep as feels easy.';
+    if(stop&&/parasail/i.test(stop.title))return 'If you go up at '+name+', keep the harness on and skip it when the wind feels like too much.';
+    if(stop&&/beach|pool|ocean|sea|dive|sunset/i.test(stop.title)&&feasibleStop(stop, day))return 'Visit the water at '+name+' and stay only as deep as feels easy.';
     return 'Drink a full glass of water before '+name+'.';
   }
-  if(element==='fire')return 'Take the lively part of '+name+' at a pace where you can still talk.';
-  if(element==='wood')return 'Start '+name+' with an easy walk, and turn back whenever you like.';
-  if(element==='wind')return 'Take three slow breaths before '+name+'.';
+  if(element==='fire')return stop?'Take the lively part of '+name+' at a pace where you can still talk.':'Take a short walk at a pace where you can still talk.';
+  if(element==='wood')return stop?'Start '+name+' with an easy walk, and turn back whenever you like.':'Take an easy walk and turn back whenever you like.';
+  if(element==='wind')return 'Take three slow breaths'+(stop?' before '+name:'')+'.';
   if(stop&&/check[- ]?in|settle in|hotel/i.test(stop.title))return 'After you check in, sit quietly for a few minutes before dinner.';
-  return 'Sit down for '+name+' and leave your phone in your bag.';
+  return stop?'Sit down for '+name+' and leave your phone in your bag.':'Sit down for a few minutes and leave your phone in your bag.';
 }
 function checkedElements(day, data){
   const found=new Set();
@@ -157,22 +172,68 @@ function catalog(){
   const lists=picks?picks.activities.concat(picks.restaurants):[];
   return lists;
 }
+function mealRole(item){
+  const title=String(item.title||item.name||'').toLowerCase();
+  if(/\bbreakfast|grab-and-go\b/.test(title))return 'breakfast';
+  if(/\blunch\b/.test(title))return 'lunch';
+  if(/\bdinner|supper\b/.test(title))return 'dinner';
+  if(/\bbrunch\b/.test(title))return 'breakfast';
+  if(/\bsnack\b/.test(title))return 'snack';
+  if(Array.isArray(item.meals)&&item.meals.length===1)return item.meals[0];
+  if((item.kind==='meal'||item.meals)&&item.start!=null)return item.start<630?'breakfast':item.start<870?'lunch':item.start<1080?'snack':'dinner';
+  return '';
+}
+function fineDining(pick){
+  return root.GoNowBudget&&root.GoNowBudget.priceRank(pick.price)>=4||/\b(fine dining|tasting menu|omakase|la mer)\b/i.test((pick.name||'')+' '+(pick.cuisine||'')+' '+(pick.intro||''));
+}
 function fitsPick(pick, a){
   if(pick.meals&&root.GoNowDiet){
     const hit=root.GoNowDiet.match({kind:'meal',title:pick.name,desc:pick.intro||'',tags:pick.tags||[]},a);
     if(hit.status==='conflict')return false;
   }
-  if(root.GoNowBudget&&pick.price&&!root.GoNowBudget.fits(pick,a))return false;
+  if(!root.GoNowBudget)return !fineDining(pick);
+  if(root.GoNowBudget.explicit(a, pick))return true;
+  if(fineDining(pick)&&!root.GoNowBudget.wantsFineDining(a))return false;
+  return root.GoNowBudget.fits(pick, a);
+}
+function sameRole(pick, item){
+  const meal=mealRole(item);
+  const pickMeal=Array.isArray(pick.meals)&&pick.meals.length;
+  if(meal)return pickMeal&&pick.meals.includes(meal);
+  if(item.kind==='meal'||item.meals)return !!pickMeal;
+  return !pickMeal;
+}
+function openAt(pick, item, date){
+  const start=Number.isFinite(item.start)?item.start:null;
+  if(start==null)return true;
+  const length=Math.min(item.duration||45, pick.duration||45, 90);
+  const hrs=pick.hours||{};
+  if(hrs.open!=null&&(start<Number(hrs.open)||start+Math.min(length,30)>Number(hrs.close)))return false;
+  if(/sunset/i.test(pick.name||'')&&(start<sunsetMinute()-90||start>=sunsetMinute()))return false;
+  if(/sunrise/i.test(pick.name||'')&&start>8*60)return false;
+  if(/dive|snorkel|surf|parasail/i.test(pick.name||'')&&(start<8*60||start>=sunsetMinute()-60))return false;
+  if(date&&root.DayBuilder&&root.DayBuilder.closedOn&&root.DayBuilder.closedOn(Object.assign({title:pick.name}, pick), date))return false;
   return true;
 }
-function alternatives(element, item){
+function sameEnergy(pick, item){
+  const calm=item.kind==='rest'||/free time|downtime|pool|sunset photo|picnic/i.test(item.title||'');
+  const bold=/dive|scuba|snorkel|surf|parasail|summit|jurassic|utv|cliff|hike|crater|falls|pillbox|lighthouse|waimea|sharks cove|north shore/i.test(pick.name||'');
+  if(calm&&bold)return false;
+  const itemBold=/dive|scuba|parasail|hike|crater|pillbox|lighthouse|trail/i.test(item.title||'');
+  const pickCalm=/sunset photo|pool & beach|free time/i.test(pick.name||'');
+  if(itemBold&&pickCalm)return false;
+  return true;
+}
+function alternatives(element, item, date){
   const a=answers();
   const title=String(item.title||'').toLowerCase();
   return catalog().filter(pick=>{
     if(!pick||!pick.name||title.includes(String(pick.name).toLowerCase()))return false;
-    const shaped={title:pick.name,kind:pick.meals?'meal':'activity',category:pick.category,tags:pick.tags,effort:pick.effort};
+    if(/north shore|waimea|pipeline|laniakea|sharks cove|sunset beach/i.test((pick.name||'')+' '+(pick.area||'')))return false;
+    if(!sameRole(pick, item)||!sameEnergy(pick, item)||!openAt(pick, item, date))return false;
+    const shaped={title:pick.name,kind:pick.meals?'meal':'activity',category:pick.category,tags:pick.tags,effort:pick.effort,style:pick.meals?'food':''};
     if(!ofItem(shaped).includes(element))return false;
-    return fitsPick(pick,a);
+    return fitsPick(pick, a);
   }).slice(0,4);
 }
 function missingElement(day){
@@ -182,23 +243,82 @@ function missingElement(day){
   if(have.length===1)return missing[0];
   return missing.includes('earth')?'earth':missing[0];
 }
-function suggestionFor(element){
-  const gentleName=/beach|walk|garden|sunset|cafe|pool|park|tea|picnic/i;
-  const skip=/dive|scuba|parasail|summit|jurassic|utv|cliff|snorkel|hike|crater/i;
-  const match=catalog().find(pick=>{
-    if(skip.test(pick.name||'')||!gentleName.test(pick.name||'')||(pick.duration||60)>60)return false;
-    const shaped={title:pick.name,kind:pick.meals?'meal':'activity',category:pick.category,tags:pick.tags,effort:pick.effort};
-    return ofItem(shaped).includes(element)&&fitsPick(pick,answers());
+function arrivalCursor(day, items){
+  let cursor=8*60;
+  const flight=items.find(it=>it.kind==='flight'||it.flight);
+  if(flight)cursor=Math.max(cursor,(flight.start||0)+(flight.duration||0));
+  const a=answers();
+  const arrivalDay=day&&day.date&&(day.date===(a.start||(plan()&&plan().start)));
+  if(arrivalDay&&!flight&&a.arrivalTime&&root.DayBuilder&&root.DayBuilder.parseClock){
+    const at=root.DayBuilder.parseClock(a.arrivalTime);
+    if(at!=null)cursor=Math.max(cursor, at);
+  }
+  const checkin=items.find(it=>/check[- ]?in/i.test(it.title||'')||(arrivalDay&&it.kind==='stay'));
+  if(arrivalDay&&checkin)cursor=Math.max(cursor, checkin.start||cursor);
+  return {cursor:cursor, checkin:checkin};
+}
+function freeWindows(day){
+  const items=dayItems(day).filter(it=>it.start!=null).sort((a,b)=>a.start-b.start);
+  const windows=[];
+  const gate=arrivalCursor(day, items);
+  let cursor=gate.cursor;
+  items.forEach(it=>{
+    const end=(it.start||0)+(it.duration||0);
+    const transit=it===gate.checkin;
+    if(!transit&&it.start-cursor>=30)windows.push([cursor, it.start]);
+    cursor=Math.max(cursor, end);
   });
-  if(match)return {title:match.name,place:match.area||'Nearby',duration:Math.min(match.duration||60,60),kind:match.meals?'meal':'activity'};
-  const gentle={
-    water:{title:'Quiet time by the water',place:'Near your hotel',duration:20,kind:'activity'},
-    fire:{title:'A short brisk walk',place:'Near your hotel',duration:10,kind:'activity'},
-    wood:{title:'Easy walk near your hotel',place:'Near your hotel',duration:30,kind:'activity'},
-    wind:{title:'Five quiet minutes outside',place:'Near your hotel',duration:10,kind:'activity'},
-    earth:{title:'A seated snack',place:'Near your hotel',duration:20,kind:'meal'}
+  if(22*60-cursor>=30)windows.push([cursor, 22*60]);
+  return windows;
+}
+function placeIn(windows, length, earliest, latest){
+  const win=windows.find(([a,b])=>b-a>=length+10&&a>=earliest&&a+length<=latest);
+  return win?win[0]:null;
+}
+function atHotel(day, start){
+  const stay=dayItems(day).find(it=>it.kind==='stay'||/check[- ]?in|hotel/i.test(it.title||''));
+  if(!stay||stay.start==null)return false;
+  return start>=(stay.start||0)+(stay.duration||0);
+}
+function suggestionFor(element, day){
+  if(!day)return null;
+  const windows=freeWindows(day);
+  if(!windows.length)return null;
+  const set=sunsetMinute();
+  const skip=/dive|scuba|parasail|summit|jurassic|utv|cliff|snorkel|hike|crater|turtle|north shore|sunset|sunrise/i;
+  const gentleName=/beach|walk|garden|cafe|pool|park|tea|picnic/i;
+  const match=catalog().find(pick=>{
+    const name=pick.name||'';
+    if(skip.test(name)||!gentleName.test(name)||(pick.duration||60)>40)return false;
+    const length=Math.min(pick.duration||30, 30);
+    const daylight=/beach|ocean|pool/i.test(name);
+    const latest=daylight?Math.min((pick.hours&&pick.hours.close)||set, set-15):(pick.hours&&pick.hours.close)||21*60+30;
+    const start=placeIn(windows, length, 8*60, latest);
+    if(start==null)return false;
+    const hrs=pick.hours||{};
+    if(hrs.open!=null&&(start<Number(hrs.open)||start+length>Number(hrs.close)))return false;
+    const shaped={title:name,kind:pick.meals?'meal':'activity',category:pick.category,tags:pick.tags,effort:pick.effort};
+    if(!ofItem(shaped).includes(element)||!fitsPick(pick, answers()))return false;
+    pick._start=start;pick._length=length;
+    return true;
+  });
+  if(match)return {title:match.name,place:match.area||'Nearby',duration:match._length,kind:match.meals?'meal':'activity',start:match._start};
+  if(element==='water'){
+    const start=placeIn(windows, 20, set, 22*60);
+    if(start!=null&&atHotel(day, start))return {title:'A few quiet minutes by the hotel pool',place:'Your hotel',duration:20,kind:'activity',start:start};
+    return null;
+  }
+  const indoor={
+    fire:{title:'A short walk near the hotel',place:'Your hotel',duration:15,kind:'activity'},
+    wood:{title:'An easy loop near the hotel',place:'Your hotel',duration:20,kind:'activity'},
+    wind:{title:'Five quiet minutes outside',place:'Your hotel',duration:10,kind:'activity'},
+    earth:{title:'A seated snack',place:'Your hotel',duration:20,kind:'meal'}
   };
-  return gentle[element];
+  const idea=indoor[element];
+  if(!idea)return null;
+  const start=placeIn(windows, idea.duration, 8*60, 21*60+30);
+  if(start==null||!atHotel(day, start))return null;
+  return Object.assign(idea,{start:start});
 }
 function catSVG(){
   return '<svg class="jindou" viewBox="0 0 64 64" width="48" height="48" aria-hidden="true"><ellipse cx="32" cy="40" rx="18" ry="14" fill="#6B4226"/><circle cx="32" cy="28" r="16" fill="#7A4A2A"/><circle cx="22" cy="18" r="5" fill="#7A4A2A"/><circle cx="42" cy="18" r="5" fill="#7A4A2A"/><circle cx="22" cy="18" r="2.4" fill="#F3D2B5"/><circle cx="42" cy="18" r="2.4" fill="#F3D2B5"/><ellipse cx="32" cy="46" rx="10" ry="8" fill="#F3D2B5"/><circle cx="26" cy="28" r="2.2" fill="#2A211C"/><circle cx="38" cy="28" r="2.2" fill="#2A211C"/><path d="M29 33h6l-3 2z" fill="#C4896A"/><path d="M18 36c-4 2-4 8 0 8M46 36c4 2 4 8 0 8" fill="none" stroke="#6B4226" stroke-width="2"/></svg>';
@@ -243,13 +363,14 @@ function paintDay(card, data){
     const cardState=data.challenges[date]||{element:element,done:false};
     const flipped=!!cardState.flipped;
     head.insertAdjacentHTML('beforeend','<section class="element-challenge" data-wuxing="1" data-testid="element-challenge" data-date="'+esc(date)+'">'+(flipped
-      ?'<p class="element-kicker">Today is '+(NAMES[cardState.element||element]==='Earth'?'an':'a')+' '+NAMES[cardState.element||element]+' day</p><p>'+esc(cardState.text||challengeText(element,items))+'</p><button type="button" class="outline" data-testid="element-challenge-done" data-date="'+esc(date)+'" aria-pressed="'+(cardState.done?'true':'false')+'">'+(cardState.done?'Challenge done':'I did this')+'</button>'
+      ?'<p class="element-kicker">Today is '+(NAMES[cardState.element||element]==='Earth'?'an':'a')+' '+NAMES[cardState.element||element]+' day</p><p>'+esc(cardState.text||challengeText(element,items,day))+'</p><button type="button" class="outline" data-testid="element-challenge-done" data-date="'+esc(date)+'" aria-pressed="'+(cardState.done?'true':'false')+'">'+(cardState.done?'Challenge done':'I did this')+'</button>'
       :'<button type="button" class="element-flip" data-testid="element-flip" data-date="'+esc(date)+'">Flip today’s element</button>')+'</section>');
   }
   const miss=missingElement(day);
   if(miss&&data.nudges[date]!=='dismissed'&&lit.length<5){
-    const idea=suggestionFor(miss);
-    head.insertAdjacentHTML('beforeend','<aside class="balance-buddy" data-wuxing="1" data-testid="balance-buddy"><div class="jindou-wrap">'+catSVG()+'</div><div><p><strong>Jindou</strong> · 金豆</p><p>This day leans away from '+NAMES[miss].toLowerCase()+'. '+esc(idea.title)+' would balance it.</p><div class="row"><button type="button" class="outline" data-testid="buddy-add" data-date="'+esc(date)+'" data-title="'+esc(idea.title)+'" data-place="'+esc(idea.place)+'" data-duration="'+idea.duration+'" data-kind="'+esc(idea.kind)+'">Add it</button><button type="button" data-testid="buddy-dismiss" data-date="'+esc(date)+'">Not now</button></div></div></aside>');
+    const idea=suggestionFor(miss, day);
+    if(!idea)return;
+    head.insertAdjacentHTML('beforeend','<aside class="balance-buddy" data-wuxing="1" data-testid="balance-buddy"><div class="jindou-wrap">'+catSVG()+'</div><div><p><strong>Jindou</strong> · 金豆</p><p>This day leans away from '+NAMES[miss].toLowerCase()+'. '+esc(idea.title)+' would balance it.</p><div class="row"><button type="button" class="outline" data-testid="buddy-add" data-date="'+esc(date)+'" data-title="'+esc(idea.title)+'" data-place="'+esc(idea.place)+'" data-duration="'+idea.duration+'" data-kind="'+esc(idea.kind)+'" data-time="'+esc(clockOf(idea.start))+'">Add it</button><button type="button" data-testid="buddy-dismiss" data-date="'+esc(date)+'">Not now</button></div></div></aside>');
     if(data.nudges[date]!=='shown'){data.nudges[date]='shown';save(data);}
   }
 }
@@ -312,7 +433,7 @@ function onClick(e){
   if(id==='element-flip'){
     const data=load(); const date=t.dataset.date; const day=days().find(d=>d.date===date); if(!day)return;
     const element=elementOf(day);
-    data.challenges[date]={element:element,text:challengeText(element,dayItems(day)),flipped:true,done:false};
+    data.challenges[date]={element:element,text:challengeText(element,dayItems(day),day),flipped:true,done:false};
     save(data);refresh();return;
   }
   if(id==='element-challenge-done'){
@@ -333,7 +454,7 @@ function onClick(e){
   if(id==='buddy-dismiss'){const data=load();data.nudges[t.dataset.date]='dismissed';save(data);refresh();return;}
   if(id==='buddy-add'){
     const date=t.dataset.date;
-    const result=root.DayBuilder&&root.DayBuilder.addToDay?root.DayBuilder.addToDay(date,{title:t.dataset.title,place:t.dataset.place,duration:Number(t.dataset.duration)||30,time:'15:30',kind:t.dataset.kind||'activity'}):{ok:false};
+    const result=root.DayBuilder&&root.DayBuilder.addToDay?root.DayBuilder.addToDay(date,{title:t.dataset.title,place:t.dataset.place,duration:Number(t.dataset.duration)||30,time:t.dataset.time||'',kind:t.dataset.kind||'activity'}):{ok:false};
     const data=load(); data.nudges[date]='dismissed'; save(data);
     toast(result&&result.ok?'Added '+t.dataset.title+'. This does not book it.':(result&&result.reason)||'Couldn’t add that stop.');
     refresh();return;
@@ -346,16 +467,16 @@ function onClick(e){
     const item=day&&dayItems(day).find(it=>(it.sourceId||it.id)===itemId||it.id===row.getAttribute('data-db-id'));
     if(!item)return;
     if(item.kind==='stay'||/check[- ]?in/i.test(item.title||'')){toast('This stay stays put. Use Check in to light its element.');return;}
-    openSwap(item,t.dataset.element,day&&day.date);
+    openSwap(item,t.dataset.element,day);
   }
 }
-function openSwap(item, element, date){
-  const options=alternatives(element,item);
+function openSwap(item, element, day){
+  const options=alternatives(element,item,day&&day.date);
   const locked=!!(item.locked||item.booked);
   const dlg=document.createElement('dialog');
   dlg.className='wuxing-swap';
   dlg.setAttribute('data-testid','element-swap-sheet');
-  dlg.innerHTML='<h2>Other '+esc(NAMES[element]||'element')+' places</h2><p class="muted">'+(locked?'This booking stays put. These are ideas for another time.':'Same element, and they fit your budget and diet. One tap swaps it. You can undo.')+'</p>'+(options.length?options.map((pick,i)=>'<button type="button" data-testid="element-swap-option" data-index="'+i+'">'+esc(pick.name)+' · '+esc(pick.area||'Nearby')+'</button>').join(''):'<p>Nothing else nearby fits that element.</p>')+'<button type="button" data-testid="element-swap-close">Close</button>';
+  dlg.innerHTML='<h2>Other '+esc(NAMES[element]||'element')+' places</h2><p class="muted">'+(locked?'This booking stays put. These ideas match this kind of stop, this time, and your budget.':'Same kind of stop, open at this time, and within your budget and diet. One tap swaps it. You can undo.')+'</p>'+(options.length?options.map((pick,i)=>'<button type="button" data-testid="element-swap-option" data-index="'+i+'">'+esc(pick.name)+' · '+esc(pick.area||'Nearby')+'</button>').join(''):'<p>Nothing else fits this time and budget.</p>')+'<button type="button" data-testid="element-swap-close">Close</button>';
   document.body.appendChild(dlg); dlg.showModal();
   dlg.querySelector('[data-testid=element-swap-close]').onclick=()=>{dlg.close();dlg.remove();};
   dlg.querySelectorAll('[data-testid=element-swap-option]').forEach(btn=>btn.onclick=()=>{

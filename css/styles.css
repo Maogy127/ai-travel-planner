@@ -2158,9 +2158,11 @@ input[type=checkbox]:checked::after{clip-path:inset(0 0 0 0)}
 .compact-values .cv b{font-family:var(--font-display);font-weight:400;font-size:22px;line-height:1;color:var(--ink);font-variant-numeric:tabular-nums lining-nums}
 .compact-values .cv small{font-size:12px;color:var(--ink-2);font-weight:500}
 .compact-values .cv-sep{display:none}
-.day-head .compact-rings>button,.day-head .compact-rings>p,.day-head .compact-rings>[data-testid=ring-breakdown]{grid-column:1/-1}
+.day-head .compact-rings>button,.day-head .compact-rings>p,.day-head .compact-rings>[data-testid=ring-breakdown]{grid-column:1/-1;min-width:0}
+.db-root button.ring-encouragement,.wellness-rings button.ring-encouragement{display:block;width:auto;max-width:100%;min-width:0;min-height:0;white-space:normal;overflow-wrap:anywhere;line-height:1.35;text-align:left;border:0;border-radius:0;background:transparent;box-shadow:none;padding:2px 0;font-size:13px;color:var(--ink)}
 .db-root .db-side .db-lock-toggle[aria-pressed=true],.db-root .db-side .db-lock-toggle[aria-pressed=true]:hover{background:var(--soft);color:var(--accent-text);border-radius:50%}
 .db-root .db-side button{border-radius:50%}
+.db-root button.ring-encouragement{border-radius:0;white-space:normal;max-width:100%;min-width:0;width:auto;height:auto}
 .db-root [data-testid=ring-breakdown-toggle]{box-shadow:none;background:transparent;border:0}
 [data-trip-more],.trip-card-actions [data-trip-more]{display:inline-grid;place-items:center;width:44px;height:44px;min-width:44px;padding:0;border-radius:50%;border:0;box-shadow:inset 0 0 0 1px var(--line);background:var(--surface);color:var(--ink)}
 .plan-header .banner-photo{display:block;position:relative;height:200px;margin:-8px -8px 20px;border-radius:20px;overflow:hidden}

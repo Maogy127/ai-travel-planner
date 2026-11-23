@@ -23,7 +23,7 @@ async def checks(browser):
         # Combined preview adds elements, city snapshots, and Gemini.
         assert len(assets) == 38, len(assets)
         for path in assets:
-            assert path.endswith('?v=wuxing-play2-20261123'), path
+            assert path.endswith('?v=wuxing-play3-20261123'), path
             assert (await ctx.request.get('http://127.0.0.1:8817/' + path)).status == 200
         print('PASS versioned assets load with HTTP 200')
         await pg.get_by_test_id('demo-oahu').click()
