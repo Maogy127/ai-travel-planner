@@ -88,7 +88,7 @@ function create(app){
    '<div class="community-tabs cx-tabs" role="tablist">'+TABS.map(([k,l])=>'<button role="tab" data-testid="community-tab-'+(k==='all'?'foryou':k)+'" aria-selected="'+(tab===k)+'" data-tab="'+k+'">'+l+'</button>').join('')+'</div>'+
    elementChips()+
    (tab==='checkin'?'<button class="outline" data-testid="checkin-start">Check in at a restaurant</button>':'')+
-   (posts===null?'<p class="muted" data-testid="community-loading">Loading…</p>':'')+(status==='offline'&&posts!==null?'<p class="muted" data-testid="community-offline">Showing examples. Couldn’t reach the community right now.</p>':'')+
+   (posts===null&&!list.length?'<p class="muted" data-testid="community-loading">Loading…</p>':'')+(status==='offline'&&posts!==null?'<p class="muted" data-testid="community-offline">Showing examples. Couldn’t reach the community right now.</p>':'')+
    '<div class="community-grid cx-feed" data-testid="community-grid">'+list.map(card).join('')+'</div>'+(posts!==null&&!list.length?'<p class="muted" data-testid="element-filter-empty">'+(pickedEls.length||wantAllFive?'No trips with those elements.':'Nothing shared yet.')+'</p>':'')+
    '<button class="cx-fab" data-testid="community-fab" aria-label="Share a trip">＋ Share</button></section>';
   view.querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{tab=b.dataset.tab;community(view);});

@@ -6,7 +6,7 @@
 const ORDER=['water','fire','wood','wind','earth'];
 const NAMES={water:'Water',fire:'Fire',wood:'Wood',wind:'Wind',earth:'Earth'};
 const KEY='gonow:wuxing:v1';
-const DEMO=['2026-11-26-1','2026-11-26-4','2026-11-26-8'];
+const DEMO=['2026-11-26-1','2026-11-26-4','2026-11-26-8','2026-11-26-9','2026-11-26-11','2026-11-27-1','2026-11-28-2','2026-11-28-7','2026-11-28-9'];
 let wired=false, justEarned='';
 
 function els(){return root.GoNowElements;}
@@ -16,7 +16,7 @@ function tripId(){
   const s=appState();
   return (s&&(s.tripId||(s.plan&&s.plan.id)))||'';
 }
-function blank(){return {intro:false,challenger:false,checks:{},challenges:{},badges:{},nudges:{},seeded:false};}
+function blank(){return {intro:false,challenger:false,checks:{},challenges:{},badges:{},nudges:{},seedVersion:0};}
 function load(){
   const id=tripId(); if(!id)return blank();
   const all=readAll();
@@ -87,11 +87,30 @@ function plannedElements(day){
 }
 function seed(data){
   const p=plan();
-  if(!p||p.id!=='oahu-demo-2026-11'||data.seeded)return data;
+  if(!p||p.id!=='oahu-demo-2026-11'||data.seedVersion===2)return data;
+  data.checks={};
   DEMO.forEach(id=>{data.checks[id]=true;});
-  data.badges['2026-11-26']=true;
-  data.seeded=true;
+  data.badges={'2026-11-26':true};
+  data.seedVersion=2;
   return save(data);
+}
+function badgeLabel(date){
+  const local=new Date(date+'T12:00:00');
+  const days=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+  const months=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  if(!Number.isFinite(local.getTime()))return 'Every element';
+  return 'Every element · '+days[local.getDay()]+', '+months[local.getMonth()]+' '+local.getDate();
+}
+function mixProfile(tally){
+  const counts=ORDER.map(id=>({id,n:tally[id]||0}));
+  const total=counts.reduce((n,x)=>n+x.n,0);
+  const present=counts.filter(x=>x.n>0).sort((a,b)=>b.n-a.n||ORDER.indexOf(a.id)-ORDER.indexOf(b.id));
+  if(!total||!present.length)return {kind:'empty',ids:[],total:0,counts:counts};
+  const top=present[0].n;
+  const tied=present.filter(x=>x.n===top);
+  const share=top/total;
+  if(tied.length>=4||(present.length>=4&&share<=0.25))return {kind:'balanced',ids:tied.map(x=>x.id),total:total,counts:counts};
+  return {kind:'lead',ids:tied.map(x=>x.id),total:total,counts:counts};
 }
 function counts(data){
   const tally={}; ORDER.forEach(id=>tally[id]=0);
@@ -103,25 +122,35 @@ function counts(data){
   return {tally,total};
 }
 function travelerTitle(data){
-  const {tally}=counts(data);
-  const top=ORDER.slice().sort((a,b)=>tally[b]-tally[a]||ORDER.indexOf(a)-ORDER.indexOf(b)).filter(id=>tally[id]>0);
-  if(top.length>=2)return 'You were a '+NAMES[top[0]]+'–'+NAMES[top[1]]+' traveler';
-  if(top.length===1)return 'You were a '+NAMES[top[0]]+' traveler';
-  return 'Your element story';
+  const profile=mixProfile((data&&data.tally)||counts(data).tally);
+  if(profile.kind==='empty')return 'Your element story';
+  if(profile.kind==='balanced')return 'You were a balanced traveler · all five elements';
+  if(profile.ids.length>=2)return 'You were a '+profile.ids.map(id=>NAMES[id]).join('–')+' traveler';
+  return 'You were a '+NAMES[profile.ids[0]]+' traveler';
 }
 function summaryLine(data){
-  const {tally,total}=counts(data);
-  const top=ORDER.slice().sort((a,b)=>tally[b]-tally[a]).filter(id=>tally[id]>0)[0];
-  if(!top)return 'Check in a few stops and this recap will fill in.';
-  const share=Math.round(tally[top]/total*100);
+  const profile=mixProfile((data&&data.tally)||counts(data).tally);
+  if(profile.kind==='empty')return 'Check in a few stops and this recap will fill in.';
+  if(profile.kind==='balanced')return 'All five elements showed up in even measure. Ocean, effort, walks, quiet, and meals each had a place.';
+  const id=profile.ids[0];
+  const share=Math.round(profile.counts.find(x=>x.id===id).n/profile.total*100);
   const lines={
     water:'Water led the trip ('+share+'%). Time near the ocean, with meals and walks to land the day.',
-    fire:'Fire led the trip ('+share+'%). You kept the effort lively and still left room to rest.',
+    fire:'Fire led the trip ('+share+'%). The effort stayed lively, with quieter stops around it.',
     wood:'Wood led the trip ('+share+'%). Walks and open air carried the days.',
     wind:'Wind led the trip ('+share+'%). Quiet moments sat beside the busier stops.',
     earth:'Earth led the trip ('+share+'%). Meals and rest gave the days a place to settle.'
   };
-  return lines[top];
+  if(profile.ids.length>=2)return NAMES[profile.ids[0]]+' and '+NAMES[profile.ids[1]]+' led together ('+share+'% each). The other elements stayed lighter.';
+  return lines[id];
+}
+function mixHTML(data){
+  const profile=mixProfile(counts(data).tally);
+  const marks={water:'水',fire:'火',wood:'木',wind:'风',earth:'土'};
+  return '<ul class="wuxing-mix" data-testid="wuxing-mix">'+profile.counts.map(row=>{
+    const pct=profile.total?Math.round(row.n/profile.total*100):0;
+    return '<li><span class="wuxing-mix-name">'+marks[row.id]+' '+NAMES[row.id]+'</span><span class="wuxing-mix-track" aria-hidden="true"><span class="wuxing-mix-fill el-'+row.id+'" style="width:'+pct+'%"></span></span><span class="wuxing-mix-pct">'+pct+'%</span></li>';
+  }).join('')+'</ul>';
 }
 function catalog(){
   const picks=root.GONOW_PICKS&&root.GONOW_PICKS.oahu;
@@ -214,7 +243,7 @@ function paintDay(card, data){
     const cardState=data.challenges[date]||{element:element,done:false};
     const flipped=!!cardState.flipped;
     head.insertAdjacentHTML('beforeend','<section class="element-challenge" data-wuxing="1" data-testid="element-challenge" data-date="'+esc(date)+'">'+(flipped
-      ?'<p class="element-kicker">Today is a '+NAMES[cardState.element||element]+' day</p><p>'+esc(cardState.text||challengeText(element,items))+'</p><button type="button" class="outline" data-testid="element-challenge-done" data-date="'+esc(date)+'" aria-pressed="'+(cardState.done?'true':'false')+'">'+(cardState.done?'Challenge done':'I did this')+'</button>'
+      ?'<p class="element-kicker">Today is '+(NAMES[cardState.element||element]==='Earth'?'an':'a')+' '+NAMES[cardState.element||element]+' day</p><p>'+esc(cardState.text||challengeText(element,items))+'</p><button type="button" class="outline" data-testid="element-challenge-done" data-date="'+esc(date)+'" aria-pressed="'+(cardState.done?'true':'false')+'">'+(cardState.done?'Challenge done':'I did this')+'</button>'
       :'<button type="button" class="element-flip" data-testid="element-flip" data-date="'+esc(date)+'">Flip today’s element</button>')+'</section>');
   }
   const miss=missingElement(day);
@@ -226,7 +255,7 @@ function paintDay(card, data){
 }
 function barHTML(data){
   const badges=Object.keys(data.badges);
-  const badgeLine=badges.length?badges.map(date=>'Day badge · '+date).join(' · '):'Check in stops to earn a day badge.';
+  const badgeLine=badges.length?badges.map(badgeLabel).join(' · '):'Check in stops to earn a day badge.';
   const intro=data.intro?'':'<p class="wuxing-intro" data-testid="wuxing-intro">Inspired by 五行 (Wu Xing), the five elements of Chinese tradition. Check in a stop to light its element. <button type="button" data-testid="wuxing-intro-dismiss">Got it</button></p>';
   return '<section class="wuxing-bar" data-testid="wuxing-bar">'+intro
     +'<div class="wuxing-tools"><label class="wuxing-toggle"><input type="checkbox" data-testid="challenger-toggle"'+(data.challenger?' checked':'')+'> Challenger mode</label>'
@@ -246,13 +275,11 @@ function refresh(){
   justEarned='';
 }
 function openRecap(data){
-  const {tally,total}=counts(data);
-  const bits=ORDER.filter(id=>tally[id]).map(id=>NAMES[id]+'\u00a0'+Math.round(tally[id]/total*100)+'%').join(' · ');
   const badges=Object.keys(data.badges);
   const dlg=document.createElement('dialog');
   dlg.className='wuxing-recap';
   dlg.setAttribute('data-testid','wuxing-recap');
-  dlg.innerHTML='<h2>'+esc(travelerTitle(data))+'</h2><p data-testid="wuxing-percents">'+esc(bits||'No elements yet')+'</p><p>'+esc(summaryLine(data))+'</p>'+(badges.length?'<p data-testid="wuxing-recap-badges">Badges · '+esc(badges.join(', '))+'</p>':'<p>No day badges yet.</p>')+'<div class="row"><button type="button" class="primary" data-testid="wuxing-share">Share to Community</button><button type="button" data-testid="wuxing-recap-close">Close</button></div>';
+  dlg.innerHTML='<h2>'+esc(travelerTitle(data))+'</h2>'+mixHTML(data)+'<p data-testid="wuxing-summary">'+esc(summaryLine(data))+'</p>'+(badges.length?'<ul class="wuxing-badge-list" data-testid="wuxing-recap-badges">'+badges.map(date=>'<li>'+esc(badgeLabel(date))+'</li>').join('')+'</ul>':'<p>No day badges yet.</p>')+'<div class="wuxing-recap-actions"><button type="button" class="primary" data-testid="wuxing-share">Share to Community</button><button type="button" class="outline" data-testid="wuxing-recap-close">Close</button></div>';
   document.body.appendChild(dlg);
   dlg.showModal();
   dlg.querySelector('[data-testid=wuxing-recap-close]').onclick=()=>{dlg.close();dlg.remove();};
@@ -349,7 +376,7 @@ function boot(){
   document.addEventListener('click',onClick);
 }
 boot();
-const api={refresh,load,save,challengeText,travelerTitle,summaryLine,elementOf,checkedElements,alternatives,suggestionFor,ORDER,NAMES};
+const api={refresh,load,save,challengeText,travelerTitle,summaryLine,badgeLabel,mixProfile,elementOf,checkedElements,alternatives,suggestionFor,ORDER,NAMES};
 root.GoNowWuXing=api;
 if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);
