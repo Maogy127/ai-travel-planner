@@ -1727,5 +1727,7 @@ window.DayBuilder = {convert,slotCandidates,estimateTravel,parseClock:parse,clos
     applyEdits: ops => active()?.applyEdits(ops) || {results:[], before:null},
     restore: snapshot => active()?.restore(snapshot),
     addToDay: (date, spec) => active()?.addToDay(date, spec) || {ok: false, reason: 'Open a draft first'},
+    swapItem: (id, alternative) => active()?.swapItem(id, alternative) || false,
+    restoreState: snapshot => active()?.restore(snapshot),
     resetSession: () => { stayOverride=''; session.date = '2026-11-26'; session.open.clear(); session.shared = null; session.sharedKey = null; }};
 })();

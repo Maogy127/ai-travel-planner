@@ -50,9 +50,16 @@
     if(hit)return hit;
     const nameHit=(title,name)=>{
       const n=fold(name);if(!title||!n)return false;
-      if(title.includes(n)||(n.includes(title)&&title.length>=8))return true;
+      if(title===n||title.startsWith(n+' ')||title.startsWith(n+'-'))return true;
+      const at=title.indexOf(n);
+      if(at>0){
+        const before=title.slice(0,at);
+        if(/\b(with|near|view of|overlooking|toward|towards)\s+$/.test(before))return false;
+        if(at<12)return true;
+      }
+      if(n.includes(title)&&title.length>=8)return true;
       const parts=n.split(/\s+/).filter(w=>w.length>2&&!['the','and','at'].includes(w));
-      return parts.length>=2&&parts.every(w=>title.includes(w));
+      return parts.length>=2&&parts.every(w=>title.includes(w))&&title.indexOf(parts[0])<12;
     };
     return list.find(p=>nameHit(title,p.name))||null;
   }
@@ -139,7 +146,7 @@
     const ids=of(item);if(!ids.length)return '';
     const size=(opts&&opts.size)||14;
     const names=ids.map(label).join(', ');
-    return '<span class="el-icons" data-testid="item-elements" data-elements="'+esc(ids.join(' '))+'" aria-label="'+esc(names)+'">'+ids.map(id=>icon(id,size)).join('')+'</span>';
+    return '<span class="el-icons" data-testid="item-elements" data-elements="'+esc(ids.join(' '))+'" aria-label="'+esc(names)+'">'+ids.map(id=>'<button type="button" class="el-swap el-'+id+'" data-testid="element-swap" data-element="'+id+'" aria-label="'+esc(BY[id].nameZh+' '+BY[id].name)+'. See other '+esc(BY[id].name)+' places"><span class="el-swap-mark" aria-hidden="true">'+esc(BY[id].nameZh)+'</span><span class="el-swap-name">'+esc(BY[id].name)+'</span></button>').join('')+'</span>';
   }
 
   function detailHTML(item){
